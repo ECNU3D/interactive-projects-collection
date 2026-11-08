@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>ALLEYWAY · GB</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  /* ============ 页面 chrome(Game Boy 机身风) ============ */
+  html,body{
+    margin:0; padding:0; background:#c4bebb;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none; user-select:none;
+    touch-action:none; overscroll-behavior:none;
+  }
+  #wrap{
+    min-height:100vh; box-sizing:border-box;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:14px 10px; gap:10px;
+  }
+  /* 机身屏幕外框:灰紫机身 + 深色镜面框 + 圆角 */
+  #bezel{
+    background:#5c5660; padding:16px 18px 12px; border-radius:16px;
+    box-shadow: inset 0 2px 0 #7d7681, inset 0 -4px 0 #463f4b, 0 8px 22px rgba(40,30,45,.35);
+  }
+  #frame{
+    background:#221e26; padding:10px; border-radius:10px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.7);
+  }
+  canvas#gb{
+    display:block; width:480px; height:432px; /* JS 会根据窗口改成整数倍 */
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    background:#9bbc0f; border-radius:2px;
+  }
+  #caption{
+    margin-top:8px; text-align:center; color:#a79ea9; font-size:10px; letter-spacing:3px;
+  }
+  /* 常驻按键说明 */
+  #hint{ color:#4a444f; font-size:12px; letter-spacing:1px; text-align:center; }
+  /* ============ 触屏虚拟按键(半透明) ============ */
+  #touch{
+    width:100%; max-width:560px;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:0 6px; box-sizing:border-box;
+  }
+  .pad{ display:grid; grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,46px); gap:4px; }
+  .tbtn{
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(38,32,44,.30); color:#2c2731;
+    border-radius:10px; font-size:18px; font-weight:bold;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .tbtn.on{ background:rgba(38,32,44,.62); color:#12100f; }
+  .tbtn.empty{ background:transparent; pointer-events:none; }
+  .abtn{ width:56px; height:56px; border-radius:50%; font-size:20px; }
+  .sbtn{ width:52px; height:22px; border-radius:12px; font-size:10px; letter-spacing:1px; }
+  #mid{ display:flex; flex-direction:column; gap:10px; align-items:center; }
+  #ab{ display:flex; gap:14px; align-items:center; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="bezel">
+    <div id="frame"><canvas id="gb" width="160" height="144"></canvas></div>
+    <div id="caption">ALLEYWAY &middot; GB STYLE</div>
+  </div>
+  <div id="ui">
+    <div id="hint">&#8592;&#8594; 移动 &nbsp; X(A) 发球 &nbsp; ENTER(START) 开始</div>
+    <div id="touch">
+      <div class="pad">
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="up">&#9650;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="left">&#9664;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="right">&#9654;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="down">&#9660;</div>
+        <div class="tbtn empty"></div>
+      </div>
+      <div id="mid">
+        <div class="tbtn sbtn" data-k="select">SELECT</div>
+        <div class="tbtn sbtn" data-k="start">START</div>
+      </div>
+      <div id="ab">
+        <div class="tbtn abtn" data-k="b">B</div>
+        <div class="tbtn abtn" data-k="a">A</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+ * ALLEYWAY · Game Boy 风格打砖块(单文件,零依赖)
+ * 操作:方向键左右=移动挡板  X=A(发球)  Enter=Start  Shift=Select
+ * 关卡:普通阵 / 整体平移阵 / 定时下压阵 / 第4·8关马里奥奖励关,8 关循环加速
+ * ===================================================================== */
+
+/* ---------- 基本常量 ---------- */
+const W = 160, H = 144;                          // GB 逻辑分辨率 160x144
+const PAL = ['#0f380f', '#306230', '#8bac0f', '#9bbc0f']; // DMG 4 色绿
+const WALL_L = 4, WALL_R = 156;                  // 左右墙内侧(可打区域 152px)
+const CEIL_Y = 10;                               // 天花板反弹线
+const BR_X = 4, BR_Y = 16;                       // 砖阵原点(像素)
+const BCOL = 8, BROW = 6;                        // 砖格 8x6(砖体 8x5,留 1px 缝)
+const PAD_Y = 136, PAD_H = 4;                    // 挡板位置/厚度
+const BASE_PAD_W = 24;                           // 挡板初始宽度
+
+const cv = document.getElementById('gb');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+/* 全部画面只允许用 fillRect 画 */
+function R(x, y, w, h, c) {
+  ctx.fillStyle = PAL[c];
+  ctx.fillRect(x | 0, y | 0, w, h);
+}
+
+/* ---------- 8-bit 芯片音效(Web Audio 合成,无音频文件) ---------- */
+const Snd = (() => {
+  let ac = null, master = null, noiseBuf = null;
+  function init() {                       // 首次按键后才创建 AudioContext
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain();
+    master.gain.value = 0.14;
+    master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  function sq(freq, delay, dur, vol, slideTo) {   // 方波
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(delay, dur, vol, hp) {           // 噪声通道
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const s = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+    s.buffer = noiseBuf;
+    s.loop = true;
+    f.type = hp ? 'highpass' : 'lowpass';
+    f.frequency.value = hp ? 1800 : 900;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t); s.stop(t + dur + 0.02);
+  }
+  const N = n => 440 * Math.pow(2, (n - 69) / 12); // MIDI 音号 -> 频率
+  return {
+    init,
+    paddle() { sq(190, 0, 0.035, 0.5, 130); },                         // 击挡板"嗒"
+    wall()   { sq(140, 0, 0.03, 0.35); },                              // 撞墙/顶"咔"
+    brick(v) { const f = 520 + v * 180; sq(f, 0, 0.055, 0.4, f * 1.15); }, // 击砖"叮",分值越高音越高
+    launch() { sq(330, 0, 0.06, 0.4, 520); },                          // 发球
+    lose()   { sq(320, 0, 0.45, 0.5, 55); noise(0, 0.25, 0.25, false); }, // 丢球下行音
+    shift()  { sq(90, 0, 0.05, 0.3); },                                // 砖阵下压"咯噔"
+    clear()  { [72, 76, 79, 84].forEach((n, i) => sq(N(n), i * 0.07, 0.09, 0.45)); }, // 过关
+    congrats() { [72, 76, 79, 84, 79, 84, 88, 91].forEach((n, i) => sq(N(n), i * 0.1, 0.12, 0.45)); }, // 通关号角
+    start()  { sq(N(72), 0, 0.07, 0.45); sq(N(79), 0.07, 0.12, 0.45); },
+    over()   { [76, 72, 69, 65, 62, 57].forEach((n, i) => sq(N(n), i * 0.14, 0.15, 0.45)); },
+  };
+})();
+
+/* ---------- 8x8 手绘像素字体(画布文字只能用它) ---------- */
+const FONT = (() => {
+  const F = {};
+  const def = (ch, rows) => { F[ch] = rows; };
+  def(' ', ["........","........","........","........","........","........","........","........"]);
+  def('0', [".###....","#...#...","#..##...","#.#.#...","##..#...","#...#...",".###....","........"]);
+  def('1', ["..#.....",".##.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('2', [".###....","#...#...","....#...","..##....",".#......","#.......","#####...","........"]);
+  def('3', ["####....","....#...","....#...",".###....","....#...","....#...","####....","........"]);
+  def('4', ["...##...",".#.#....","#..#....","#####...","...#....","...#....","...#....","........"]);
+  def('5', ["#####...","#.......","####....","....#...","....#...","#...#...",".###....","........"]);
+  def('6', [".###....","#.......","#.......","####....","#...#...","#...#...",".###....","........"]);
+  def('7', ["#####...","....#...","...#....","...#....","..#.....","..#.....","..#.....","........"]);
+  def('8', [".###....","#...#...","#...#...",".###....","#...#...","#...#...",".###....","........"]);
+  def('9', [".###....","#...#...","#...#...",".####...","....#...","#...#...",".###....","........"]);
+  def('A', [".###....","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('B', ["####....","#...#...","#...#...","####....","#...#...","#...#...","####....","........"]);
+  def('C', [".####...","#.......","#.......","#.......","#.......","#.......",".####...","........"]);
+  def('D', ["####....","#...#...","#...#...","#...#...","#...#...","#...#...","####....","........"]);
+  def('E', ["#####...","#.......","#.......","####....","#.......","#.......","#####...","........"]);
+  def('F', ["#####...","#.......","#.......","####....","#.......","#.......","#.......","........"]);
+  def('G', [".####...","#.......","#.......","#.###...","#...#...","#...#...",".####...","........"]);
+  def('H', ["#...#...","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('I', [".###....","..#.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('J', ["..###...","...#....","...#....","...#....","...#....","#..#....",".##.....","........"]);
+  def('K', ["#...#...","#..#....","#.#.....","##......","#.#.....","#..#....","#...#...","........"]);
+  def('L', ["#.......","#.......","#.......","#.......","#.......","#.......","#####...","........"]);
+  def('M', ["#...#...","##.##...","#.#.#...","#.#.#...","#...#...","#...#...","#...#...","........"]);
+  def('N', ["#...#...","##..#...","#.#.#...","#..##...","#...#...","#...#...","#...#...","........"]);
+  def('O', [".###....","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('P', ["####....","#...#...","#...#...","####....","#.......","#.......","#.......","........"]);
+  def('Q', [".###....","#...#...","#...#...","#...#...","#.#.#...","#..#....",".##.#...","........"]);
+  def('R', ["####....","#...#...","#...#...","####....","#.#.....","#..#....","#...#...","........"]);
+  def('S', [".####...","#.......","#.......",".###....","....#...","....#...","####....","........"]);
+  def('T', ["#####...","..#.....","..#.....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('U', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('V', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".#.#....","........"]);
+  def('W', ["#...#...","#...#...","#...#...","#.#.#...","#.#.#...","##.##...","#...#...","........"]);
+  def('X', ["#...#...","#...#...",".#.#....","..#.....",".#.#....","#...#...","#...#...","........"]);
+  def('Y', ["#...#...","#...#...",".#.#....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('Z', ["#####...","....#...","...#....","..#.....",".#......","#.......","#####...","........"]);
+  def('!', ["..#.....","..#.....","..#.....","..#.....","..#.....","........","..#.....","........"]);
+  def('.', ["........","........","........","........","........","..##....","..##....","........"]);
+  def('-', ["........","........","........",".###....","........","........","........","........"]);
+  def(':', ["........","..##....","..##....","........","..##....","..##....","........","........"]);
+  def('*', ["........",".#...#..","..#.#...","...#....","..#.#...",".#...#..","........","........"]);
+  return F;
+})();
+
+/* 画文字:逐像素 fillRect,等宽 8px,可整数放大 */
+function drawText(str, x, y, color, scale) {
+  scale = scale || 1;
+  str = String(str).toUpperCase();
+  for (let i = 0; i < str.length; i++) {
+    const g = FONT[str[i]] || FONT[' '];
+    for (let r = 0; r < 8; r++) {
+      const row = g[r];
+      for (let c = 0; c < 8; c++) {
+        if (row[c] === '#') R(x + i * 8 * scale + c * scale, y + r * scale, scale, scale, color);
+      }
+    }
+  }
+}
+
+/* ---------- 输入:键盘 + 触屏(按住连发 / 单次触发都可靠) ---------- */
+const keys = { left: 0, right: 0, up: 0, down: 0, a: 0, b: 0, start: 0, select: 0 };
+const pressed = {};                    // 按下沿,逻辑帧消费,绝不丢输入
+const KEYMAP = {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+  KeyX: 'a', KeyZ: 'b', Enter: 'start', ShiftLeft: 'select', ShiftRight: 'select',
+};
+window.addEventListener('keydown', e => {
+  const k = KEYMAP[e.code];
+  if (!k) return;
+  e.preventDefault();
+  Snd.init();                          // 首次按键才初始化音频
+  if (!keys[k]) pressed[k] = 1;
+  keys[k] = 1;
+});
+window.addEventListener('keyup', e => {
+  const k = KEYMAP[e.code];
+  if (k) keys[k] = 0;
+});
+function hit(k) { if (pressed[k]) { pressed[k] = 0; return true; } return false; }
+function clearPressed() { for (const k in pressed) pressed[k] = 0; }
+
+/* 触屏按钮(pointer 事件,鼠标同样可用) */
+document.querySelectorAll('[data-k]').forEach(el => {
+  const k = el.getAttribute('data-k');
+  const down = e => {
+    e.preventDefault(); Snd.init();
+    if (!keys[k]) pressed[k] = 1;
+    keys[k] = 1;
+    el.classList.add('on');
+    if (el.setPointerCapture && e.pointerId !== undefined) {
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+  };
+  const up = e => { e.preventDefault(); keys[k] = 0; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+});
+
+/* ---------- 关卡数据 ---------- */
+/* 8 关循环:普通 / 平移 / 下压 / 奖励(马里奥),两轮 */
+const KINDS = ['normal', 'shift', 'descend', 'bonus', 'normal', 'shift', 'descend', 'bonus'];
+function kindOf(lv) { return KINDS[(lv - 1) % 8]; }
+
+/* 奖励关:砖块拼出的像素马里奥头像(16 列 x 12 行)
+ * R=帽子(深色,3 分)  H=头发/眼睛(中间色,2 分)  S=皮肤(浅色,1 分) */
+const MARIO = [
+  "....RRRRRRRR....",
+  "..RRRRRRRRRRRR..",
+  "..HHHSSSHSS.....",
+  ".HSHSSSSSHSSS...",
+  ".HSHHSSSSSHSSS..",
+  ".HHSSSSSHHHHH...",
+  "....SSSSSSSS....",
+  "..RRRSRRRRR.....",
+  ".RRRRSRRSRRRR...",
+  "RRRRRSSSSRRRRR..",
+  "SSRRSSSSSSRRSS..",
+  "SSSSSSSSSSSSSS..",
+];
+function marioCells() {
+  return MARIO.map(row => row.split('').map(ch =>
+    ch === 'R' ? 3 : ch === 'H' ? 2 : ch === 'S' ? 1 : 0));
+}
+
+/* 普通砖阵:上 2 行 3 分,中 3 行 2 分,下 3 行 1 分 */
+function stdCells(cols, rows) {
+  const cells = [];
+  for (let r = 0; r < rows; r++) {
+    const row = [];
+    for (let c = 0; c < cols; c++) row.push(r < 2 ? 3 : (r < 5 ? 2 : 1));
+    cells.push(row);
+  }
+  return cells;
+}
+
+/* ---------- 游戏状态 ---------- */
+const ST = { TITLE: 0, CARD: 1, SERVE: 2, PLAY: 3, CLEAR: 4, CONGRATS: 5, OVER: 6 };
+const game = {
+  state: ST.TITLE, frame: 0,
+  score: 0, lives: 3, level: 1, loop: 0,
+  cardT: 0, clearT: 0, congratsT: 0, overT: 0,
+};
+/* wall:砖阵 {kind,cols,rows,cells,ox,oy,dir,dt,left};ox/oy 为像素偏移 */
+let wall = null;
+const pad = { x: 68, w: BASE_PAD_W };            // 挡板
+const ball = { x: 79, y: 134, vx: 0, vy: 0, trail: [] }; // 2x2 弹球 + 残影
+let bricksHit = 0;                               // 本球击砖数(决定球速/板长)
+let ceilHalved = false;                          // 本球是否已触发"碰顶板子减半"
+let serveT = 0;                                  // 发球等待帧数(超时自动发)
+
+function buildLevel(lv) {
+  const kind = kindOf(lv);
+  if (kind === 'bonus') {
+    wall = { kind, cols: 16, rows: 12, cells: marioCells(), ox: 12, oy: 0, dir: 1, dt: 0, left: 0 };
+  } else if (kind === 'shift') {
+    wall = { kind, cols: 15, rows: 8, cells: stdCells(15, 8), ox: 16, oy: 0, dir: 1, dt: 0, left: 0 };
+  } else {
+    wall = { kind, cols: 19, rows: 8, cells: stdCells(19, 8), ox: 0, oy: 0, dir: 1, dt: 0, left: 0 };
+  }
+  for (const row of wall.cells)
+    for (const v of row) if (v) wall.left++;
+}
+
+/* 球速:随击砖数缓慢提升,通关一轮后整体加速(封顶 3px/帧) */
+function ballSpeed() {
+  return Math.min(3.0, 1.25 * (1 + game.loop * 0.15) + Math.min(bricksHit * 0.02, 1.3));
+}
+
+/* 挡板宽度:击砖提速后变短(16 块 -4,40 块 -8);碰过天花板再减半 */
+function updatePadW() {
+  const shrink = bricksHit >= 40 ? 8 : bricksHit >= 16 ? 4 : 0;
+  let w = BASE_PAD_W - shrink;
+  if (ceilHalved) w = Math.max(10, w >> 1);
+  if (w !== pad.w) {
+    const cx = pad.x + pad.w / 2;
+    pad.w = w;
+    pad.x = cx - w / 2;
+    clampPad();
+  }
+}
+function clampPad() { pad.x = Math.max(WALL_L, Math.min(WALL_R - pad.w, pad.x)); }
+
+function newGame() {
+  game.score = 0; game.lives = 3; game.level = 1; game.loop = 0;
+  startCard();
+}
+function startCard() {
+  buildLevel(game.level);
+  game.cardT = 0;
+  game.state = ST.CARD;
+  clearPressed();
+}
+function setupServe() {
+  bricksHit = 0; ceilHalved = false;
+  pad.w = BASE_PAD_W;
+  pad.x = (WALL_L + WALL_R - BASE_PAD_W) / 2;
+  ball.x = pad.x + pad.w / 2 - 1; ball.y = PAD_Y - 2;
+  ball.vx = 0; ball.vy = 0; ball.trail = [];
+  serveT = 0;
+}
+function launch() {
+  const a = Math.random() * 0.7 - 0.35;          // 小角度随机向上发
+  const sp = ballSpeed();
+  ball.vx = sp * Math.sin(a);
+  ball.vy = -sp * Math.cos(a);
+  game.state = ST.PLAY;
+  Snd.launch();
+}
+
+/* 击砖:计分(1/2/3 分)、提速、缩短挡板,打光则过关 */
+function breakCell(c, r) {
+  const v = wall.cells[r][c];
+  if (!v) return;
+  wall.cells[r][c] = 0;
+  wall.left--;
+  game.score += v;
+  bricksHit++;
+  updatePadW();
+  Snd.brick(v);
+  if (wall.left <= 0) startClear();
+}
+function startClear() {
+  game.state = ST.CLEAR;
+  game.clearT = 0;
+  Snd.clear();
+}
+function loseBall() {
+  if (game.state !== ST.PLAY) return;
+  Snd.lose();
+  if (wall && wall.kind === 'bonus') {           // 奖励关:不扣命,重新发球
+    setupServe();
+    game.state = ST.SERVE;
+    return;
+  }
+  game.lives--;
+  if (game.lives <= 0) {
+    game.state = ST.OVER;
+    game.overT = 0;
+    Snd.over();
+  } else {
+    setupServe();
+    game.state = ST.SERVE;
+  }
+}
+/* 球碰天花板:挡板缩短一半(原版惩罚机制,每球只触发一次) */
+function onCeil() {
+  if (!ceilHalved) { ceilHalved = true; updatePadW(); }
+}
+
+/* ---------- 碰撞 ---------- */
+/* 像素点落在哪个砖格上(含 ox/oy 偏移);没砖返回 null */
+function cellAt(px, py) {
+  const c = Math.floor((px - BR_X - wall.ox) / BCOL);
+  const r = Math.floor((py - BR_Y - wall.oy) / BROW);
+  if (c < 0 || c >= wall.cols || r < 0 || r >= wall.rows) return null;
+  if (!wall.cells[r][c]) return null;
+  return { c, r };
+}
+function collideX() {
+  if (ball.x < WALL_L) { ball.x = WALL_L; ball.vx = Math.abs(ball.vx); Snd.wall(); return; }
+  if (ball.x + 2 > WALL_R) { ball.x = WALL_R - 2; ball.vx = -Math.abs(ball.vx); Snd.wall(); return; }
+  if (!wall) return;
+  const edge = ball.vx > 0 ? ball.x + 2 : ball.x - 0.01;
+  const hits = [];
+  for (const yy of [ball.y + 0.2, ball.y + 1.8]) {
+    const cell = cellAt(edge, yy);
+    if (cell && !hits.some(o => o.c === cell.c && o.r === cell.r)) hits.push(cell);
+  }
+  if (!hits.length) return;
+  const bx = BR_X + wall.ox + hits[0].c * BCOL;
+  if (ball.vx > 0) ball.x = bx - 2; else ball.x = bx + BCOL;
+  ball.vx = -ball.vx;
+  for (const h of hits) breakCell(h.c, h.r);
+}
+function collideY() {
+  if (ball.y < CEIL_Y) {
+    ball.y = CEIL_Y; ball.vy = Math.abs(ball.vy);
+    Snd.wall(); onCeil();
+    return;
+  }
+  if (wall) {
+    const edge = ball.vy > 0 ? ball.y + 2 : ball.y - 0.01;
+    const hits = [];
+    for (const xx of [ball.x + 0.2, ball.x + 1.8]) {
+      const cell = cellAt(xx, edge);
+      if (cell && !hits.some(o => o.c === cell.c && o.r === cell.r)) hits.push(cell);
+    }
+    if (hits.length) {
+      const by = BR_Y + wall.oy + hits[0].r * BROW;
+      if (ball.vy > 0) ball.y = by - 2; else ball.y = by + BROW;
+      ball.vy = -ball.vy;
+      for (const h of hits) breakCell(h.c, h.r);
+      return;
+    }
+  }
+  if (ball.vy > 0) {
+    /* 挡板:反弹角由落点决定,越靠边越斜,正中接近垂直(手感核心) */
+    if (ball.y + 2 >= PAD_Y && ball.y + 2 <= PAD_Y + PAD_H + 1 &&
+        ball.x + 2 > pad.x && ball.x < pad.x + pad.w) {
+      const rel = Math.max(-1, Math.min(1, (ball.x + 1 - (pad.x + pad.w / 2)) / (pad.w / 2)));
+      const ang = rel * 1.05;                    // 最大约 60 度
+      const sp = ballSpeed();
+      ball.vx = sp * Math.sin(ang);
+      ball.vy = -sp * Math.cos(ang);
+      ball.y = PAD_Y - 2;
+      Snd.paddle();
+      return;
+    }
+    if (ball.y > H) loseBall();
+  }
+}
+/* 1px 子步移动,高速也不穿透 */
+function moveBall() {
+  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(ball.vx), Math.abs(ball.vy))));
+  const sx = ball.vx / steps, sy = ball.vy / steps;
+  for (let i = 0; i < steps; i++) {
+    if (game.state !== ST.PLAY) return;
+    ball.x += sx; collideX();
+    ball.y += sy; collideY();
+  }
+}
+
+/* 平移阵整体左右滑动 / 下压阵每隔几秒下移一行 */
+function stepWall() {
+  if (!wall) return;
+  if (wall.kind === 'shift') {
+    const iv = Math.max(1, 3 - game.loop);
+    if (++wall.dt >= iv) {
+      wall.dt = 0;
+      wall.ox += wall.dir;
+      if (wall.ox <= 0) { wall.ox = 0; wall.dir = 1; }
+      if (wall.ox >= 32) { wall.ox = 32; wall.dir = -1; }
+    }
+  } else if (wall.kind === 'descend') {
+    const iv = Math.max(200, 360 - game.loop * 40);
+    if (++wall.dt >= iv) {
+      wall.dt = 0;
+      if (BR_Y + wall.oy + wall.rows * BROW + BROW <= PAD_Y - 18) {
+        wall.oy += BROW;
+        Snd.shift();
+      }
+    }
+  }
+}
+
+function movePad() {
+  const sp = 2.8;
+  if (keys.left) pad.x -= sp;
+  if (keys.right) pad.x += sp;
+  clampPad();
+}
+
+/* ---------- 主逻辑帧 ---------- */
+function step() {
+  game.frame++;
+  switch (game.state) {
+    case ST.TITLE:
+      if (hit('start')) { newGame(); Snd.start(); }
+      break;
+    case ST.CARD:                                // 关卡卡片:STAGE N / BONUS STAGE
+      if (++game.cardT >= 90) { setupServe(); game.state = ST.SERVE; }
+      break;
+    case ST.SERVE:                               // 球停在挡板上待发球
+      movePad();
+      ball.x = pad.x + pad.w / 2 - 1;
+      ball.y = PAD_Y - 2;
+      if (hit('a') || hit('start') || ++serveT > 240) launch();
+      break;
+    case ST.PLAY:
+      movePad();
+      stepWall();
+      ball.trail.unshift({ x: ball.x, y: ball.y });
+      const cap = 3 + Math.floor(ballSpeed() * 4); // 速度越快残影越长(GB 液晶拖影)
+      while (ball.trail.length > cap) ball.trail.pop();
+      moveBall();
+      break;
+    case ST.CLEAR:                               // 过关停顿
+      if (++game.clearT >= 110) {
+        game.level++;
+        if (game.level > 8) {                    // 8 关全通:恭喜 + 循环加速
+          game.state = ST.CONGRATS;
+          game.congratsT = 0;
+          game.score += 1000;
+          Snd.congrats();
+        } else {
+          startCard();
+        }
+      }
+      break;
+    case ST.CONGRATS:
+      if (++game.congratsT >= 220) {
+        game.loop++;
+        game.level = 1;
+        startCard();
+      }
+      break;
+    case ST.OVER:
+      game.overT++;
+      if (game.overT > 30 && hit('start')) game.state = ST.TITLE;
+      break;
+  }
+}
+
+/* ---------- 渲染 ---------- */
+/* 单块砖:深浅 3 色对应 3/2/1 分,底部+左侧砖缝看出"一块一块" */
+function drawBrickCell(x, y, v) {
+  const col = 3 - v;                             // 3 分最深(0),1 分最浅(2)
+  const seam = col === 0 ? 1 : col - 1;          // 砖缝比砖体深一级
+  R(x, y, BCOL, 5, col);
+  R(x, y + 4, BCOL, 1, seam);
+  R(x, y, 1, 4, seam);
+  if (col === 0) { R(x + 3, y + 1, 1, 1, 1); R(x + 6, y + 2, 1, 1, 1); }
+}
+function drawWall() {
+  if (!wall) return;
+  for (let r = 0; r < wall.rows; r++)
+    for (let c = 0; c < wall.cols; c++) {
+      const v = wall.cells[r][c];
+      if (v) drawBrickCell(BR_X + wall.ox + c * BCOL, BR_Y + wall.oy + r * BROW, v);
+    }
+}
+/* 左右砖柱墙 + 天花板横线 */
+function drawFrameWalls() {
+  for (let y = 8; y < H; y += 8) {
+    R(0, y, 4, 7, 1); R(0, y + 7, 4, 1, 0); R(3, y, 1, 7, 0);
+    R(156, y, 4, 7, 1); R(156, y + 7, 4, 1, 0); R(156, y, 1, 7, 0);
+  }
+  R(0, 8, W, 1, 1); R(0, 9, W, 1, 0);
+}
+function drawHUD() {
+  drawText('SCORE', 0, 0, 0);
+  drawText(String(game.score).padStart(6, '0'), 44, 0, 0);
+  drawText('L' + game.level, 96, 0, 0);
+  for (let i = 0; i < game.lives; i++) R(120 + i * 12, 3, 9, 2, 0); // 小挡板=命
+}
+function drawPad() {
+  R(pad.x, PAD_Y, pad.w, PAD_H, 0);
+  R(pad.x + 1, PAD_Y, pad.w - 2, 1, 2);
+}
+function drawBall() {
+  for (let i = 1; i < ball.trail.length; i++) {  // 1px 残影,越老越浅
+    const t = ball.trail[i];
+    R(t.x, t.y, 1, 1, i < ball.trail.length / 2 ? 1 : 2);
+  }
+  R(ball.x, ball.y, 2, 2, 0);
+}
+function drawScene() {
+  drawHUD();
+  drawFrameWalls();
+  drawWall();
+  drawPad();
+  if (game.state === ST.SERVE || game.state === ST.PLAY) drawBall();
+}
+
+/* 标题:砖墙装饰 + 像素大标题 + 闪烁的 PRESS START */
+function drawTitle() {
+  for (let c = 0; c < 19; c++) {
+    drawBrickCell(4 + c * 8, 12, 3);
+    drawBrickCell(4 + c * 8, 18, 2);
+    drawBrickCell(4 + c * 8, 24, 1);
+  }
+  drawText('ALLEYWAY', 16, 44, 0, 2);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 84, 0); // 闪烁,灵魂所在
+  R(68, 118, 24, 4, 0); R(69, 118, 22, 1, 2);    // 底部挡板 + 球
+  R(79, 108, 2, 2, 0);
+}
+
+function drawCard() {
+  R(0, 0, W, H, 0);
+  const t = wall.kind === 'bonus' ? 'BONUS STAGE' : 'STAGE ' + game.level;
+  drawText(t, (W - t.length * 8) / 2, 64, 3);
+  if (wall.kind === 'bonus') drawText('NO MISS', (W - 7 * 8) / 2, 80, 3);
+}
+function drawClear() {
+  drawScene();
+  R(30, 58, 100, 20, 0);
+  drawText('STAGE CLEAR', 36, 64, 3);
+}
+function drawCongrats() {
+  R(0, 0, W, H, 0);
+  drawText('CONGRATULATIONS', 20, 44, 3);
+  drawText('BONUS 1000', 40, 64, 3);
+  if ((game.frame >> 4) % 2 === 0) drawText('SPEED UP!', 44, 92, 3);
+}
+function drawOver() {
+  R(0, 0, W, H, 0);
+  drawText('GAME OVER', 44, 44, 3);
+  drawText('SCORE ' + String(game.score).padStart(6, '0'), 32, 68, 3);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 100, 3);
+}
+
+function render() {
+  R(0, 0, W, H, 3);                              // 背景 = 最浅色
+  switch (game.state) {
+    case ST.TITLE: drawTitle(); break;
+    case ST.CARD: drawCard(); break;
+    case ST.SERVE: drawScene(); drawServeHint(); break;
+    case ST.PLAY: drawScene(); break;
+    case ST.CLEAR: drawClear(); break;
+    case ST.CONGRATS: drawCongrats(); break;
+    case ST.OVER: drawOver(); break;
+  }
+}
+function drawServeHint() {
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS A', 52, 100, 0);
+}
+
+/* ---------- 主循环:requestAnimationFrame + 固定 60fps 逻辑帧 ---------- */
+let lastTs = 0, acc = 0;
+function frameLoop(ts) {
+  requestAnimationFrame(frameLoop);
+  if (!lastTs) lastTs = ts;
+  let dt = ts - lastTs;
+  lastTs = ts;
+  if (dt > 250) dt = 250;                        // 切后台回来不追帧
+  acc += dt;
+  while (acc >= 1000 / 60) { step(); acc -= 1000 / 60; }
+  render();
+}
+
+/* ---------- 画布整数倍放大(3~5 倍,像素锐利) ---------- */
+function fit() {
+  const ui = document.getElementById('ui');
+  const chrome = (ui ? ui.offsetHeight : 120) + 64;
+  const availW = window.innerWidth - 20, availH = window.innerHeight - chrome;
+  let s = Math.floor(Math.min(availW / 160, availH / 144));
+  s = Math.max(3, Math.min(5, s));
+  cv.style.width = 160 * s + 'px';
+  cv.style.height = 144 * s + 'px';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', fit);
+fit();
+requestAnimationFrame(frameLoop);
+
+/* ---------- 离屏测试钩子(不影响游戏本身) ---------- */
+window.__test = {
+  ST, game, keys, pressed, step, render, cellAt, stepWall,
+  newGame, startCard, setupServe, launch, loseBall, breakCell, buildLevel, kindOf,
+  ballSpeed, updatePadW,
+  WALL_L, WALL_R, CEIL_Y, PAD_Y, PAD_H, BR_X, BR_Y, BCOL, BROW, BASE_PAD_W,
+  key(k, down) { if (down && !keys[k]) pressed[k] = 1; keys[k] = down ? 1 : 0; },
+  get wall() { return wall; },
+  get pad() { return pad; },
+  get ball() { return ball; },
+  get bricksHit() { return bricksHit; },
+  get ceilHalved() { return ceilHalved; },
+  setHits(n) { bricksHit = n; updatePadW(); },
+  clearToLast() {                              // 只留一块砖(测试过关用)
+    let kept = false;
+    for (let r = 0; r < wall.rows; r++)
+      for (let c = 0; c < wall.cols; c++) {
+        if (!wall.cells[r][c]) continue;
+        if (kept) wall.cells[r][c] = 0; else kept = true;
+      }
+    wall.left = 1;
+  },
+};
+</script>
+</body>
+</html>

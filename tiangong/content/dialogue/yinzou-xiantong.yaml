@@ -1,0 +1,57 @@
+# 引奏仙童｜通明殿收表
+# 依据：文档 01 §2.4（程式化）；考据 research §4.9（第3回：傍有引奏仙童接上表文）
+id: yinzou_xiantong
+name: 引奏仙童
+model: speech-2.6-hd
+voice_setting:
+  voice_id: "cute_boy"
+  speed: 1.0
+  pitch: 1
+  emotion: fluent
+
+greet:
+  - id: greet_01
+    text: "大圣，有表此处递。"
+  - id: greet_02
+    text: "表到即接，不敢耽搁。"
+
+topics:
+  - id: shoubiao
+    label: "收表的规矩"
+    source: "第3回"
+    lines:
+      - id: w_yzxt_shoubiao_01
+        speaker: pc
+        text: "小童儿，你这收表，一日收得几道？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: shoubiao_01
+        text: "多时十余道，少时三五道。接一道，唱一道名，登一道簿。"
+      - id: w_yzxt_shoubiao_02
+        speaker: pc
+        text: "老孙的表，你先登。"
+        voice_setting: { emotion: happy, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: shoubiao_02
+        text: "不敢。表有先后，簿有次第，大圣的表也一样。"
+  - id: paotui
+    label: "殿里殿外"
+    source: "第3回、第31回；自拟对话"
+    lines:
+      - id: w_yzxt_paotui_01
+        speaker: pc
+        text: "小童儿，这殿里殿外的路，你跑得熟么？"
+        voice_setting: { emotion: happy, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: paotui_01
+        text: "通明殿到灵霄殿，童儿一日跑七八趟，闭着眼也错不了。"
+
+fallback:
+  - id: fb_01
+    text: "童儿只管收表，别的不晓得。"
+  - id: fb_02
+    text: "大圣问天师去。"
+
+bye:
+  - id: bye_01
+    text: "大圣慢走。"

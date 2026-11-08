@@ -1,0 +1,1333 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>自动放映 自检</title>
+<link rel="stylesheet" href="css/main.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js",
+    "three/addons/postprocessing/Pass.js": "./vendor/Pass.js",
+    "@sparkjsdev/spark": "./vendor/spark.module.min.js"
+  }
+}
+</script>
+<script>
+// 本自检页把 localStorage 换成页内内存 shim。理由：score.js / app.js / choice.js 会真实
+// 读写 shanhe_save_v1 与 shanhe_settings_v1，若直落真实存储，人工在日常浏览器 profile 里
+// 打开本页就会污染玩家存档（CDP 运行器每次用独立 user-data-dir 不受影响，但本页也支持
+// 人工打开）。必须在任何项目脚本之前替换，否则 app.js 的 init() 已经读过真实存档了。
+(function () {
+  var mem = Object.create(null);
+  var shim = {
+    getItem: function (k) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
+    setItem: function (k, v) { mem[k] = String(v); },
+    removeItem: function (k) { delete mem[k]; },
+    clear: function () { mem = Object.create(null); },
+    key: function (i) { return Object.keys(mem)[i] || null; }
+  };
+  Object.defineProperty(shim, "length", { get: function () { return Object.keys(mem).length; } });
+  Object.defineProperty(window, "localStorage", { configurable: true, get: function () { return shim; } });
+})();
+</script>
+</head>
+<body>
+<pre id="out" style="position:fixed;left:0;top:0;z-index:99999;background:#fff;color:#000;margin:0;padding:8px;font:12px/1.5 monospace;max-height:60vh;overflow:auto">运行中……</pre>
+
+<header id="top-bar">
+  <h1 id="app-title" aria-label="山河岁月"><span class="app-title-text">山河岁月</span></h1>
+  <div id="score-hud" aria-live="polite"></div>
+  <nav id="top-bar-actions">
+    <button id="btn-mute" type="button" aria-pressed="false">静音</button>
+    <button id="btn-graph" type="button" aria-label="人物星图"><span class="btn-label-full">人物星图</span><span class="btn-label-short">星图</span></button>
+    <button id="btn-map" type="button">舆图</button>
+    <button id="btn-autoplay" type="button" aria-pressed="false"><span class="btn-label-full">自动放映</span><span class="btn-label-short">放映</span></button>
+    <button id="btn-ending" type="button" hidden>终章</button>
+    <button id="btn-about" type="button">关于</button>
+    <button id="btn-restart" type="button" aria-label="重新开始"><span class="btn-label-full">重新开始</span><span class="btn-label-short">重来</span></button>
+  </nav>
+</header>
+
+<main id="views">
+  <div id="scroll-view"></div>
+  <div id="choice-view" hidden></div>
+  <div id="graph-view" hidden></div>
+  <div id="map-view" hidden></div>
+  <div id="ending-view" hidden></div>
+  <div id="about-view" hidden></div>
+</main>
+
+<script src="data/chapters.js"></script>
+<script src="data/events.js"></script>
+<script src="data/choices.js"></script>
+<script src="data/persons.js"></script>
+<script src="data/map-geo.js"></script>
+<script src="data/map-places.js"></script>
+<script src="vendor/d3.v7.min.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/score.js"></script>
+<script src="js/autoplay-kit.js"></script>
+<script src="js/narration.js"></script>
+<script src="js/bgm.js"></script>
+<script src="js/chapterfilm.js"></script>
+<script src="js/scroll.js"></script>
+<script src="js/choice.js"></script>
+<script src="js/graph.js"></script>
+<script src="js/ending.js"></script>
+<script src="js/map.js"></script>
+<script src="js/app.js"></script>
+<script src="js/autoplay.js"></script>
+<script type="module">
+import "./js/walkin.js";
+
+var R = { pass: 0, fail: 0, messages: [] };
+function ok(cond, msg) { if (cond) R.pass++; else { R.fail++; R.messages.push("✘ " + msg); } }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function report() {
+  document.getElementById("out").textContent =
+    "通过 " + R.pass + " 项，失败 " + R.fail + " 项\n" + R.messages.join("\n");
+}
+// 任何段落抛异常都要先把已有结果写出去，否则运行器只能等到超时、拿不到任何诊断信息
+window.addEventListener("error", function () { report(); });
+
+// ============ Task 1：localStorage shim 与时钟原语 ============
+
+ok(!(window.localStorage instanceof Storage), "localStorage 已被页内内存 shim 替换（不污染真实存档）");
+window.localStorage.setItem("__probe__", "1");
+ok(window.localStorage.getItem("__probe__") === "1", "shim 的 setItem/getItem 往返正常");
+window.localStorage.removeItem("__probe__");
+
+var KIT = window.SHY_AUTOPLAY_KIT;
+ok(!!KIT, "window.SHY_AUTOPLAY_KIT 已挂载");
+ok(typeof KIT.createClock === "function" && typeof KIT.orbitEase === "function"
+   && typeof KIT.isCancelledError === "function", "kit 三个入口都是函数");
+
+// 缓动曲线：端点精确、单调不减、总位移恰为 1（否则环绕一周会差一截或多转一点）
+ok(KIT.orbitEase(0) === 0 && KIT.orbitEase(1) === 1, "orbitEase 端点精确为 0 与 1");
+var monotonic = true, prevE = -1;
+for (var q = 0; q <= 100; q++) { var e = KIT.orbitEase(q / 100); if (e < prevE - 1e-9) monotonic = false; prevE = e; }
+ok(monotonic, "orbitEase 单调不减（镜头不会倒转）");
+ok(Math.abs(KIT.orbitEase(0.5) - 0.5) < 1e-6, "orbitEase 在中点为 0.5（两端缓动对称）");
+
+// wait 基本时长
+var clk = KIT.createClock();
+var t0 = Date.now();
+await clk.wait(300);
+var dt0 = Date.now() - t0;
+ok(dt0 >= 260 && dt0 <= 450, "wait(300) 实测 " + dt0 + "ms");
+
+// 暂停语义（设计文档 §9.1 断言 4）：wait(1000) 开始 200ms 后暂停 2000ms 再继续，
+// 总墙钟应 ≈3000ms。≈4000ms 说明恢复时重开了完整时长的定时器（明确禁止的实现），
+// ≈1000ms 说明暂停对该等待未生效。
+var t1 = Date.now();
+var p1 = clk.wait(1000);
+setTimeout(function () { clk.pause(); }, 200);
+setTimeout(function () { clk.resume(); }, 2200);
+await p1;
+var dt1 = Date.now() - t1;
+ok(dt1 >= 2820 && dt1 <= 3250,
+  "暂停 2s 的 wait(1000) 应 ≈3000ms，实测 " + dt1 + "ms（≈4000=恢复时重开完整定时器，≈1000=暂停未生效）");
+ok(clk.isPaused() === false, "resume 后 isPaused 为 false");
+
+// waitFor 命中与超时
+var flag = false;
+setTimeout(function () { flag = true; }, 300);
+var hit = await clk.waitFor(function () { return flag; }, { timeoutMs: 3000 });
+ok(hit === true, "waitFor 条件命中返回 true");
+var miss = await clk.waitFor(function () { return false; }, { timeoutMs: 300 });
+ok(miss === false, "waitFor 超时返回 false 而非抛错");
+var immediate = await clk.waitFor(function () { return true; }, { timeoutMs: 3000 });
+ok(immediate === true, "waitFor 对已成立的条件立即返回 true");
+
+// withCap：永不 settle 的 promise 也不能把放映挂死
+var t2 = Date.now();
+var capped = await clk.withCap(new Promise(function () {}), 250);
+ok(capped === undefined && Date.now() - t2 < 900, "withCap 超时后 resolve(undefined) 而非挂死");
+var passthrough = await clk.withCap(Promise.resolve("值"), 5000);
+ok(passthrough === "值", "withCap 在 promise 先完成时透传其值");
+clk.cancel();
+
+// cancel 令 pending 等待以 CancelledError reject
+var clk2 = KIT.createClock();
+var rejectedKind = null;
+var pending = clk2.wait(5000).then(function () { rejectedKind = "resolved"; },
+                                   function (e) { rejectedKind = KIT.isCancelledError(e) ? "cancelled" : "other"; });
+clk2.cancel();
+await pending;
+ok(rejectedKind === "cancelled", "cancel() 令 pending 的 wait 以 CancelledError reject，实际 " + rejectedKind);
+ok(clk2.isCancelled() === true, "cancel 后 isCancelled 为 true");
+
+// ============ Task 2：全景 360° 环绕 ============
+
+var C = window.SHY_CHOICE;
+ok(typeof C.orbitPanorama === "function" && typeof C.setViewMode === "function"
+   && typeof C.setAutoplayActive === "function" && typeof C.setOrbitPaused === "function"
+   && typeof C.debugPano === "function", "SHY_CHOICE 四个放映契约方法 + debugPano 均已导出");
+
+// 尚未打开任何抉择（全景层不存在/隐藏）时必须立即 resolve(false)，绝不能挂死
+var t3 = Date.now();
+var noPano = await C.orbitPanorama({ durationMs: 5000 });
+ok(noPano === false && Date.now() - t3 < 500, "未进入环景模式时 orbitPanorama 立即 resolve(false)");
+
+// 打开 c01（有 2:1 全景图），等环景引擎起来
+document.dispatchEvent(new CustomEvent("shy:enter-choice", { detail: { choiceId: "c01" } }));
+var panoEl = null;
+for (var pi = 0; pi < 60 && !panoEl; pi++) {
+  await sleep(100);
+  var el = document.querySelector(".choice-bg-pano");
+  if (el && !el.hidden) panoEl = el;
+}
+ok(panoEl !== null, "c01 以环景模式启动（.choice-bg-pano 可见）");
+ok(C.debugPano().panoTileW > 0, "panoTileW 已算出，实际 " + C.debugPano().panoTileW);
+
+// 环绕一周的位移必须恰为一个平铺宽度——差一截就会看见全景接缝
+var st0 = C.debugPano();
+var orbited = await C.orbitPanorama({ durationMs: 600 });
+var st1 = C.debugPano();
+var moved = st1.panoX - st0.panoX;
+ok(orbited === true, "环景模式下 orbitPanorama resolve(true)");
+ok(Math.abs(moved + st0.panoTileW) < 1.5,
+  "环绕一周位移 ≈ -panoTileW（实测 " + moved.toFixed(2) + " vs " + (-st0.panoTileW).toFixed(2) + "）");
+ok(C.debugPano().orbiting === false, "环绕结束后 orbiting 复位为 false");
+
+// 暂停：冻结期间位移必须为 0
+var pausedOrbit = C.orbitPanorama({ durationMs: 1200 });
+await sleep(150);
+C.setOrbitPaused(true);
+var pa = C.debugPano().panoX;
+await sleep(350);
+var pb = C.debugPano().panoX;
+C.setOrbitPaused(false);
+await pausedOrbit;
+ok(Math.abs(pb - pa) < 1, "setOrbitPaused(true) 期间环绕位移冻结（实测 " + (pb - pa).toFixed(2) + "px）");
+
+// 放映态：拖拽必须失效，否则观众误触会和镜头轨道打架
+C.setAutoplayActive(true);
+var ov = document.querySelector(".choice-overlay");
+ok(ov.classList.contains("is-autoplay"), "setAutoplayActive(true) 加上 .is-autoplay 类");
+var dragBefore = C.debugPano().panoX;
+ov.dispatchEvent(new PointerEvent("pointerdown", { clientX: 100, clientY: 300, pointerId: 1, bubbles: true, cancelable: true }));
+ov.dispatchEvent(new PointerEvent("pointermove", { clientX: 400, clientY: 300, pointerId: 1, bubbles: true }));
+var dragAfter = C.debugPano().panoX;
+ov.dispatchEvent(new PointerEvent("pointerup", { clientX: 400, clientY: 300, pointerId: 1, bubbles: true }));
+ok(Math.abs(dragAfter - dragBefore) < 5,
+  "放映态全景拖拽被禁用（300px 拖拽未产生位移，实测 " + (dragAfter - dragBefore).toFixed(1) + "px）");
+
+// 放映态 + 观景模式下，「AI 生成想象图」角标必须仍然可见（项目硬规则）
+C.setViewMode(true);
+await sleep(50);
+var badge = document.querySelector(".choice-ai-badge");
+ok(parseFloat(getComputedStyle(badge).opacity) > 0.5,
+  "放映态的观景模式下 AI 角标仍可见（opacity=" + getComputedStyle(badge).opacity + "）");
+C.setViewMode(false);
+C.setAutoplayActive(false);
+await sleep(50);
+ok(parseFloat(getComputedStyle(document.querySelector(".choice-ai-badge")).opacity) > 0.5,
+  "退出放映态后角标恢复常态可见");
+
+// ============ Task 3：高斯泼溅原地环视 ============
+
+var W = window.SHY_WALKIN;
+ok(typeof W.orbit === "function" && typeof W.setOrbitPaused === "function",
+   "SHY_WALKIN.orbit / setOrbitPaused 已导出");
+
+// 无模型的抉择：立即 resolve(false)，且不得创建覆盖层（c99 是约定的"永不放置模型"的 id）
+var noModel = await W.orbit("c99", { durationMs: 500 });
+ok(noModel === false, "无模型的 c99：orbit resolve(false)，实际 " + noModel);
+ok(document.querySelector(".walkin-overlay") === null, "无模型时不创建覆盖层");
+
+// c01 有模型：真实加载并环视。.spz 约 49MB，本机 HTTP 下加载数秒，给足超时。
+var yaws = [];
+var uiChecked = false, exitHiddenInOrbit = false, hintTextInOrbit = "";
+var orbitPromise = W.orbit("c01", { durationMs: 4000 });
+for (var wi = 0; wi < 400; wi++) {
+  await sleep(50);
+  var st = W.debugState();
+  if (!st) { if (yaws.length) break; else continue; }
+  if (!uiChecked && st.overlay) {
+    uiChecked = true;
+    exitHiddenInOrbit = st.overlay.querySelector(".walkin-exit").hidden === true;
+    hintTextInOrbit = st.overlay.querySelector(".walkin-hint").textContent;
+  }
+  if (st.camera && st.mesh && st.mesh.isInitialized) yaws.push(st.camera.rotation.y);
+}
+var orbitOk = await orbitPromise;
+
+ok(orbitOk === true, "c01 环视 resolve(true)，实际 " + orbitOk);
+ok(W.isOpen() === false, "环视结束后自动关闭（isOpen 为 false）");
+ok(document.querySelector(".walkin-overlay") === null, "环视结束后覆盖层已从 DOM 移除");
+ok(exitHiddenInOrbit === true, "环视模式下「回到抉择」按钮不渲染");
+ok(hintTextInOrbit.indexOf("自动环视") >= 0, "环视模式下提示文案改为「自动环视中」，实际「" + hintTextInOrbit + "」");
+ok(yaws.length > 3, "环视过程中采到多帧 camera.rotation.y（实际 " + yaws.length + " 帧）");
+var monotoneYaw = yaws.every(function (y, i) { return i === 0 || y <= yaws[i - 1] + 1e-6; });
+ok(monotoneYaw, "yaw 单调递减（镜头只朝一个方向转，不来回摆）");
+ok(yaws.length > 3 && yaws[yaws.length - 1] < -Math.PI,
+   "环视转过半圈以上（末次采样 yaw=" + (yaws[yaws.length - 1] || 0).toFixed(3) + "，应 < -3.14）");
+
+// 常规漫游模式不受影响：仍有「回到抉择」按钮与 WASD 提示
+W.open("c01");
+await sleep(300);
+var normalOverlay = document.querySelector(".walkin-overlay");
+ok(normalOverlay && normalOverlay.querySelector(".walkin-exit").hidden === false,
+   "常规漫游模式仍渲染「回到抉择」按钮");
+ok(normalOverlay && normalOverlay.querySelector(".walkin-hint").textContent.indexOf("WASD") >= 0,
+   "常规漫游模式仍显示 WASD 提示");
+W.close();
+ok(document.querySelector(".walkin-overlay") === null, "常规漫游 close 后覆盖层已移除");
+
+// ============ Task 4：沙盒进出 ============
+
+ok(typeof window.SHY_APP.showToast === "function", "SHY_APP.showToast 已导出");
+var A = window.SHY_AUTOPLAY;
+ok(!!A && typeof A.start === "function" && typeof A.stop === "function"
+   && typeof A.togglePause === "function" && typeof A.isRunning === "function"
+   && typeof A.isPaused === "function" && typeof A.debugState === "function",
+   "SHY_AUTOPLAY 六个入口均已导出");
+
+// 造一个"玩家已有进度"的真实存档，证明放映全程不碰它
+window.SHY_APP.state = {
+  unlockedCount: 5, total: 777, combo: 2,
+  answered: { c01: { firstTryCorrect: true, earned: 100, tries: 1, confirmed: true } },
+  readExtra: { e0101: true }, litPersons: ["p_linzexu"],
+  chapterEarned: { ch01: "甲" }, lastGradedChapter: "ch01", finished: false
+};
+window.SHY_SCORE.saveState(window.SHY_APP.state);
+var rawBefore = window.localStorage.getItem("shanhe_save_v1");
+var stateBefore = JSON.stringify(window.SHY_APP.state);
+var saveFnBefore = window.SHY_SCORE.saveState;
+
+var started = A.start({ debugFast: true });
+ok(started === true, "start() 返回 true");
+ok(A.isRunning() === true, "start 后 isRunning 为 true");
+ok(window.SHY_APP.state.unlockedCount === 1 && window.SHY_APP.state.total === 0,
+   "沙盒 state 被替换为全新状态（unlockedCount=" + window.SHY_APP.state.unlockedCount +
+   " total=" + window.SHY_APP.state.total + "）");
+ok(window.SHY_SCORE.saveState !== saveFnBefore, "saveState 已被劫持为 no-op");
+
+// 重复 start 必须无效，否则会用沙盒 state 覆盖掉快照，真实存档一去不返
+var restarted = A.start({ debugFast: true });
+ok(restarted === false, "放映进行中重复 start() 返回 false 且不重置快照");
+
+// 放映期任何写盘调用都必须落空
+window.SHY_APP.state.total = 9999;
+window.SHY_SCORE.saveState(window.SHY_APP.state);
+ok(window.localStorage.getItem("shanhe_save_v1") === rawBefore, "放映期 saveState 调用不写盘");
+
+A.stop();
+ok(A.isRunning() === false, "stop 后 isRunning 为 false");
+ok(window.SHY_SCORE.saveState === saveFnBefore, "stop 后 saveState 已还原为原函数");
+ok(JSON.stringify(window.SHY_APP.state) === stateBefore, "stop 后 state 与启动前快照深度相等");
+ok(window.localStorage.getItem("shanhe_save_v1") === rawBefore, "stop 后 localStorage 逐字节未变");
+
+// 重复 stop 必须幂等：若不加守卫，第二次 stop 会把已经是 no-op 的 saveState 当作"原函数"存下来，
+// 从此真实存档永远写不进去——这类静默损坏最难排查，必须有断言钉住。
+A.stop();
+ok(window.SHY_SCORE.saveState === saveFnBefore, "重复 stop() 幂等，不会把 no-op 误当原函数保存");
+ok(JSON.stringify(window.SHY_APP.state) === stateBefore, "重复 stop() 不破坏已还原的 state");
+
+// 异常安全网 1：start() 关键段（快照/劫持/换态/首帧渲染）中途抛出必须完整回滚，
+// 不能把 saveState 停在 no-op、把 state 停在沙盒态、把 clock 定时器晾在那不 cancel。
+var renderOrig = window.SHY_SCROLL.render;
+window.SHY_SCROLL.render = function () { throw new Error("模拟渲染异常"); };
+var startThrew = A.start({ debugFast: true });
+window.SHY_SCROLL.render = renderOrig;
+ok(startThrew === false, "start() 关键段抛出时返回 false，实际 " + startThrew);
+ok(A.isRunning() === false, "start() 回滚后 isRunning 为 false");
+ok(window.SHY_SCORE.saveState === saveFnBefore, "start() 回滚后 saveState 仍是原函数");
+ok(JSON.stringify(window.SHY_APP.state) === stateBefore, "start() 回滚后 state 与启动前快照深度相等");
+
+// 回滚必须彻底：紧接着的正常 start()/stop() 应照常工作，证明没有半开状态卡住
+// （比如 clock 没 cancel、running 卡在 true 导致后续 start() 一律被挡）
+var startAgainOk = A.start({ debugFast: true });
+A.stop();
+ok(startAgainOk === true && A.isRunning() === false
+   && window.SHY_SCORE.saveState === saveFnBefore
+   && JSON.stringify(window.SHY_APP.state) === stateBefore,
+   "start() 异常回滚后仍可正常重新放映一轮并干净收尾");
+
+// 异常安全网 2：stop() 收尾阶段（teardownScene，如 WebGL 上下文丢失导致 renderer.dispose 抛）
+// 中途抛出，也必须无条件走到 saveState/state 的还原——这与"重复 stop 不加守卫"是同一类
+// 静默永久损坏，只是这次由异常路径触发，且此前没有任何回归信号覆盖它。
+var startedForStopThrow = A.start({ debugFast: true });
+ok(startedForStopThrow === true, "为 stop() 异常用例准备一次正常放映");
+var walkinCloseOrig = window.SHY_WALKIN.close;
+window.SHY_WALKIN.close = function () { throw new Error("模拟 WebGL 上下文丢失"); };
+A.stop();
+window.SHY_WALKIN.close = walkinCloseOrig;
+ok(A.isRunning() === false, "stop() 收尾抛出后 isRunning 仍变为 false");
+ok(window.SHY_SCORE.saveState === saveFnBefore, "stop() 收尾抛出后 saveState 仍被还原为原函数");
+ok(JSON.stringify(window.SHY_APP.state) === stateBefore, "stop() 收尾抛出后 state 仍被还原为启动前快照");
+ok(window.localStorage.getItem("shanhe_save_v1") === rawBefore, "stop() 收尾抛出后 localStorage 逐字节未变");
+
+// ============ Task 5：全程时间轴 ============
+
+window.SHY_APP.state = window.SHY_SCORE.newState();
+window.SHY_SCORE.saveState(window.SHY_APP.state);
+var raw5 = window.localStorage.getItem("shanhe_save_v1");
+var snap5 = JSON.stringify(window.SHY_APP.state);
+
+A.start({ debugFast: true });
+var ended5 = false;
+for (var k5 = 0; k5 < 3000; k5++) {          // 最长 300s
+  await sleep(100);
+  if (!A.isRunning()) { ended5 = true; break; }
+}
+ok(ended5 === true, "debugFast 全程放映在 300s 内自行跑完并停止");
+
+var lr = A.debugState().lastRun;
+ok(!!lr, "stop 前记录了沙盒终态 lastRun");
+ok(lr && lr.finished === true, "放映走到通关（沙盒 state.finished 为 true）");
+ok(lr && lr.view === "ending", "终态停在 ending 视图，实际 " + (lr && lr.view));
+ok(lr && lr.total === 3290,
+   "满分 3290（26 抉择全首答正确 + 连击倍率，不含史海钩沉），实际 " + (lr && lr.total));
+var gradeKeys = lr ? Object.keys(lr.chapterEarned) : [];
+ok(gradeKeys.length === 15 && gradeKeys.every(function (k) { return lr.chapterEarned[k] === "甲"; }),
+   "15 章全部评为甲，实际 " + gradeKeys.length + " 章 / " +
+   gradeKeys.map(function (k) { return lr.chapterEarned[k]; }).join(""));
+
+ok(JSON.stringify(window.SHY_APP.state) === snap5, "全程跑完后真实 state 原样还原");
+ok(window.localStorage.getItem("shanhe_save_v1") === raw5, "全程跑完后 localStorage 逐字节未变");
+
+// 中途 stop 也要能干净退场，不留下 3D 覆盖层与观景态
+A.start({ debugFast: true });
+await sleep(1500);
+A.stop();
+await sleep(200);
+ok(document.querySelector(".walkin-overlay") === null, "中途 stop 后无残留 3D 覆盖层");
+ok(document.querySelector(".choice-overlay.is-viewing") === null, "中途 stop 后观景模式已退出");
+ok(document.querySelector(".modal-backdrop.is-open") === null, "中途 stop 后事件卡已关闭");
+ok(JSON.stringify(window.SHY_APP.state) === snap5, "中途 stop 后真实 state 原样还原");
+
+// ============ Task 5 修复回归：真实音频路径（waitNarration 非 debugFast 分支） ============
+//
+// 复现审查发现的 bug：new Audio() 同一 tick 内 duration 恒为 NaN，要等一小段真实时间（解码器
+// 读到文件头）才会被填上。debugFast 全程都用 clock.wait(20) 短路掉这条分支（waitNarration
+// 顶部 if (fast) return），是这条 bug 能在只跑 debugFast 的自检里滑过去的原因——本节必须以
+// debugFast:false 驱动才能真正跑到它。用一个"先 NaN、200ms 后置为已知值"的假音频对象模拟
+// 这个时序，配合一段刻意缩短的 ch01.intro（不缩短的话 estimateMs 兜底本身也要几十秒，测试
+// 窗口分不出新旧行为的差异）。
+var ch01_6 = (window.SHY_DATA.chapters || []).filter(function (c) { return c.id === "ch01"; })[0];
+var origIntro6 = ch01_6.intro;
+ch01_6.intro = "测试用极短占位文本"; // 9 字 × 220ms = 1980 → 钳到 estimateMs 下限 4000ms
+
+var origPlayFor6 = window.SHY_VOICE.playFor;
+var fakeAudio6 = null; // 供测试脚本读取"最近一次 playFor 创建的假音频"，用于派发 ended
+window.SHY_VOICE.playFor = function () {
+  var listeners6 = {};
+  var audio = {
+    duration: NaN, // 模拟 new Audio() 同一 tick 内的真实状态
+    pause: function () {},
+    play: function () { return Promise.resolve(); },
+    addEventListener: function (t, fn) { (listeners6[t] = listeners6[t] || []).push(fn); },
+    removeEventListener: function (t, fn) {
+      var arr = listeners6[t] || []; var i = arr.indexOf(fn); if (i >= 0) arr.splice(i, 1);
+    },
+    dispatchEvent: function (evt) { (listeners6[evt.type] || []).slice().forEach(function (fn) { fn(evt); }); }
+  };
+  fakeAudio6 = audio;
+  window.SHY_VOICE.current = audio;
+  // 200ms 后补上"元数据已解码"——闭包捕获的是这次调用自己的 audio，不会被后续调用覆盖。
+  setTimeout(function () { audio.duration = 50; }, 200);
+};
+
+// document 监听器净增量：只关心 shy:muted-changed（makeAudioEndWaiter 专挂的那一条）。
+// 手法与 walkin-selftest.html 里对开关覆盖层的监听器计数是同一套。
+var muteAdds6 = 0, muteRemoves6 = 0;
+var realAddEL6 = document.addEventListener.bind(document);
+var realRemoveEL6 = document.removeEventListener.bind(document);
+document.addEventListener = function (t, l, o) {
+  if (t === "shy:muted-changed") muteAdds6++;
+  return realAddEL6(t, l, o);
+};
+document.removeEventListener = function (t, l, o) {
+  if (t === "shy:muted-changed") muteRemoves6++;
+  return realRemoveEL6(t, l, o);
+};
+
+var snap6 = JSON.stringify(window.SHY_APP.state);
+// skipFilm:true——本节要测的是 waitNarration 的真实音频分支，ch01 现在挂着真实 .mp4，
+// 不显式跳过的话章引言幕会去放真实影片而不是调这里桩好的 playFor，fakeAudio6 永远不会
+// 被赋值。同一类顾虑见下方"并行性打桩"节对 SHY_WALKIN.orbit 的打桩说明。
+A.start({ debugFast: false, skipFilm: true }); // 非 debugFast：dwell() 不压缩，才会走到 waitNarration 的真实分支
+
+var got6 = false;
+for (var w6 = 0; w6 < 40 && !got6; w6++) { // 最长 4s：章引言幕滚动落位（700ms）后即调用 playFor
+  await sleep(100);
+  if (window.SHY_VOICE.current === fakeAudio6) got6 = true;
+}
+ok(got6 === true, "真实音频路径：章引言幕已把假音频挂到 SHY_VOICE.current");
+
+// 此刻 duration 已由 setTimeout 补上，按修复后的逻辑封顶应 ≈52000ms（50s 真实时长 + 2000
+// 缓冲）；若封顶退化回旧 bug 的 estimateMs 钳位值（本例中 4000+2000=6000ms），事件幕会在
+// 约 0.7s（滚动落位）+6s（封顶）+1.2s（章节停顿）≈7.9s 时提前打开。等到 9s 时旧 bug 的
+// modal 早该出现，新逻辑则应仍在等 ended，modal 尚未出现——用这个时间窗分辨新旧行为。
+await sleep(9000);
+ok(document.querySelector(".modal-backdrop.is-open") === null,
+   "真实音频路径：9s 内未提前推进到事件卡（若封顶退化为 estimateMs 钳位值会在约 7.9s 时越过）");
+
+fakeAudio6.dispatchEvent(new Event("ended"));
+var advanced6 = false;
+for (var w7 = 0; w7 < 50 && !advanced6; w7++) { // 最长 5s
+  await sleep(100);
+  if (document.querySelector(".modal-backdrop.is-open")) advanced6 = true;
+}
+ok(advanced6 === true, "真实音频路径：dispatchEvent(ended) 后放映继续推进到第一张事件卡");
+
+A.stop();
+// clock.cancel() 触发的 CancelledError 经 Promise 微任务链传播到 waitNarration 的 finally——
+// 同步调用 stop() 后立即读计数会抢在微任务前面，故等一轮真实时间再核对，且要晚于恢复原始
+// document.addEventListener/removeEventListener，否则会漏计这次由取消触发的 cleanup。
+await sleep(200);
+ok(muteAdds6 > 0 && muteAdds6 === muteRemoves6,
+   "真实音频路径：shy:muted-changed 监听净增为 0（挂 " + muteAdds6 + " 次摘 " + muteRemoves6 + " 次）");
+ok(JSON.stringify(window.SHY_APP.state) === snap6, "真实音频路径场景 stop 后真实 state 原样还原");
+
+document.addEventListener = realAddEL6;
+document.removeEventListener = realRemoveEL6;
+window.SHY_VOICE.playFor = origPlayFor6;
+ch01_6.intro = origIntro6;
+
+// ============ Task 6：抉择幕的两段环绕 ============
+
+// 用打桩记录编排顺序与参数：真跑 26 幕 × 48s 环绕不适合放进自检，
+// 要验的是"导演是否按正确顺序、正确参数、正确的观景态开关调用了它们"。
+var calls = [];
+var realPano = window.SHY_CHOICE.orbitPanorama;
+var realViewMode = window.SHY_CHOICE.setViewMode;
+var realWalkinOrbit = window.SHY_WALKIN.orbit;
+window.SHY_CHOICE.orbitPanorama = function (o) { calls.push("pano:" + o.durationMs); return Promise.resolve(true); };
+window.SHY_CHOICE.setViewMode = function (on) { calls.push("view:" + (on ? "on" : "off")); return realViewMode(on); };
+window.SHY_WALKIN.orbit = function (id, o) { calls.push("splat:" + id + ":" + o.durationMs); return Promise.resolve(true); };
+
+window.SHY_APP.state = window.SHY_SCORE.newState();
+A.start({ debugFast: true, skipOrbits: false });
+var ended6 = false;
+for (var k6 = 0; k6 < 3000; k6++) {
+  await sleep(100);
+  if (!A.isRunning()) { ended6 = true; break; }
+}
+ok(ended6 === true, "带环绕编排的 debugFast 全程放映在 300s 内跑完");
+
+ok(calls.slice(0, 4).join(" | ") === "view:on | pano:24000 | splat:c01:24000 | view:off",
+   "首个抉择幕的编排为 观景on → 全景24s → 泼溅24s → 观景off，实际 " + calls.slice(0, 4).join(" | "));
+ok(calls.filter(function (c) { return c.indexOf("pano:") === 0; }).length === 26,
+   "26 个抉择幕各调用一次全景环绕，实际 " + calls.filter(function (c) { return c.indexOf("pano:") === 0; }).length);
+ok(calls.filter(function (c) { return c.indexOf("splat:") === 0; }).length === 26,
+   "26 个抉择幕各调用一次泼溅环视（无模型的由 orbit 内部 resolve(false)），实际 " +
+   calls.filter(function (c) { return c.indexOf("splat:") === 0; }).length);
+var viewOn = calls.filter(function (c) { return c === "view:on"; }).length;
+var viewOff = calls.filter(function (c) { return c === "view:off"; }).length;
+ok(viewOn === 26 && viewOff === viewOn + 1,
+   "观景模式 26 开、27 关——多出的一次是 stop() 收尾时 teardownScene() 的无条件防御性关闭（幂等，与环绕无关），实际 " +
+   viewOn + " 开 / " + viewOff + " 关");
+ok(A.debugState().lastRun.total === 3290, "插入环绕后仍是满分 3290，实际 " + A.debugState().lastRun.total);
+
+// skipOrbits（自检默认随 debugFast 打开）时一次环绕都不该发起
+calls.length = 0;
+window.SHY_APP.state = window.SHY_SCORE.newState();
+A.start({ debugFast: true });
+await sleep(3000);
+A.stop();
+ok(calls.filter(function (c) { return c.indexOf("pano:") === 0 || c.indexOf("splat:") === 0; }).length === 0,
+   "skipOrbits 默认随 debugFast 打开时不发起任何环绕，实际 " +
+   calls.filter(function (c) { return c.indexOf("pano:") === 0 || c.indexOf("splat:") === 0; }).length + " 次");
+
+// 减弱动效偏好：跳过两段环绕，改为观景态静态停留（不调 orbitPanorama、不调 walkin.orbit）
+calls.length = 0;
+var realMatchMedia = window.matchMedia;
+window.matchMedia = function (q) {
+  if (/prefers-reduced-motion/.test(q)) return { matches: true, media: q, addEventListener: function () {}, removeEventListener: function () {} };
+  return realMatchMedia.call(window, q);
+};
+window.SHY_APP.state = window.SHY_SCORE.newState();
+A.start({ debugFast: true, skipOrbits: false });
+for (var k7 = 0; k7 < 600 && calls.indexOf("view:off") < 0; k7++) await sleep(50);
+A.stop();
+window.matchMedia = realMatchMedia;
+ok(calls.indexOf("view:on") >= 0 && calls.indexOf("view:off") >= 0,
+   "减弱动效下仍进出观景模式（做静态展示）");
+ok(calls.filter(function (c) { return c.indexOf("pano:") === 0 || c.indexOf("splat:") === 0; }).length === 0,
+   "减弱动效下不发起任何环绕，实际 " +
+   calls.filter(function (c) { return c.indexOf("pano:") === 0 || c.indexOf("splat:") === 0; }).length + " 次");
+
+window.SHY_CHOICE.orbitPanorama = realPano;
+window.SHY_CHOICE.setViewMode = realViewMode;
+window.SHY_WALKIN.orbit = realWalkinOrbit;
+
+// ============ 验收修复 1：抉择幕「旁白与环绕并行」============
+//
+// 钉住 playChoice() 把"等旁白播完 → 再跑两段环绕"改成了两者并发、取 max(narration, orbits)
+// 才作答。光看调用顺序分不出并行与串行——debugFast + 打桩下两者都是瞬时的（Task 6 那组
+// 断言即是如此）。这里改用真实定时器打桩（不依赖 debugFast/dwell 的压缩，全程 debugFast:
+// false）：SHY_CHOICE.orbitPanorama 经真实 2200ms 后 resolve；c01 的旁白经真实 400ms 后
+// "播完"（其余幕的旁白桩成 5ms 内播完，只为尽快滚到 c01，不占用测量窗口）；SHY_WALKIN.orbit
+// 也打桩为立即 resolve——c01 真实挂着一个约 49MB 的 .spz，不桩它会让测量窗口被真实网络
+// 加载耗时污染，且与本条要测的并行语义无关。
+//
+// 两个桩值刻意选得比最初设想的 200/500 大：choice.js 自己另有一段与旁白/环绕都无关的固定
+// 真实定时器——renderSceneAndSchedule() 按 choice.scene 逐句淡入后延时 550ms 才
+// revealQuestionAndOptions()（选项按钮此刻才被创建），c01 的 scene 切成 6 句、
+// stepDelay=min(160,1400/6)=160、lastDelay=5*160=800，算下来选项要到 shy:enter-choice
+// 后 ~1350ms 才存在——这与 playChoice() 内部的并行/串行编排完全无关，但如果桩值定得太小
+// （比如最初设想的 200/500），"正确选项被点击"这一时刻会被这段固定 1350ms 死死卡住，
+// 并行（500ms）与串行（700ms）的差异会被这段不相关的 1350ms 吞掉、测不出来（首轮实测
+// 印证：桩 200/500 时并行实测 2199ms ≈ 1350 + 800 高亮 + 少量开销，与"串行会更慢"完全
+// 脱钩）。把桩值抬到 400/2200 后，两种编排下 playChoice() 自己的等待都超过 1350ms，
+// 选项按钮早已存在，瓶颈才真正回到 narration/orbits 身上。
+//
+// 测量从 shy:enter-choice（抉择幕开场，choice.js 已同步开始播旁白）到正确选项被 .click()
+// 的墙钟时长。这段时长 = max(400, 2200)（并行）或 400+2200（串行）+ PICK_HIGHLIGHT_MS(800，
+// 非 debugFast 下不压缩) + 少量事件调度开销：
+//   并行 ≈ 2200 + 800 = 3000ms；串行 ≈ 2600 + 800 = 3400ms
+// 两者相差恰为被并行吃掉的 400ms 旁白时长，取一个卡在二者中间的阈值即可明确区分——把
+// playChoice() 改回"先 await 旁白、再 await runOrbits()"会让这条断言因总时长超过阈值而
+// 真实失败（已人工验证，见验收报告）。打桩全部在测量结束后立即还原。
+var realPlayForP = window.SHY_VOICE.playFor;
+var realPanoP = window.SHY_CHOICE.orbitPanorama;
+var realWalkinOrbitP = window.SHY_WALKIN.orbit;
+
+window.SHY_VOICE.playFor = function (id) {
+  var listenersP = {};
+  var audio = {
+    duration: 30, // 创建时即为有限正数，跳过 waitNarration 里等元数据的 3000ms 轮询窗口
+    pause: function () {}, play: function () { return Promise.resolve(); },
+    addEventListener: function (t, fn) { (listenersP[t] = listenersP[t] || []).push(fn); },
+    removeEventListener: function (t, fn) {
+      var arr = listenersP[t] || []; var i = arr.indexOf(fn); if (i >= 0) arr.splice(i, 1);
+    },
+    dispatchEvent: function (evt) { (listenersP[evt.type] || []).slice().forEach(function (fn) { fn(evt); }); }
+  };
+  window.SHY_VOICE.current = audio;
+  var delayP = (id === "c01") ? 400 : 5; // 只有目标抉择的旁白真正计时，其余幕尽快"播完"以缩短测试
+  setTimeout(function () { audio.dispatchEvent(new Event("ended")); }, delayP);
+};
+window.SHY_CHOICE.orbitPanorama = function () {
+  return new Promise(function (resolve) { setTimeout(function () { resolve(true); }, 2200); });
+};
+window.SHY_WALKIN.orbit = function () { return Promise.resolve(true); };
+
+var c01DataP = (window.SHY_DATA.choices || []).filter(function (c) { return c.id === "c01"; })[0];
+var correctIdxP = -1;
+(c01DataP.options || []).forEach(function (o, i) { if (o.correct && correctIdxP < 0) correctIdxP = i; });
+var selP = '.choice-option[data-orig-index="' + correctIdxP + '"]';
+
+var t0P = null, t1P = null;
+function onEnterChoiceP(e) {
+  if (t0P === null && e.detail && e.detail.choiceId === "c01") t0P = Date.now();
+}
+function onClickCaptureP(e) {
+  if (t1P === null && e.target && e.target.closest && e.target.closest(selP)) t1P = Date.now();
+}
+document.addEventListener("shy:enter-choice", onEnterChoiceP);
+document.addEventListener("click", onClickCaptureP, true);
+
+window.SHY_APP.state = window.SHY_SCORE.newState();
+// skipFilm:true——同上方 SHY_WALKIN.orbit 的打桩理由：ch01 现在挂着真实 .mp4，
+// 不跳过的话章引言幕会去解码一段真实影片，测量窗口会被这段无关的真实加载/播放耗时污染。
+A.start({ debugFast: false, skipOrbits: false, skipFilm: true });
+
+for (var wP = 0; wP < 200 && t1P === null; wP++) await sleep(100); // 最长 20s
+A.stop();
+await sleep(200); // 留出时间让 cancel() 触发的微任务链（Promise.allSettled → playChoice 的 finally）走完
+
+document.removeEventListener("shy:enter-choice", onEnterChoiceP);
+document.removeEventListener("click", onClickCaptureP, true);
+window.SHY_VOICE.playFor = realPlayForP;
+window.SHY_CHOICE.orbitPanorama = realPanoP;
+window.SHY_WALKIN.orbit = realWalkinOrbitP;
+
+ok(t0P !== null && t1P !== null,
+   "并行性打桩：捕获到 shy:enter-choice(c01) 与正确选项被点击，实际 t0=" + t0P + " t1=" + t1P);
+var elapsedP = (t0P !== null && t1P !== null) ? (t1P - t0P) : -1;
+ok(elapsedP >= 0 && elapsedP < 3200,
+   "抉择幕旁白（桩 400ms）与环绕（桩 2200ms）应并行执行：从 shy:enter-choice 到正确选项被点击" +
+   "应 ≈ max(400,2200)+800(PICK_HIGHLIGHT_MS)≈3000ms，若改回串行会 ≈400+2200+800=3400ms，" +
+   "实测 " + elapsedP + "ms（判定阈值 <3200ms）");
+
+// ============ Task 7：放映外壳 ============
+
+var apBtn = document.getElementById("btn-autoplay");
+ok(!!apBtn, "顶栏「自动放映」按钮存在");
+
+window.SHY_APP.state = window.SHY_SCORE.newState();
+apBtn.click();
+await sleep(100);
+ok(A.isRunning() === true, "点顶栏按钮即开始放映（无进度时不弹确认框）");
+ok(apBtn.getAttribute("aria-pressed") === "true", "放映中 aria-pressed=true");
+ok(apBtn.textContent.indexOf("停止") >= 0, "放映中按钮文案切为停止，实际「" + apBtn.textContent + "」");
+var indicator = document.querySelector(".autoplay-indicator");
+ok(!!indicator, "放映指示条已渲染");
+ok(indicator.textContent.indexOf("Esc") >= 0, "指示条含 Esc 退出提示");
+
+// 空格暂停 / 继续
+document.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
+await sleep(60);
+ok(A.isPaused() === true, "空格键暂停");
+ok(document.querySelector(".autoplay-indicator").textContent.indexOf("已暂停") >= 0, "指示条显示已暂停");
+document.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
+await sleep(60);
+ok(A.isPaused() === false, "再按空格继续");
+
+// 顶栏守卫：星图/舆图/关于/重开被拦截，静音不受限
+document.getElementById("btn-graph").click();
+await sleep(60);
+ok(document.getElementById("graph-view").hidden === true, "放映期点「人物星图」被守卫拦截，不切视图");
+ok(A.isRunning() === true, "被守卫拦截不影响放映继续");
+document.getElementById("btn-map").click();
+await sleep(60);
+ok(document.getElementById("map-view").hidden === true, "放映期点「舆图」被守卫拦截");
+document.getElementById("btn-about").click();
+await sleep(60);
+ok(document.getElementById("about-view").hidden === true, "放映期点「关于」被守卫拦截");
+document.getElementById("btn-mute").click();
+await sleep(60);
+ok(A.isRunning() === true, "静音不受守卫限制，也不打断放映");
+document.getElementById("btn-mute").click();
+
+// Esc 停止（捕获阶段注册，必须先于 choice.js 的「抉择不可跳过」拦截）
+document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+await sleep(150);
+ok(A.isRunning() === false, "Esc 停止放映");
+ok(document.querySelector(".autoplay-indicator") === null, "停止后指示条已移除");
+ok(apBtn.getAttribute("aria-pressed") === "false", "停止后 aria-pressed 复位");
+
+// I4 回归：progress.eventIndex 初值为 -1，若 renderIndicator() 先于 eventIndex 赋值执行，
+// 指示条永远慢一幕——全场第一张事件卡出现时会显示「第 0/93 幕」而非「第 1/93 幕」，此后
+// 每一幕都在自己整整一段时长里显示上一幕的序号。用第一张事件卡出现的那一刻钉住这个时序。
+window.SHY_APP.state = window.SHY_SCORE.newState();
+A.start({ debugFast: true });
+var firstCardSeen9 = false, indicatorAtFirstCard9 = "";
+for (var k9 = 0; k9 < 200 && !firstCardSeen9; k9++) {
+  await sleep(20);
+  if (document.querySelector(".modal-backdrop.is-open")) {
+    firstCardSeen9 = true;
+    var indText9 = document.querySelector(".autoplay-indicator-text");
+    indicatorAtFirstCard9 = indText9 ? indText9.textContent : "";
+  }
+}
+A.stop();
+ok(firstCardSeen9 === true, "放映在 4s 内打开了全场第一张事件卡");
+ok(indicatorAtFirstCard9.indexOf("第 1/93 幕") >= 0,
+   "全场第一张事件卡出现时指示条应显示「第 1/93 幕」，实际「" + indicatorAtFirstCard9 + "」");
+
+// 抉择进行中按 Esc 也必须能停：choice.js 会吞掉冒泡阶段的 Escape，
+// 导演若不在捕获阶段接管，放映就再也停不下来。
+window.SHY_APP.state = window.SHY_SCORE.newState();
+A.start({ debugFast: true });
+var inChoice = false;
+for (var k8 = 0; k8 < 600; k8++) {
+  await sleep(50);
+  if (document.getElementById("choice-view").hidden === false) { inChoice = true; break; }
+}
+ok(inChoice === true, "放映在 30s 内进入了抉择视图");
+document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+await sleep(150);
+ok(A.isRunning() === false, "抉择进行中按 Esc 仍能停止放映（捕获阶段优先于 choice.js）");
+
+// 放映中点顶栏按钮 = 停止放映
+window.SHY_APP.state = window.SHY_SCORE.newState();
+A.start({ debugFast: true });
+await sleep(100);
+apBtn.click();
+await sleep(150);
+ok(A.isRunning() === false, "放映中再点顶栏按钮即停止");
+
+// ============ Task 2：开篇影片探测层 ============
+
+var FILM = window.SHY_CHAPTER_FILM;
+ok(!!FILM, "window.SHY_CHAPTER_FILM 已挂载");
+ok(typeof FILM.probeAvailable === "function", "probeAvailable 是函数");
+
+// 统计 HEAD 请求次数：证明缓存确实拦截了重复探测，而非恰好又拿到相同结果
+var filmHeadCount = 0;
+var realFetchFilm = window.fetch.bind(window);
+window.fetch = function (url, opts) {
+  if (opts && opts.method === "HEAD") filmHeadCount++;
+  return realFetchFilm(url, opts);
+};
+
+var film01 = await FILM.probeAvailable("ch01");
+ok(film01 === true, "ch01（已放置影片）探测应为 true，实际 " + film01);
+
+// 用一个永远不会有素材的 id 测"不存在"路径（不硬编码某个真实章：将来 15 章都有素材）
+var filmAbsent = await FILM.probeAvailable("ch99");
+ok(filmAbsent === false, "ch99（永不放置）探测应为 false，实际 " + filmAbsent);
+
+var filmCountBefore = filmHeadCount;
+var film01Again = await FILM.probeAvailable("ch01");
+ok(film01Again === true && filmHeadCount === filmCountBefore,
+  "ch01 重复探测走缓存：返回 true 且未新发 HEAD 请求（计数 " + filmCountBefore + "→" + filmHeadCount + "）");
+
+var filmAbsentAgain = await FILM.probeAvailable("ch99");
+ok(filmAbsentAgain === false && filmHeadCount === filmCountBefore,
+  "ch99 的否定结果同样入缓存，不重复探测（计数 " + filmCountBefore + "→" + filmHeadCount + "）");
+
+window.fetch = realFetchFilm;
+
+// ============ Task 3：开篇影片全屏播放器 ============
+
+ok(typeof FILM.open === "function" && typeof FILM.play === "function"
+   && typeof FILM.close === "function" && typeof FILM.isOpen === "function"
+   && typeof FILM.setPaused === "function" && typeof FILM.debugState === "function",
+   "SHY_CHAPTER_FILM 六个入口均已导出");
+
+// 无素材：立即 resolve(false)，且不得创建覆盖层
+var filmNone = await FILM.play("ch99");
+ok(filmNone === false, "无素材的 ch99：play resolve(false)，实际 " + filmNone);
+ok(document.querySelector(".chapter-film-overlay") === null, "无素材时不创建覆盖层");
+ok(FILM.isOpen() === false, "无素材时 isOpen 为 false");
+
+// I-2 修复验证：video.play() 必须在 open() 调用返回前（即同一同步任务内）就至少发起一次，
+// 这是保留 ▶ 点击 user activation 的机制本身——旧版把起播全部留给异步的 canplay 回调，
+// 点击带来的手势传不过去。本自检跑在 Chrome 里，sticky activation 会让"只在 canplay 里
+// 异步起播"这种写法在这个环境照样能放行、测不出 Safari/iOS 上 transient activation
+// 丢失导致的 NotAllowedError；这里退而求其次，直接断言"是否同步调用"这一结构性事实——
+// 修复前 open() 刚返回时这里应为 0（第一次 play() 要等 canplay 才发生），修复后应 ≥1。
+var syncPlayCalls = 0;
+var origVideoPlaySync = window.HTMLMediaElement.prototype.play;
+window.HTMLMediaElement.prototype.play = function () {
+  syncPlayCalls++;
+  return origVideoPlaySync.apply(this, arguments);
+};
+FILM.open("ch01");
+ok(syncPlayCalls >= 1,
+   "open() 同步返回前已至少发起一次 video.play()（保留点击手势），实际 " + syncPlayCalls);
+window.HTMLMediaElement.prototype.play = origVideoPlaySync;
+FILM.close();
+await sleep(100);
+
+// 真实播放 ch01：覆盖层出现、<video> 存在、导演模式下无 controls 与「跳过」按钮
+var filmPromise = FILM.play("ch01");
+var filmOverlay = null;
+for (var fi = 0; fi < 300 && !filmOverlay; fi++) {
+  await sleep(50);
+  filmOverlay = document.querySelector(".chapter-film-overlay");
+}
+ok(filmOverlay !== null, "play() 创建了全屏覆盖层");
+var filmVideo = filmOverlay && filmOverlay.querySelector("video");
+ok(!!filmVideo, "覆盖层内有 <video> 元素");
+ok(filmVideo && filmVideo.controls === false, "导演模式不渲染原生 controls");
+ok(filmOverlay && filmOverlay.querySelector(".chapter-film-skip") === null, "导演模式不渲染「跳过」按钮");
+
+// 等到真的开始播（currentTime 前进），再验暂停冻结
+var started = false;
+for (var fj = 0; fj < 300 && !started; fj++) {
+  await sleep(50);
+  started = !!(filmVideo && filmVideo.currentTime > 0.2);
+}
+ok(started === true, "影片已开始播放（currentTime 前进）");
+
+FILM.setPaused(true);
+await sleep(120);
+var tA = filmVideo.currentTime;
+await sleep(400);
+var tB = filmVideo.currentTime;
+ok(Math.abs(tB - tA) < 0.05,
+   "setPaused(true) 期间 currentTime 冻结（实测 " + tA.toFixed(2) + " → " + tB.toFixed(2) + "）");
+FILM.setPaused(false);
+await sleep(300);
+ok(filmVideo.currentTime > tB, "setPaused(false) 后继续前进（" + tB.toFixed(2) + " → " + filmVideo.currentTime.toFixed(2) + "）");
+
+// 中途 close()：play() 的 Promise 必须以 false 收尾，绝不能永不 settle
+FILM.close();
+var filmClosed = await filmPromise;
+ok(filmClosed === false, "中途 close() 使 play() resolve(false)，实际 " + filmClosed);
+ok(document.querySelector(".chapter-film-overlay") === null, "close 后覆盖层已从 DOM 移除");
+ok(FILM.isOpen() === false, "close 后 isOpen 为 false");
+ok(FILM.debugState() === null, "close 后内部会话已清空");
+
+// 手动模式：渲染 controls 与「跳过」按钮，且焦点被圈在覆盖层内
+FILM.open("ch01");
+var manualOverlay = null;
+for (var fk = 0; fk < 300 && !manualOverlay; fk++) {
+  await sleep(50);
+  manualOverlay = document.querySelector(".chapter-film-overlay");
+}
+ok(manualOverlay !== null, "open() 创建了覆盖层");
+var skipBtn = manualOverlay && manualOverlay.querySelector(".chapter-film-skip");
+ok(!!skipBtn, "手动模式渲染「跳过」按钮");
+ok(manualOverlay.querySelector("video").controls === true, "手动模式渲染原生 controls");
+ok(manualOverlay.contains(document.activeElement), "打开即把焦点圈进覆盖层");
+
+// 手动模式的 Esc 可关闭（放映模式不注册 Esc，见 Task 5）
+document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+await sleep(150);
+ok(document.querySelector(".chapter-film-overlay") === null, "手动模式 Esc 关闭覆盖层");
+
+// 反复开关不留残留，且 document 监听器净增为 0
+var filmAdds = 0, filmRemoves = 0;
+var realAddFilm = document.addEventListener.bind(document);
+var realRemoveFilm = document.removeEventListener.bind(document);
+document.addEventListener = function (t, l, o) { filmAdds++; return realAddFilm(t, l, o); };
+document.removeEventListener = function (t, l, o) { filmRemoves++; return realRemoveFilm(t, l, o); };
+var netBefore = filmAdds - filmRemoves;
+FILM.open("ch01"); await sleep(300); FILM.close();
+FILM.open("ch01"); await sleep(300); FILM.close();
+var netAfter = filmAdds - filmRemoves;
+document.addEventListener = realAddFilm;
+document.removeEventListener = realRemoveFilm;
+ok(document.querySelectorAll(".chapter-film-overlay").length === 0 && netAfter === netBefore,
+   "反复开关无残留覆盖层，且 document 监听器净增为 0（" + netBefore + " → " + netAfter + "）");
+
+// 自动播放被浏览器真的拒绝（NotAllowedError）：必须 resolve(false) 且拆掉覆盖层。
+// 与 setPaused(true) 打断在途 play() 抛出的 AbortError 是两回事，canplay 回调里靠
+// err.name 分流——这条断言专守"真失败"这一支，不与暂停场景混淆。
+var origMediaPlay = window.HTMLMediaElement.prototype.play;
+window.HTMLMediaElement.prototype.play = function () {
+  return Promise.reject(new DOMException("", "NotAllowedError"));
+};
+var filmRejected = await FILM.play("ch01");
+window.HTMLMediaElement.prototype.play = origMediaPlay;
+ok(filmRejected === false, "自动播放被拒（NotAllowedError）：play() resolve(false)，实际 " + filmRejected);
+ok(document.querySelector(".chapter-film-overlay") === null, "自动播放被拒后覆盖层已从 DOM 移除");
+
+// I-1 修复验证：手动模式（open()，无调用方 cb 接管）加载失败时必须自己退回音频路径。
+// 回归前的表现是 settle() 的 else 分支只弹一句 toast 就结束——玩家按下引言卡的 ▶ 只得到
+// 一闪黑屏加一句报错，什么都不播，而改动前这个按钮必定会播 chNN.mp3，是功能倒退。
+var toastMsgsI1 = [];
+var origShowToastI1 = window.SHY_APP.showToast;
+window.SHY_APP.showToast = function (msg) { toastMsgsI1.push(msg); };
+var playForCallsI1 = [];
+var origPlayForI1 = window.SHY_VOICE.playFor;
+window.SHY_VOICE.playFor = function (id) { playForCallsI1.push(id); };
+var origMediaPlayI1 = window.HTMLMediaElement.prototype.play;
+window.HTMLMediaElement.prototype.play = function () {
+  return Promise.reject(new DOMException("", "NotAllowedError"));
+};
+FILM.open("ch01");
+var settledI1 = false;
+for (var si = 0; si < 100 && !settledI1; si++) {
+  await sleep(20);
+  settledI1 = playForCallsI1.length > 0;
+}
+window.HTMLMediaElement.prototype.play = origMediaPlayI1;
+window.SHY_APP.showToast = origShowToastI1;
+window.SHY_VOICE.playFor = origPlayForI1;
+ok(playForCallsI1.length === 1 && playForCallsI1[0] === "ch01",
+   "手动模式加载失败后自动退回播放 chNN.mp3，实际调用 " + JSON.stringify(playForCallsI1));
+ok(toastMsgsI1.some(function (m) { return m.indexOf("改为播放解说") >= 0; }),
+   "toast 文案改为「改为播放解说」，别让玩家以为什么都没发生，实际 " + JSON.stringify(toastMsgsI1));
+ok(document.querySelector(".chapter-film-overlay") === null, "失败退回音频后覆盖层已移除");
+
+// I-4 修复验证：probeAvailable 仍在飞行时发生一次 close()（对应 Esc / 顶栏按钮 / 切场景
+// 打断放映），探测结果回来后不该再凭空建起覆盖层——回归前的表现是探测照常命中、start()
+// 照样执行，放映已经结束却全屏升起一段 40-50 秒、导演模式下没有任何退出手段的影片。
+//
+// 章号不能用 ch01-ch15 中任何一个：SHY_SCROLL.render() 在页面初始化时就已经为长卷上
+// 每张引言卡调过一次 probeAvailable（构造缩略图），到这里跑的时候全部 15 章早已入
+// probeCache，probeAvailable 会同步返回、fetch 根本不会被调用，制造不出延迟窗口
+// （首次这样写时，window.fetch 桩子因此从未被触发，releaseFilmFetch 一直是 null，
+// 随后无条件调用它直接抛 TypeError 崩溃了整个自检——这里额外挑一个真实素材永远不会
+// 出现的章号，从根上避免撞上任何缓存）。
+// 也不能让延迟窗口结束后 fetch 返回"不存在"：那样即使没有世代守卫，!available 这条
+// 判断本身也会让 start() 不执行，测不出世代守卫是否真的在起作用。因此桩子里放行时不发
+// 真实网络请求，直接用一个合成的 { ok: true } 模拟"素材确实存在"，专门验证"世代不对就该
+// 放弃 start()"这一条，而不是被"素材缺失"那条更早的判断顺带挡住、测出一个看似通过、
+// 实则没测到守卫本身的假断言。
+var raceChapterId = "ch-race-test-" + Date.now(); // 保真：绝不会与任何真实章号或此前
+                                                    // 探测过的 id 撞车
+var releaseFilmFetch = null;
+var realFetchRace = window.fetch.bind(window);
+window.fetch = function (url, opts) {
+  if (opts && opts.method === "HEAD" && String(url).indexOf(raceChapterId + ".mp4") >= 0) {
+    return new Promise(function (resolve) {
+      releaseFilmFetch = function () { resolve({ ok: true }); };
+    });
+  }
+  return realFetchRace(url, opts);
+};
+
+var racePromise = FILM.play(raceChapterId);
+for (var ri = 0; ri < 100 && typeof releaseFilmFetch !== "function"; ri++) await sleep(10);
+ok(typeof releaseFilmFetch === "function", "全新章号的 HEAD 探测已发出且被拦下，进入延迟窗口");
+FILM.close(); // 延迟窗口内关闭：此时 play() 的会话还没建（探测没回来），close() 对
+              // disposeCurrent 而言是空操作，但世代号已经递增——这正是要验的那一步
+if (releaseFilmFetch) releaseFilmFetch(); // 放行探测结果（合成 ok:true，模拟素材确实存在）
+
+// 覆盖层要是会出现，必然发生在 fetch 的 .then 链那一批微任务里（start() 是同步调用，
+// 直接把 <div class="chapter-film-overlay"> 挂上 body）——这比"没有世代守卫时 play()
+// 的 Promise 靠视频自己 error/超时才 settle，settle() 里的 close() 才把覆盖层收拾掉"
+// 快得多。所以必须在这里、await racePromise 之前，用一个短而有界的窗口直接探测"是否
+// 出现过"；如果先 await racePromise 再查，没有世代守卫的回归版本会先经历一次真实的
+// 视频加载失败（几十毫秒到数秒不等），把覆盖层清理干净，届时再查会得到假阴性——
+// 测不出这条回归，等于白写。
+var overlaySeen = !!document.querySelector(".chapter-film-overlay");
+for (var rj = 0; rj < 20 && !overlaySeen; rj++) {
+  await sleep(10);
+  overlaySeen = !!document.querySelector(".chapter-film-overlay");
+}
+window.fetch = realFetchRace;
+ok(overlaySeen === false,
+   "探测回来后没有凭空创建覆盖层（世代号已变，start() 被放弃），实际 " + overlaySeen);
+
+var raceResult = await racePromise;
+ok(raceResult === false, "探测期间发生 close() 后，play() 仍以 resolve(false) 收尾，实际 " + raceResult);
+
+// ============ Task 4：长卷引言卡接入 ============
+
+// 引言卡由 SHY_SCROLL.render() 构建；此时长卷已渲染过，直接查 DOM。
+// 探测是异步的，缩略图与按钮行为的升级要等探测回来。
+var introCard = null;
+for (var gi = 0; gi < 100 && !introCard; gi++) {
+  await sleep(50);
+  introCard = document.querySelector('.chapter-section[data-chapter-id="ch01"] .chapter-intro-card');
+}
+ok(introCard !== null, "ch01 引言卡存在");
+
+var introThumb = null;
+for (var gj = 0; gj < 100 && !introThumb; gj++) {
+  await sleep(50);
+  introThumb = introCard.querySelector(".chapter-intro-thumb");
+}
+ok(introThumb !== null, "影片可用时引言卡挂上了封面缩略图");
+ok(introThumb && introThumb.getAttribute("src") === "assets/video/chapters/ch01.jpg",
+   "缩略图指向本章封面图，实际 " + (introThumb && introThumb.getAttribute("src")));
+
+var introBtn = introCard.querySelector(".chapter-intro-play");
+ok(!!introBtn, "引言卡的播放按钮存在");
+ok(introBtn.getAttribute("aria-label").indexOf("影片") >= 0,
+   "影片可用时按钮 aria-label 改为影片语义，实际「" + introBtn.getAttribute("aria-label") + "」");
+
+// 点按钮应打开影片覆盖层，而不是播 mp3
+introBtn.click();
+var cardOverlay = null;
+for (var gk = 0; gk < 200 && !cardOverlay; gk++) {
+  await sleep(50);
+  cardOverlay = document.querySelector(".chapter-film-overlay");
+}
+ok(cardOverlay !== null, "点引言卡按钮打开了影片覆盖层");
+ok(cardOverlay && cardOverlay.querySelector(".chapter-film-skip") !== null,
+   "经引言卡打开的是手动模式（有「跳过」按钮）");
+window.SHY_CHAPTER_FILM.close();
+await sleep(100);
+ok(document.querySelector(".chapter-film-overlay") === null, "关闭后覆盖层已移除");
+
+// ============ Task 5：自动放映的章引言幕改走影片 ============
+
+// 打桩记录导演是否为每一章都发起了影片播放。真跑 15 段 45 秒影片不适合放进自检，
+// 要验的是编排：是否每章都调了 play、以及不可用时是否退回音频路径。
+var filmCalls = [];
+var realFilmPlay = window.SHY_CHAPTER_FILM.play;
+window.SHY_CHAPTER_FILM.play = function (id) { filmCalls.push(id); return Promise.resolve(true); };
+
+window.SHY_APP.state = window.SHY_SCORE.newState();
+A.start({ debugFast: true, skipFilm: false });
+var filmRunEnded = false;
+for (var hi = 0; hi < 3000; hi++) {
+  await sleep(100);
+  if (!A.isRunning()) { filmRunEnded = true; break; }
+}
+ok(filmRunEnded === true, "带影片编排的 debugFast 全程放映在 300s 内跑完");
+ok(filmCalls.length === 15, "15 章各发起一次开篇影片，实际 " + filmCalls.length + " 次");
+ok(filmCalls[0] === "ch01" && filmCalls[14] === "ch15",
+   "按章序发起，首末为 ch01/ch15，实际 " + filmCalls[0] + "/" + filmCalls[14]);
+ok(A.debugState().lastRun.total === 3290,
+   "接入影片后仍是满分 3290，实际 " + A.debugState().lastRun.total);
+
+// 影片不可用时必须退回音频路径，且放映仍能完整走完
+filmCalls.length = 0;
+window.SHY_CHAPTER_FILM.play = function (id) { filmCalls.push(id); return Promise.resolve(false); };
+var voiceCalls = [];
+var realPlayFor = window.SHY_VOICE.playFor;
+window.SHY_VOICE.playFor = function (id) { voiceCalls.push(id); return realPlayFor.call(window.SHY_VOICE, id); };
+
+window.SHY_APP.state = window.SHY_SCORE.newState();
+A.start({ debugFast: true, skipFilm: false });
+var fbEnded = false;
+for (var hj = 0; hj < 3000; hj++) {
+  await sleep(100);
+  if (!A.isRunning()) { fbEnded = true; break; }
+}
+window.SHY_VOICE.playFor = realPlayFor;
+ok(fbEnded === true, "影片不可用时放映仍能跑完全程");
+ok(filmCalls.length === 15, "仍为每章尝试一次影片，实际 " + filmCalls.length);
+ok(voiceCalls.filter(function (id) { return /^ch\d\d$/.test(id); }).length === 15,
+   "15 章全部退回播章解说 mp3，实际 " +
+   voiceCalls.filter(function (id) { return /^ch\d\d$/.test(id); }).length);
+ok(A.debugState().lastRun.total === 3290, "降级路径下仍是满分 3290");
+
+// skipFilm 默认随 debugFast 打开时，一次影片都不该发起
+filmCalls.length = 0;
+window.SHY_APP.state = window.SHY_SCORE.newState();
+A.start({ debugFast: true });
+await sleep(3000);
+A.stop();
+ok(filmCalls.length === 0, "skipFilm 默认随 debugFast 打开时不发起影片，实际 " + filmCalls.length);
+
+// 暂停要一并冻结影片；停止要关掉覆盖层
+// 打桩前先各存一份真实实现，结尾按引用还原——不能靠重新取值，那时拿到的已是桩函数
+var realFilmSetPaused = window.SHY_CHAPTER_FILM.setPaused;
+var realFilmClose = window.SHY_CHAPTER_FILM.close;
+var pausedFlags = [];
+var closeCalls = 0;
+window.SHY_CHAPTER_FILM.setPaused = function (on) { pausedFlags.push(on); };
+window.SHY_CHAPTER_FILM.close = function () { closeCalls++; return realFilmClose.call(window.SHY_CHAPTER_FILM); };
+window.SHY_APP.state = window.SHY_SCORE.newState();
+A.start({ debugFast: true });
+await sleep(300);
+A.togglePause();
+ok(pausedFlags[pausedFlags.length - 1] === true, "空格暂停时一并冻结影片");
+A.togglePause();
+ok(pausedFlags[pausedFlags.length - 1] === false, "继续时一并恢复影片");
+A.stop();
+await sleep(150);
+ok(closeCalls > 0, "停止放映时关闭影片覆盖层，实际调用 " + closeCalls + " 次");
+
+window.SHY_CHAPTER_FILM.play = realFilmPlay;
+window.SHY_CHAPTER_FILM.close = realFilmClose;
+window.SHY_CHAPTER_FILM.setPaused = realFilmSetPaused;
+
+// ============ Task 1：续播的沙盒起点 ============
+
+// 造一个"玩家已推进到第 46 幕、且有得分"的真实存档
+function makeResumeState() {
+  return {
+    unlockedCount: 46, total: 1234, combo: 3,
+    answered: { c01: { firstTryCorrect: true, earned: 100, tries: 1, confirmed: true } },
+    readExtra: { e0101: true }, litPersons: ["p_linzexu"],
+    chapterEarned: { ch01: "甲", ch02: "乙" }, lastGradedChapter: "ch02", finished: false
+  };
+}
+
+window.SHY_APP.state = makeResumeState();
+window.SHY_SCORE.saveState(window.SHY_APP.state);
+var rawBeforeResume = window.localStorage.getItem("shanhe_save_v1");
+var stateBeforeResume = JSON.stringify(window.SHY_APP.state);
+
+// resume:true —— 沙盒态应当继承玩家进度，而不是从零开始
+A.start({ debugFast: true, resume: true });
+ok(A.isRunning() === true, "resume 模式可以启动");
+ok(window.SHY_APP.state.unlockedCount === 46,
+   "续播沙盒态继承玩家的 unlockedCount，实际 " + window.SHY_APP.state.unlockedCount);
+ok(window.SHY_APP.state.total === 1234,
+   "续播沙盒态继承玩家的 total，实际 " + window.SHY_APP.state.total);
+
+// 本次唯一的新失败模式：沙盒态与"用于还原的快照"必须是两份互相独立的深拷贝。
+// 若实现写成 app().state = snapshot，下面这行改动会直接改到打算还原回去的那个对象，
+// 退场时"还原"的将是被放映改过的状态——玩家进度被悄悄改写。
+window.SHY_APP.state.total = 999999;
+window.SHY_APP.state.unlockedCount = 99;
+// 嵌套字段：浅拷贝（Object.assign({}, snapshot)）也能通过上面两条原始字段改动，
+// 只有嵌套对象才会在浅拷贝下与 snapshot 共享引用而"泄漏"。夹具里 chapterEarned.ch01
+// 原值是 "甲"，若沙盒态与快照共享了这个对象，下面的还原断言会读到被污染的 "丁"。
+window.SHY_APP.state.chapterEarned.ch01 = "丁";
+A.stop();
+ok(JSON.stringify(window.SHY_APP.state) === stateBeforeResume,
+   "改动续播沙盒态（含嵌套字段）不影响退场还原（两份拷贝相互独立）");
+ok(window.SHY_APP.state.total === 1234,
+   "退场后 total 仍是启动前的 1234，实际 " + window.SHY_APP.state.total);
+ok(window.localStorage.getItem("shanhe_save_v1") === rawBeforeResume,
+   "续播全程 localStorage 逐字节未变");
+
+// resume:false（默认）仍是全新状态，不受本次改动影响
+window.SHY_APP.state = makeResumeState();
+A.start({ debugFast: true });
+ok(window.SHY_APP.state.unlockedCount === 1 && window.SHY_APP.state.total === 0,
+   "resume 省略时仍为全新沙盒态（unlockedCount=" + window.SHY_APP.state.unlockedCount +
+   " total=" + window.SHY_APP.state.total + "）");
+A.stop();
+ok(window.SHY_APP.state.total === 1234, "从头模式退场后同样原样还原");
+
+// ============ I-1：续播落在"已作答未确认"的抉择上不应死等 20 秒 ============
+
+// 可达场景：玩家在前沿那一幕答完题、读完「历史真实走向」，没点「继续前行」就离开——
+// choice.js 重开该幕时走的是 renderAnsweredReplay 回顾视图（js/choice.js:350/405），
+// 它根本不渲染选项。让前沿恰好落在这样的幕上：全数据里唯一的收尾幕 e1506（choiceId
+// c26，也是全部 93 幕里最后一个），构造 unlockedCount=93 使其成为前沿。这样一次续播
+// 只会播这一幕，耗时几乎全部来自 pickCorrectOption 是否按预期短路——没有短路时会卡满
+// WAIT_OPTIONS_MS（20000ms，且不受 debugFast 压缩）才放弃，去掉本文件里的短路会让下面
+// 的计时断言必然失败（耗时 >= 20000ms，远超 10000ms 的判定线）。
+function makeFrontierAnsweredState() {
+  var s = window.SHY_SCORE.newState();
+  s.unlockedCount = 93; // 前沿 = 92 = e1506（见 data/events.js，唯一含抉择的收尾幕）
+  s.answered = { c26: { firstTryCorrect: true, earned: 100, tries: 1, confirmed: false } };
+  return s;
+}
+
+window.SHY_APP.state = makeFrontierAnsweredState();
+var frontierChoiceStart = Date.now();
+A.start({ debugFast: true, resume: true });
+var frontierChoiceEnded = false;
+for (var fi = 0; fi < 250; fi++) {
+  await sleep(100);
+  if (!A.isRunning()) { frontierChoiceEnded = true; break; }
+}
+var frontierChoiceElapsedMs = Date.now() - frontierChoiceStart;
+ok(frontierChoiceEnded === true, "续播落在已作答未确认的抉择上仍能放完（25s 内结束）");
+ok(frontierChoiceElapsedMs < 10000,
+   "续播落在已作答未确认的抉择上不应白等 WAIT_OPTIONS_MS（20s），实际耗时 " + frontierChoiceElapsedMs + "ms");
+
+// ============ Task 2：续播的时间轴起点 ============
+
+// 打桩记录实际播了哪些幕与哪些章引言。真跑不适合放进自检，要验的是跳过范围是否精确。
+var playedEvents = [];
+var playedIntros = [];
+var realOpenEvent = window.SHY_SCROLL.openEvent;
+var realFilmPlay = window.SHY_CHAPTER_FILM.play;
+var realVoicePlayFor = window.SHY_VOICE.playFor;
+window.SHY_SCROLL.openEvent = function (id) { playedEvents.push(id); return realOpenEvent.call(window.SHY_SCROLL, id); };
+// 章引言幕会播影片或退回音频，两条路都记：影片打桩返回 false 迫使走音频路径，
+// 音频路径的 playFor(ch.id) 即"这一章播了引言"的判据。
+window.SHY_CHAPTER_FILM.play = function () { return Promise.resolve(false); };
+window.SHY_VOICE.playFor = function (id) {
+  if (/^ch\d\d$/.test(id)) playedIntros.push(id);
+  return realVoicePlayFor.call(window.SHY_VOICE, id);
+};
+
+var allEvents = window.SHY_DATA.events;
+var resumeFrontier = 45;              // 前沿下标 45 → unlockedCount 46 → 第 46 幕
+window.SHY_APP.state = makeResumeState();   // unlockedCount = 46，见 Task 1
+A.start({ debugFast: true, resume: true });
+var resumeEnded = false;
+for (var ri = 0; ri < 3000; ri++) {
+  await sleep(100);
+  if (!A.isRunning()) { resumeEnded = true; break; }
+}
+window.SHY_SCROLL.openEvent = realOpenEvent;
+window.SHY_CHAPTER_FILM.play = realFilmPlay;
+window.SHY_VOICE.playFor = realVoicePlayFor;
+
+ok(resumeEnded === true, "续播在 300s 内跑完");
+ok(playedEvents[0] === allEvents[resumeFrontier].id,
+   "首个播出的幕是前沿那一幕（期望 " + allEvents[resumeFrontier].id + "，实际 " + playedEvents[0] + "）");
+ok(playedEvents.length === allEvents.length - resumeFrontier,
+   "播出的幕数 = 93 − 45 = 48，实际 " + playedEvents.length);
+
+var playedBefore = playedEvents.filter(function (id) {
+  return allEvents.findIndex(function (e) { return e.id === id; }) < resumeFrontier;
+});
+ok(playedBefore.length === 0,
+   "起点之前的幕一次都没播，实际漏播 " + playedBefore.length + " 幕：" + playedBefore.join(","));
+
+// 起点所在章不播引言；其后各章照常播
+var frontierChapterId = allEvents[resumeFrontier].chapterId;
+ok(playedIntros.indexOf(frontierChapterId) === -1,
+   "起点所在章（" + frontierChapterId + "）未播章引言");
+var chaptersAfter = window.SHY_DATA.chapters.slice().sort(function (a, b) { return a.order - b.order; })
+  .filter(function (c) {
+    var first = allEvents.findIndex(function (e) { return e.chapterId === c.id; });
+    return first >= resumeFrontier;
+  });
+ok(playedIntros.length === chaptersAfter.length,
+   "其后各章章引言全播（期望 " + chaptersAfter.length + "，实际 " + playedIntros.length + "）");
+
+// I-3：续播跑完全程（doUnlock 在末幕置 finished=true 后退场）也要覆盖存档还原——
+// 从头放映那一侧已有对应断言（Task 1 沙盒进出段），续播这一侧此前只有"起播后立即
+// 停止"这一条覆盖，没有任何断言验证过跑到通关退场这条完整链路。
+// window.SHY_APP.state 此刻仍是本轮续播自然结束（finishNaturally→stop）后还原出的
+// 真实状态——下面三条零额外运行时间，这一轮本来就跑完了。rawBeforeResume 定义于
+// Task 1 断言段（改动续播沙盒态的对照组），核实过本文件从那之后再没有调用过未劫持的
+// 真实 SHY_SCORE.saveState（唯一的调用在其定义处之前），localStorage 内容因此没变过。
+ok(A.debugState().lastRun.finished === true, "续播跑到通关（沙盒 finished 为 true）");
+ok(JSON.stringify(window.SHY_APP.state) === JSON.stringify(makeResumeState()),
+   "续播跑完全程后真实 state 原样还原");
+ok(window.localStorage.getItem("shanhe_save_v1") === rawBeforeResume,
+   "续播跑完全程后 localStorage 逐字节未变");
+
+// resume:false 不受影响：15 章引言全播、93 幕全播
+playedEvents.length = 0; playedIntros.length = 0;
+window.SHY_SCROLL.openEvent = function (id) { playedEvents.push(id); return realOpenEvent.call(window.SHY_SCROLL, id); };
+window.SHY_CHAPTER_FILM.play = function () { return Promise.resolve(false); };
+window.SHY_VOICE.playFor = function (id) {
+  if (/^ch\d\d$/.test(id)) playedIntros.push(id);
+  return realVoicePlayFor.call(window.SHY_VOICE, id);
+};
+// 上一块的轮询若耗尽（300s 未结束）会不调 stop() 就往下走，而 start() 顶部有
+// `if (running) return false` 重入保护——那样这次 start() 会静默短路，对照组测到的
+// 其实是残留的第一轮，而不是新一轮从头放映。无条件收一次尾（stop 幂等）消除这个依赖。
+A.stop();
+await sleep(100);
+window.SHY_APP.state = window.SHY_SCORE.newState();
+A.start({ debugFast: true });
+var fullEnded = false;
+for (var rj = 0; rj < 3000; rj++) {
+  await sleep(100);
+  if (!A.isRunning()) { fullEnded = true; break; }
+}
+window.SHY_SCROLL.openEvent = realOpenEvent;
+window.SHY_CHAPTER_FILM.play = realFilmPlay;
+window.SHY_VOICE.playFor = realVoicePlayFor;
+
+ok(fullEnded === true, "从头放映仍能跑完全程");
+ok(playedEvents.length === 93, "从头模式播满 93 幕，实际 " + playedEvents.length);
+ok(playedIntros.length === 15, "从头模式播满 15 章引言，实际 " + playedIntros.length);
+ok(A.debugState().lastRun.total === 3290,
+   "从头模式仍是满分 3290，实际 " + A.debugState().lastRun.total);
+
+// ============ Task 3：入口弹窗 ============
+
+var apBtn2 = document.getElementById("btn-autoplay");
+ok(typeof A.promptAndStart === "function", "SHY_AUTOPLAY.promptAndStart 已导出");
+
+// 有可续起点：点按钮应弹窗，且不立即开播
+window.SHY_APP.state = makeResumeState();
+apBtn2.click();
+await sleep(150);
+var prompt1 = document.querySelector(".autoplay-prompt-backdrop");
+ok(prompt1 !== null, "有可续起点时点顶栏按钮弹出选择框");
+ok(A.isRunning() === false, "弹窗出现时尚未开播");
+ok(prompt1.querySelector(".autoplay-prompt-resume") !== null
+   && prompt1.querySelector(".autoplay-prompt-fresh") !== null
+   && prompt1.querySelector(".autoplay-prompt-cancel") !== null,
+   "三个按钮齐备");
+ok(prompt1.contains(document.activeElement), "打开即把焦点圈进弹窗");
+
+// 取消：不开播，弹窗关闭
+prompt1.querySelector(".autoplay-prompt-cancel").click();
+await sleep(150);
+ok(document.querySelector(".autoplay-prompt-backdrop") === null, "点取消关闭弹窗");
+ok(A.isRunning() === false, "点取消不开播");
+
+// Esc 等同取消
+apBtn2.click();
+await sleep(150);
+ok(document.querySelector(".autoplay-prompt-backdrop") !== null, "再次弹窗");
+document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+await sleep(150);
+ok(document.querySelector(".autoplay-prompt-backdrop") === null, "Esc 关闭弹窗");
+ok(A.isRunning() === false, "Esc 不开播");
+
+// 从当前进度：以 resume:true 起播
+var promptResumeCalls = [];
+var realStart = A.start;
+window.SHY_AUTOPLAY.start = function (opts) { promptResumeCalls.push(!!(opts && opts.resume)); return false; };
+apBtn2.click();
+await sleep(150);
+document.querySelector(".autoplay-prompt-resume").click();
+await sleep(150);
+ok(promptResumeCalls.length === 1 && promptResumeCalls[0] === true,
+   "点「从当前进度」以 resume:true 调 start，实际 " + JSON.stringify(promptResumeCalls));
+ok(document.querySelector(".autoplay-prompt-backdrop") === null, "选择后弹窗关闭");
+
+// 从头放映：以 resume:false 起播
+promptResumeCalls.length = 0;
+apBtn2.click();
+await sleep(150);
+document.querySelector(".autoplay-prompt-fresh").click();
+await sleep(150);
+ok(promptResumeCalls.length === 1 && promptResumeCalls[0] === false,
+   "点「从头放映」以 resume:false 调 start，实际 " + JSON.stringify(promptResumeCalls));
+
+// 无可续起点（全新存档）：不弹窗，直接从头开播
+promptResumeCalls.length = 0;
+window.SHY_APP.state = window.SHY_SCORE.newState();
+apBtn2.click();
+await sleep(150);
+ok(document.querySelector(".autoplay-prompt-backdrop") === null, "全新存档不弹窗");
+ok(promptResumeCalls.length === 1 && promptResumeCalls[0] === false,
+   "全新存档直接以 resume:false 开播，实际 " + JSON.stringify(promptResumeCalls));
+
+// 已通关：同样不弹窗
+promptResumeCalls.length = 0;
+var finishedState = window.SHY_SCORE.newState();
+finishedState.unlockedCount = window.SHY_DATA.events.length + 1;
+finishedState.finished = true;
+window.SHY_APP.state = finishedState;
+apBtn2.click();
+await sleep(150);
+ok(document.querySelector(".autoplay-prompt-backdrop") === null, "已通关不弹窗");
+ok(promptResumeCalls.length === 1 && promptResumeCalls[0] === false,
+   "已通关直接以 resume:false 开播，实际 " + JSON.stringify(promptResumeCalls));
+
+window.SHY_AUTOPLAY.start = realStart;
+
+report();
+</script>
+</body></html>

@@ -1,0 +1,41 @@
+id: lishi_chu
+name: 锄树力士
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "male-qn-daxuesheng"
+  speed: 1.0
+  pitch: -2
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣。地里活粗，仔细污了鞋。"
+  - id: greet_02
+    text: "大圣安好。老力锄完这一垄就来。"
+
+topics:
+  - id: huoji
+    label: "园里的活计"
+    source: "第5回"
+    lines:
+      - id: w_chu_huoji_01
+        speaker: pc
+        text: "这桃树也生草？还要锄？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: huoji_02
+        text: "锄的不是草，是根旁的浮土。土松了，根才肯往下扎。"
+      - id: w_chu_huoji_03
+        speaker: pc
+        text: "几千年才熟的东西，急甚么。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: huoji_04
+        text: "急不得，也懒不得。园子等得起，老力的锄头歇不得。"
+
+fallback:
+  - id: fb_01
+    text: "老力只会锄地，别的不懂。"
+  - id: fb_02
+    text: "大圣问土地爷去，他记性好。"
+bye:
+  - id: bye_01
+    text: "大圣慢走。"

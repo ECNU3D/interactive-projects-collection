@@ -1,0 +1,94 @@
+id: narrator
+name: 旁白
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Gentleman"
+  speed: 0.92
+  pitch: -1
+  emotion: calm
+
+greet:
+  # 开场白
+  - id: opening_01
+    speaker: narrator
+    text: "惊动高天上圣大慈仁者玉皇大天尊玄穹高上帝，驾座金阙云宫灵霄宝殿，聚集仙卿。"
+  - id: opening_02
+    speaker: narrator
+    text: "蟠桃会前，天宫上下都在忙。只有你，齐天大圣，闲得很。"
+
+  # 区域初次进入
+  - id: region_nantianmen_01
+    speaker: narrator
+    text: "碧沉沉，琉璃造就；明幌幌，宝玉妆成。"
+  - id: region_nantianmen_02
+    speaker: narrator
+    text: "天门外是无边云海。下界在云海之下，隐隐约约。"
+  - id: region_gongdianhai_01
+    speaker: narrator
+    text: "三十三座天宫，七十二重宝殿。一宫宫脊吞金稳兽，一殿殿柱列玉麒麟。"
+  - id: region_gongdianhai_02
+    speaker: narrator
+    text: "你如今见三清称个『老』字，逢四帝道个『陛下』。"
+    quote: true
+  - id: region_lingxiaodian_01
+    speaker: narrator
+    text: "金钉攒玉户，彩凤舞朱门。复道回廊，处处玲珑剔透。"
+  - id: region_lingxiaodian_02
+    speaker: narrator
+    text: "丹墀之上，殿门大开。门内金柱森森，御座在深处，看不分明。"
+  - id: region_pantaoyuan_01
+    speaker: narrator
+    text: "时开时结千年熟，无夏无冬万载迟。三千六百株桃树，花与果同在一枝上。"
+  - id: region_pantaoyuan_02
+    speaker: narrator
+    text: "这里是你的园子。园中一亭一树，都归齐天大圣督理。"
+  - id: region_yaochi_01
+    speaker: narrator
+    text: "琼香缭绕，瑞霭缤纷。瑶台铺彩结，宝阁散氤氲。"
+  - id: region_yaochi_02
+    speaker: narrator
+    text: "廊下酒缸已排开，席上铺设得齐齐整整，却还未有仙来。"
+  - id: region_guanghangong_01
+    speaker: narrator
+    text: "这里没有日色，只有月色。桂树，玉杵，永夜。"
+  - id: region_guanghangong_02
+    speaker: narrator
+    text: "捣药声一下一下，把这座宫殿捣得更静了。"
+  - id: region_doushuaigong_01
+    speaker: narrator
+    text: "三十三天之上，乃离恨天。兜率宫孤悬在此，比一切天都高。"
+  - id: region_doushuaigong_02
+    speaker: narrator
+    text: "丹房里炉火不熄。三层高阁之上，隐约有人讲道。"
+  - id: region_zhanyaotai_01
+    speaker: narrator
+    text: "台上无人，无刀无斧。只有一根柱子，和满台的风。"
+  - id: region_tianhe_01
+    speaker: narrator
+    text: "一条大河横在云上，水面映着星斗。岸边是水兵的营寨，旗影连绵。"
+
+  # 系统提示
+  - id: sys_chaosheng_01
+    speaker: narrator
+    text: "金钟撞动，三曹神表进丹墀。远处的宫殿群里，神仙们陆续出来了。"
+  - id: sys_chaosheng_02
+    speaker: narrator
+    text: "天鼓鸣时，万圣朝王参玉帝。这鼓，你也敲得。"
+  - id: sys_dianmao_01
+    speaker: narrator
+    text: "斗牛宫外，星宿们列队点卯。名牌墙上，有一块牌子是空的。"
+  - id: sys_zhaitao_01
+    speaker: narrator
+    text: "桃分三段：前段三千年一熟，中段六千年，后段九千年。后段的桃，紫纹缃核。"
+  - id: sys_xiwei_01
+    speaker: narrator
+    text: "席位牌上，宾客的名字一列一列排开。<#0.5#>你从头看到尾。"
+  - id: sys_xiwei_02
+    speaker: narrator
+    text: "名单很长。<#0.3#>你再从头看一遍。"
+  - id: sys_hulu_01
+    speaker: narrator
+    text: "五个葫芦并排放在炉边。可以拿起，不可开盖。"
+  - id: sys_dianmen_01
+    speaker: narrator
+    text: "殿门口，有一位灵官按鞭而立。他不让开。"

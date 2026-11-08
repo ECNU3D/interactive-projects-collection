@@ -1,0 +1,168 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>走入历史 自检</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js",
+    "three/addons/postprocessing/Pass.js": "./vendor/Pass.js",
+    "@sparkjsdev/spark": "./vendor/spark.module.min.js"
+  }
+}
+</script>
+</head>
+<body><pre id="out">运行中……</pre>
+<div id="choice-view"></div>
+<script src="data/chapters.js"></script>
+<script src="data/events.js"></script>
+<script src="data/choices.js"></script>
+<script src="data/persons.js"></script>
+<script src="js/score.js"></script>
+<script src="js/choice.js"></script>
+<script type="module">
+import "./js/walkin.js";
+
+var R = { pass: 0, fail: 0, messages: [] };
+function ok(cond, msg) { if (cond) R.pass++; else { R.fail++; R.messages.push("✘ " + msg); } }
+
+// 统计 HEAD 探测请求次数：证明缓存确实拦截了重复探测（而非恰好再次拿到相同结果）
+var headFetchCount = 0;
+var realFetch = window.fetch.bind(window);
+window.fetch = function (url, opts) {
+  if (opts && opts.method === "HEAD") headFetchCount++;
+  return realFetch(url, opts);
+};
+
+// —— 探测层（Task 3） ——
+ok(!!window.SHY_WALKIN, "window.SHY_WALKIN 已挂载");
+ok(typeof window.SHY_WALKIN.probeAvailable === "function", "probeAvailable 是函数");
+
+var c01 = await window.SHY_WALKIN.probeAvailable("c01");
+ok(c01 === true, "c01（已放置模型）探测应为 true，实际 " + c01);
+
+// 用一个永远不会有模型的 id 测“不存在”路径（不能硬编码某个真实幕：用户随时会给
+// c02、c03…放入模型，曾因此误报——见 2026-07-14 修订）
+var cAbsent = await window.SHY_WALKIN.probeAvailable("c99");
+ok(cAbsent === false, "c99（永不放置模型）探测应为 false，实际 " + cAbsent);
+
+var countBefore = headFetchCount;
+var c01Again = await window.SHY_WALKIN.probeAvailable("c01");
+ok(c01Again === true && headFetchCount === countBefore,
+  "c01 重复探测走缓存：返回true且未新发HEAD请求（计数 " + countBefore + "→" + headFetchCount + "）");
+
+// —— 渲染生命周期（Task 4） ——
+async function waitInitialized(timeoutMs) {
+  var start = performance.now();
+  while (performance.now() - start < timeoutMs) {
+    var st = window.SHY_WALKIN.debugState();
+    if (st && st.mesh && st.mesh.isInitialized) return true;
+    await new Promise(function (r) { setTimeout(r, 200); });
+  }
+  return false;
+}
+function sleep(ms) {
+  return new Promise(function (r) { setTimeout(r, ms); });
+}
+
+window.SHY_WALKIN.open("c01");
+ok(window.SHY_WALKIN.debugState() !== null, "open后debugState非空");
+ok(document.querySelector(".walkin-overlay canvas") !== null, "canvas已插入DOM");
+
+var loaded = await waitInitialized(30000);
+ok(loaded === true, "c01.spz 在30秒内完成加载(isInitialized)");
+
+window.SHY_WALKIN.close();
+ok(window.SHY_WALKIN.debugState() === null, "close后debugState为null");
+ok(document.querySelector(".walkin-overlay") === null, "close后overlay已从DOM移除");
+
+// 反复开关不留残留canvas/overlay，且document监听器不随进出增长（显存/监听器释放的行为侧
+// 证据，真实显存占用需人工用浏览器任务管理器复核）。监听器计数从第2轮开始统计：SparkControls
+// 单例在首次open时一次性挂6个document/window监听器属预期，故只比较第2、3轮的净增量。
+// 第3轮改经真实合成Escape按键关闭，使Esc关闭路径被实际覆盖。
+var docAdds = 0, docRemoves = 0;
+var realAddEL = document.addEventListener.bind(document);
+var realRemoveEL = document.removeEventListener.bind(document);
+document.addEventListener = function (t, l, o) { docAdds++; return realAddEL(t, l, o); };
+document.removeEventListener = function (t, l, o) { docRemoves++; return realRemoveEL(t, l, o); };
+
+var netBeforeC2 = docAdds - docRemoves;
+window.SHY_WALKIN.open("c01");
+await waitInitialized(30000);
+window.SHY_WALKIN.close();
+var netAfterC2 = docAdds - docRemoves;
+
+window.SHY_WALKIN.open("c01");
+await waitInitialized(30000);
+document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+var netAfterC3 = docAdds - docRemoves;
+
+ok(document.querySelectorAll(".walkin-overlay").length === 0
+    && netAfterC2 === netBeforeC2 && netAfterC3 === netAfterC2,
+  "多次开关后无残留overlay（第3轮经真实Escape关闭），且document监听器净增为0" +
+  "（第2轮 " + netBeforeC2 + "→" + netAfterC2 + "，第3轮 →" + netAfterC3 + "）");
+
+// 加载失败路径（损坏文件，直接调用open绕过probe，验证错误提示而非崩溃）
+window.SHY_WALKIN.open("broken-test");
+await sleep(3000);
+var errVisible = document.querySelector(".walkin-error") && !document.querySelector(".walkin-error").hidden;
+ok(errVisible === true, "损坏文件应展示错误提示而非崩溃");
+window.SHY_WALKIN.close();
+
+// —— choice.js 集成（Task 5） ——
+document.dispatchEvent(new CustomEvent("shy:enter-choice", { detail: { choiceId: "c01" } }));
+await sleep(500); // 等待 setupWalkin 的异步 probeAvailable().then() 完成
+var walkinBtn = document.querySelector(".choice-walkin-toggle");
+ok(walkinBtn !== null, ".choice-walkin-toggle 按钮已渲染");
+ok(walkinBtn.hidden === false, "c01有模型，按钮应可见");
+
+// 动态发现一个当前没有模型的真实抉择（不硬编码：用户会陆续放入 c02.spz、c03.spz……）；
+// 若某天全部 26 幕都有模型，此断言退化为自动通过并在消息里注明。
+var modellessId = null;
+for (var mi = 0; mi < window.SHY_DATA.choices.length && !modellessId; mi++) {
+  var cid = window.SHY_DATA.choices[mi].id;
+  if (!(await window.SHY_WALKIN.probeAvailable(cid))) modellessId = cid;
+}
+if (modellessId) {
+  document.dispatchEvent(new CustomEvent("shy:enter-choice", { detail: { choiceId: modellessId } }));
+  await sleep(500);
+  ok(walkinBtn.hidden === true, modellessId + "无模型，按钮应隐藏");
+} else {
+  ok(true, "全部抉择均已放置模型，无模型隐藏路径无从验证（自动通过）");
+}
+
+document.dispatchEvent(new CustomEvent("shy:enter-choice", { detail: { choiceId: "c01" } }));
+// 等旁白逐句淡入结束、选项揭示（约1.4s，轮询而非猜定时），先答错一次，让 .choice-actions
+// 出现活动按钮「我明白了」——复现审查指出的场景：作答后带着活动按钮进入3D漫游。
+var optBtn = null;
+for (var w = 0; w < 50 && !optBtn; w++) {
+  await sleep(200);
+  optBtn = document.querySelector('.choice-option[data-orig-index="0"]'); // c01 的错误选项
+}
+optBtn.click(); // 答错 → handleWrong 同步把「我明白了」渲染进 .choice-actions（并自动聚焦它）
+walkinBtn.click();
+var opened = await waitInitialized(30000);
+// 焦点圈禁：打开后焦点应已移入覆盖层（初始聚焦「回到抉择」）；程序化 .focus() 背景元素
+// 会触发真实 focusin，圈禁监听应立即把焦点拉回覆盖层内。注意原生 Enter/Space 对聚焦背景
+// 按钮的合成 click 激活无法用 untrusted 合成事件模拟（无默认动作），该路径留待人工验收。
+var walkinOverlayEl = document.querySelector(".walkin-overlay");
+var focusInsideAfterOpen = !!walkinOverlayEl && walkinOverlayEl.contains(document.activeElement);
+walkinBtn.focus(); // 程序化聚焦覆盖层之外的背景按钮（正是F1(a)场景中焦点滞留的那颗按钮）
+await sleep(50);
+var focusPulledBack = !!walkinOverlayEl && walkinOverlayEl.contains(document.activeElement);
+ok(opened === true && focusInsideAfterOpen && focusPulledBack,
+  "点击按钮后调用SHY_WALKIN.open并完成加载，且焦点圈禁于覆盖层内（打开即聚焦" +
+  "，背景聚焦被focusin拉回；打开时=" + focusInsideAfterOpen + " 拉回=" + focusPulledBack + "）");
+
+// 漫游打开期间派发 Enter：choice.js 全局键盘捷径必须整体失效（纯视觉层约束——不透明
+// 覆盖层背后不得发生用户不可见的状态变更）。若 choice.js 缺失 isOpen() 守卫，Enter 会
+// 隔层点击「我明白了」：actions 按钮变为「继续前行」且 historyNote 展开，下述复合断言失败。
+document.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+var actionsBtn = document.querySelector(".choice-actions button");
+ok(document.querySelector(".walkin-overlay canvas") !== null
+    && actionsBtn !== null && actionsBtn.textContent === "我明白了"
+    && document.querySelector(".choice-historynote").hidden === true,
+  "点击按钮后3D漫游canvas已插入DOM，且漫游期间Enter不触发抉择动作（我明白了未被隔层点击、historyNote未展开）");
+window.SHY_WALKIN.close();
+
+document.getElementById("out").textContent =
+  "通过 " + R.pass + " 项，失败 " + R.fail + " 项\n" + R.messages.join("\n");
+</script>
+</body></html>

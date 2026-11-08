@@ -1,0 +1,61 @@
+id: shunfenger
+name: 顺风耳
+model: speech-2.6-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Straightforward_Boy"
+  speed: 1.1
+  pitch: 0
+  emotion: fluent
+
+greet:
+  - id: greet_01
+    text: "报——齐天大圣驾到。"
+  - id: greet_02
+    text: "大圣的脚步声，三里外我便听见了。"
+
+topics:
+  - id: tingdejian
+    label: "下界的声音"
+    source: "第1回、第3回"
+    lines:
+      - id: tingdejian_01
+        text: "千里眼看，我来听。南天门外，下界的风声水声，都进我的耳朵。"
+      - id: w_sfe_ting_02
+        speaker: pc
+        text: "可听得见花果山？"
+        voice_setting: { emotion: calm }
+      - id: tingdejian_03
+        text: "听得见。水帘洞的水声，日夜不断，和当年一个样。"
+      - id: w_sfe_ting_04
+        speaker: pc
+        text: "亲不亲，故乡人。"
+        quote: true
+        voice_setting: { emotion: sad }
+      - id: tingdejian_05
+        text: "大圣既想家，多来门楼坐坐。这里的耳朵，替大圣听着。"
+  - id: xianhua
+    label: "闲话的耳朵"
+    source: "门楼职司（本作所定）"
+    lines:
+      - id: w_sfe_xianhua_01
+        speaker: pc
+        text: "老孙若在背后说人长短呢？"
+        voice_setting: { emotion: happy }
+      - id: xianhua_02
+        text: "那我便听见了。听见，也只当没听见。"
+      - id: xianhua_03
+        text: "大圣，天上最不值钱的是闲话，最惹祸的也是闲话。我的耳朵只管听，不管传。"
+      - id: w_sfe_xianhua_04
+        speaker: pc
+        text: "好耳朵，好耳朵。"
+        voice_setting: { emotion: happy }
+
+fallback:
+  - id: fb_01
+    text: "风大，听不真。"
+  - id: fb_02
+    text: "这话我没听见，大圣也没说过。"
+
+bye:
+  - id: bye_01
+    text: "大圣慢走。"

@@ -1,0 +1,59 @@
+id: yunshui_daoren
+name: 运水道人
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Gentleman"
+  speed: 1.05
+  pitch: 0
+  emotion: calm
+
+greet:
+  - id: greet_01
+    speaker: npc
+    text: "大圣来了。贫道有礼。"
+  - id: greet_02
+    speaker: npc
+    text: "让一让，水桶沉，撞着大圣不好。"
+
+topics:
+  - id: qushui
+    label: "酿酒的水哪来的"
+    source: "第5回"
+    lines:
+      - id: qushui_01
+        speaker: npc
+        text: "酿酒的水，是贫道一担一担挑来的。缸多，人少，走了几十遭了。"
+      - id: w_ys_01
+        speaker: pc
+        text: "一江水，老孙一口气就摄来了，何消你挑？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: qushui_02
+        speaker: npc
+        text: "大圣的法术快，可酒不认快。水要一担一担澄过，静置过夜，才入得缸。快水酿酒，仙官不要。"
+  - id: huiqi
+    label: "会期将近"
+    source: "第5回"
+    lines:
+      - id: huiqi_01
+        speaker: npc
+        text: "会期一到，廊下这些缸瓮都要开。那时候上仙云集，才是瑶池的热闹。"
+      - id: w_ys_02
+        speaker: pc
+        text: "热闹？老孙在哪儿，哪儿就热闹。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: huiqi_02
+        speaker: npc
+        text: "大圣说笑了。热闹归热闹，规矩归规矩——水不到，酒不成，谁来也是一样。"
+
+fallback:
+  - id: fb_01
+    speaker: npc
+    text: "贫道只会挑水，别的事不敢多嘴。"
+  - id: fb_02
+    speaker: npc
+    text: "水担子在肩上，回话迟了，大圣莫怪。"
+
+bye:
+  - id: bye_01
+    speaker: npc
+    text: "大圣自便，贫道还要去挑水。"

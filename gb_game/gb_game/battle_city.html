@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>BATTLE CITY · GB</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  /* ============ 页面 chrome(Game Boy 机身风) ============ */
+  html,body{
+    margin:0; padding:0; background:#c4bebb;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none; user-select:none;
+    touch-action:none; overscroll-behavior:none;
+  }
+  #wrap{
+    min-height:100vh; box-sizing:border-box;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:14px 10px; gap:10px;
+  }
+  /* 机身屏幕外框:灰紫机身 + 深色镜面框 + 圆角 */
+  #bezel{
+    background:#5c5660; padding:16px 18px 12px; border-radius:16px;
+    box-shadow: inset 0 2px 0 #7d7681, inset 0 -4px 0 #463f4b, 0 8px 22px rgba(40,30,45,.35);
+  }
+  #frame{
+    background:#221e26; padding:10px; border-radius:10px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.7);
+  }
+  canvas#gb{
+    display:block; width:480px; height:432px; /* JS 会根据窗口改成整数倍 */
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    background:#9bbc0f; border-radius:2px;
+  }
+  #caption{
+    margin-top:8px; text-align:center; color:#a79ea9; font-size:10px; letter-spacing:3px;
+  }
+  /* 常驻按键说明 */
+  #hint{ color:#4a444f; font-size:12px; letter-spacing:1px; text-align:center; }
+  /* ============ 触屏虚拟按键(半透明) ============ */
+  #touch{
+    width:100%; max-width:560px;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:0 6px; box-sizing:border-box;
+  }
+  .pad{ display:grid; grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,46px); gap:4px; }
+  .tbtn{
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(38,32,44,.30); color:#2c2731;
+    border-radius:10px; font-size:18px; font-weight:bold;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .tbtn.on{ background:rgba(38,32,44,.62); color:#12100f; }
+  .tbtn.empty{ background:transparent; pointer-events:none; }
+  .abtn{ width:56px; height:56px; border-radius:50%; font-size:20px; }
+  .sbtn{ width:52px; height:22px; border-radius:12px; font-size:10px; letter-spacing:1px; }
+  #mid{ display:flex; flex-direction:column; gap:10px; align-items:center; }
+  #ab{ display:flex; gap:14px; align-items:center; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="bezel">
+    <div id="frame"><canvas id="gb" width="160" height="144"></canvas></div>
+    <div id="caption">BATTLE CITY &middot; GB STYLE</div>
+  </div>
+  <div id="ui">
+    <div id="hint">&#8592;&#8593;&#8595;&#8594; 移动 &nbsp; X(A) 开炮 &nbsp; ENTER(START) 开始 &nbsp; SHIFT(SELECT)</div>
+    <div id="touch">
+      <div class="pad">
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="up">&#9650;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="left">&#9664;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="right">&#9654;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="down">&#9660;</div>
+        <div class="tbtn empty"></div>
+      </div>
+      <div id="mid">
+        <div class="tbtn sbtn" data-k="select">SELECT</div>
+        <div class="tbtn sbtn" data-k="start">START</div>
+      </div>
+      <div id="ab">
+        <div class="tbtn abtn" data-k="b">B</div>
+        <div class="tbtn abtn" data-k="a">A</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+ * BATTLE CITY · Game Boy 风格坦克大战(单文件,零依赖)
+ * 操作:方向键=十字键(移动即转向)  X(A)=开炮  Enter=Start  Shift=Select
+ * 13x13 格战场(格 8px,砖墙按 4x4 细分破坏),右侧信息栏。
+ * ===================================================================== */
+
+/* ---------- 基本常量 ---------- */
+const W = 160, H = 144;                          // GB 逻辑分辨率 160x144
+const PAL = ['#0f380f', '#306230', '#8bac0f', '#9bbc0f']; // DMG 4 色绿
+const FX = 4, FY = 4;                            // 战场左上角像素坐标
+const CELLS = 13, CELL = 8;                      // 13x13 格,格 8px
+const FWP = CELLS * CELL;                        // 战场边长 104px
+const FN = CELLS * 2;                            // 细分格 26x26,细分格 4px
+const FT = { EMPTY: 0, BRICK: 1, STEEL: 2, RIVER: 3, TREES: 4 };
+const TANK = 16;                                 // 坦克 16x16(2x2 格)
+const DIR = [{ x: 0, y: -1 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }]; // 上右下左
+
+const cv = document.getElementById('gb');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+/* 全部画面只允许用 fillRect 画 */
+function R(x, y, w, h, c) {
+  ctx.fillStyle = PAL[c];
+  ctx.fillRect(x | 0, y | 0, w, h);
+}
+
+/* ---------- 8-bit 芯片音效(Web Audio 合成,无音频文件) ---------- */
+const Snd = (() => {
+  let ac = null, master = null, noiseBuf = null;
+  function init() {                       // 首次按键后才创建 AudioContext
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain();
+    master.gain.value = 0.14;
+    master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  function sq(freq, delay, dur, vol, slideTo) {   // 方波
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(delay, dur, vol, hp) {           // 噪声通道
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const s = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+    s.buffer = noiseBuf;
+    s.loop = true;
+    f.type = hp ? 'highpass' : 'lowpass';
+    f.frequency.value = hp ? 1800 : 700;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t); s.stop(t + dur + 0.02);
+  }
+  const N = n => 440 * Math.pow(2, (n - 69) / 12); // MIDI 音号 -> 频率
+  return {
+    init,
+    fire()   { noise(0, 0.07, 0.5, false); sq(140, 0, 0.07, 0.4, 60); },        // 开炮"砰"
+    brick()  { noise(0, 0.05, 0.4, true); },                                    // 碎砖"咔嚓"
+    steel()  { sq(1300, 0, 0.04, 0.3); sq(900, 0.02, 0.04, 0.25); },            // 打钢墙"铛"
+    boomS()  { noise(0, 0.16, 0.5, false); },                                   // 小爆炸
+    boom()   { noise(0, 0.4, 0.6, false); sq(90, 0, 0.35, 0.4, 35); },          // 坦克大爆炸
+    powerIn(){ sq(N(76), 0, 0.07, 0.4); sq(N(83), 0.07, 0.1, 0.4); },           // 道具出现
+    powerGet(){ [72, 76, 79, 84].forEach((n, i) => sq(N(n), i * 0.05, 0.07, 0.45)); }, // 吃道具
+    start()  { sq(N(72), 0, 0.07, 0.45); sq(N(79), 0.07, 0.12, 0.45); },
+    clear()  { [67, 72, 76, 79, 84, 88].forEach((n, i) => sq(N(n), i * 0.08, 0.1, 0.45)); }, // 过关号角
+    over()   { [76, 72, 69, 65, 62, 57].forEach((n, i) => sq(N(n), i * 0.14, 0.15, 0.45)); },
+    win()    { [72, 76, 79, 84, 79, 84, 88, 91].forEach((n, i) => sq(N(n), i * 0.1, 0.11, 0.45)); },
+  };
+})();
+
+/* ---------- 8x8 手绘像素字体(画布文字只能用它) ---------- */
+const FONT = (() => {
+  const F = {};
+  const def = (ch, rows) => { F[ch] = rows; };
+  def(' ', ["........","........","........","........","........","........","........","........"]);
+  def('0', [".###....","#...#...","#..##...","#.#.#...","##..#...","#...#...",".###....","........"]);
+  def('1', ["..#.....",".##.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('2', [".###....","#...#...","....#...","..##....",".#......","#.......","#####...","........"]);
+  def('3', ["####....","....#...","....#...",".###....","....#...","....#...","####....","........"]);
+  def('4', ["...##...",".#.#....","#..#....","#####...","...#....","...#....","...#....","........"]);
+  def('5', ["#####...","#.......","####....","....#...","....#...","#...#...",".###....","........"]);
+  def('6', [".###....","#.......","#.......","####....","#...#...","#...#...",".###....","........"]);
+  def('7', ["#####....","....#...","...#....","...#....","..#.....","..#.....","..#.....","........"]);
+  def('8', [".###....","#...#...","#...#...",".###....","#...#...","#...#...",".###....","........"]);
+  def('9', [".###....","#...#...","#...#...",".####...","....#...","....#...",".###....","........"]);
+  def('A', [".###....","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('B', ["####....","#...#...","#...#...","####....","#...#...","#...#...","####....","........"]);
+  def('C', [".####...","#.......","#.......","#.......","#.......","#.......",".####...","........"]);
+  def('D', ["####....","#...#...","#...#...","#...#...","#...#...","#...#...","####....","........"]);
+  def('E', ["#####...","#.......","#.......","####....","#.......","#.......","#####...","........"]);
+  def('F', ["#####...","#.......","#.......","####....","#.......","#.......","#.......","........"]);
+  def('G', [".####...","#.......","#.......","#.###...","#...#...","#...#...",".####...","........"]);
+  def('H', ["#...#...","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('I', [".###....","..#.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('J', ["..###...","...#....","...#....","...#....","...#....","#..#....",".##.....","........"]);
+  def('K', ["#...#...","#..#....","#.#.....","##......","#.#.....","#..#....","#...#...","........"]);
+  def('L', ["#.......","#.......","#.......","#.......","#.......","#.......","#####...","........"]);
+  def('M', ["#...#...","##.##...","#.#.#...","#.#.#...","#...#...","#...#...","#...#...","........"]);
+  def('N', ["#...#...","##..#...","#.#.#...","#..##...","#...#...","#...#...","#...#...","........"]);
+  def('O', [".###....","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('P', ["####....","#...#...","#...#...","####....","#.......","#.......","#.......","........"]);
+  def('Q', [".###....","#...#...","#...#...","#...#...","#.#.#...","#..#....",".##.#...","........"]);
+  def('R', ["####....","#...#...","#...#...","####....","#.#.....","#..#....","#...#...","........"]);
+  def('S', [".####...","#.......","#.......",".###....","....#...","....#...","####....","........"]);
+  def('T', ["#####...","..#.....","..#.....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('U', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('V', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".#.#....","........"]);
+  def('W', ["#...#...","#...#...","#...#...","#.#.#...","#.#.#...","##.##...","#...#...","........"]);
+  def('X', ["#...#...","#...#...",".#.#....","..#.....",".#.#....","#...#...","#...#...","........"]);
+  def('Y', ["#...#...","#...#...",".#.#....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('Z', ["#####...","....#...","...#....","..#.....",".#......","#.......","#####...","........"]);
+  def('!', ["..#.....","..#.....","..#.....","..#.....","..#.....","........","..#.....","........"]);
+  def('.', ["........","........","........","........","........","..##....","..##....","........"]);
+  def('-', ["........","........","........",".###....","........","........","........","........"]);
+  def(':', ["........","..##....","..##....","........","..##....","..##....","........","........"]);
+  def('*', ["........",".#...#..","..#.#...","...#....","..#.#...",".#...#..","........","........"]);
+  def('x', ["........","........","#...#...",".#.#....","..#.....",".#.#....","#...#...","........"]);
+  return F;
+})();
+
+/* 画文字:逐像素 fillRect,等宽 8px,可整数放大 */
+function drawText(str, x, y, color, scale) {
+  scale = scale || 1;
+  str = String(str).toUpperCase();
+  for (let i = 0; i < str.length; i++) {
+    const g = FONT[str[i]] || FONT[' '];
+    for (let r = 0; r < 8; r++) {
+      const row = g[r];
+      for (let c = 0; c < 8; c++) {
+        if (row[c] === '#') R(x + i * 8 * scale + c * scale, y + r * scale, scale, scale, color);
+      }
+    }
+  }
+}
+
+/* 点位图绘制:行字符串不足宽度自动补 '.',字符 '0'..'3' 对应调色板 */
+function drawBmp(rows, x, y) {
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r];
+    for (let c = 0; c < row.length; c++) {
+      const ch = row[c];
+      if (ch >= '0' && ch <= '3') R(x + c, y + r, 1, 1, ch.charCodeAt(0) - 48);
+    }
+  }
+}
+const pad = (rows, w) => rows.map(r => (r + '.'.repeat(w)).slice(0, w));
+
+/* ---------- 关卡数据:13x13 字符画,方便手绘新地图 ----------
+ * '.' 空地  'B' 砖墙  'S' 钢墙  'R' 河流  'T' 树林
+ * 老鹰基地固定在底部中央(像素 44,96),四周砖墙自动生成。 */
+const MAPS = [
+  [ /* STAGE 1:经典砖墙列 + 少量钢墙树林 */
+    ".............",
+    "..BB....BB...",
+    "..BB....BB...",
+    "..BB....BB...",
+    "..BB....BB...",
+    "..BB....BB...",
+    "..BB....BB...",
+    "...SS...SS...",
+    ".............",
+    "..T.......T..",
+    "B............",
+    ".............",
+    "T...........T",
+  ],
+  [ /* STAGE 2:钢墙 + 河流 */
+    ".............",
+    "...BB...BB...",
+    "...BB...BB...",
+    "...SS...SS...",
+    ".............",
+    "..RR...RR....",
+    "..RR...RR....",
+    "..TT.TT.TT...",
+    ".............",
+    ".T.........T.",
+    "....BB.BB....",
+    ".............",
+    ".............",
+  ],
+  [ /* STAGE 3:钢铁堡垒 */
+    ".............",
+    "...SS...SS...",
+    "...SS...SS...",
+    "..BB...BB....",
+    ".............",
+    "..RR...RR....",
+    "..RR...RR....",
+    "..BB.TT.BB...",
+    ".............",
+    ".T.........T.",
+    "...SS...SS...",
+    ".............",
+    ".............",
+  ],
+];
+
+/* 敌方坦克类型:普通 / 快速 / 装甲(3 发才毁) */
+const ETYPE = [
+  { name: 'NORMAL', speed: 0.6, hp: 1, score: 100, bspd: 2.0 },
+  { name: 'FAST',   speed: 1.4, hp: 1, score: 200, bspd: 3.0 },
+  { name: 'ARMOR',  speed: 0.6, hp: 3, score: 300, bspd: 2.0 },
+];
+const STAGE_COMP = [[14, 4, 2], [10, 6, 4], [6, 6, 8]]; // 每关 [普通,快速,装甲] 共 20 辆
+const TOTAL_ENEMIES = 20;
+const MAX_ONSCREEN = 4;
+
+/* 基地(老鹰):像素 44,88,16x16,底部居中于战场 */
+const BASE = { x: 44, y: 88, w: 16, h: 16 };
+/* 基地四周砖墙保护圈(细分格坐标) */
+const RING = [];
+for (let fx = 9; fx <= 16; fx++) { RING.push([fx, 20], [fx, 21]); }
+for (let fy = 22; fy <= 25; fy++) { RING.push([9, fy], [10, fy], [15, fy], [16, fy]); }
+
+/* ---------- 游戏状态 ---------- */
+const ST = { TITLE: 0, INTRO: 1, REVEAL: 2, PLAY: 3, CLEAR: 4, OVER: 5, WIN: 6 };
+const game = {
+  state: ST.TITLE, frame: 0, t: 0,
+  score: 0, lives: 3, stage: 1,
+  killed: [0, 0, 0],                     // 本关击毁数(按类型)
+  revealN: 0,                            // 地图逐格显现进度
+  overT: 0,                              // OVER 画面计时
+};
+let FG = new Uint8Array(FN * FN);        // 细分地形格 26x26
+let player = null;                       // {x,y,dir,alive,shield,level,anim,respawnT,fireCd}
+let enemies = [];                        // {x,y,dir,type,hp,anim,turnT,fireT,spawnFx}
+let bullets = [];                        // {x,y,dir,spd,byPlayer,owner,power}
+let queue = [];                          // 待刷敌人(类型编号)
+let spawnT = 0, spawnIdx = 0;            // 刷怪计时 / 出生点轮换
+let explosions = [];                     // {x,y,t,big}
+let powerups = [];                       // {x,y,kind,t} kind:0星 1铁锹 2炸弹 3命
+let shovelT = 0;                         // 铁锹剩余帧
+let ringSaved = null;                    // 铁锹前的保护圈地形
+let baseAlive = true;
+let overPending = 0;                     // 基地被毁 -> 过场再进 OVER
+let clearPending = 0;                    // 全歼 -> 过场再进 CLEAR
+let lastDir = -1;                        // 最近按下的方向(方向优先级)
+
+const SPAWNS = [{ x: 0, y: 0 }, { x: 44, y: 0 }, { x: 88, y: 0 }];
+const PLAYER_SPAWN = { x: 12, y: 88 };
+
+/* ---------- 细分地形读写 ---------- */
+function tileAt(fx, fy) {
+  if (fx < 0 || fy < 0 || fx >= FN || fy >= FN) return FT.STEEL; // 界外视同钢墙
+  return FG[fy * FN + fx];
+}
+function setTile(fx, fy, v) {
+  if (fx >= 0 && fy >= 0 && fx < FN && fy < FN) FG[fy * FN + fx] = v;
+}
+const solidTank = t => t === FT.BRICK || t === FT.STEEL || t === FT.RIVER;
+const solidShot = t => t === FT.BRICK || t === FT.STEEL;
+
+/* ---------- 关卡装载 ---------- */
+function buildQueue(stage) {
+  const comp = STAGE_COMP[stage - 1];
+  const q = [];
+  /* 类型交错排列,避免前后期难度断层 */
+  const counts = comp.slice();
+  while (q.length < TOTAL_ENEMIES) {
+    for (let t = 0; t < 3 && q.length < TOTAL_ENEMIES; t++) {
+      if (counts[t] > 0) { q.push(t); counts[t]--; }
+    }
+  }
+  return q;
+}
+function loadStage(stage) {
+  FG = new Uint8Array(FN * FN);
+  const map = MAPS[stage - 1];
+  for (let r = 0; r < CELLS; r++)
+    for (let c = 0; c < CELLS; c++) {
+      const ch = map[r][c];
+      const v = ch === 'B' ? FT.BRICK : ch === 'S' ? FT.STEEL :
+                ch === 'R' ? FT.RIVER : ch === 'T' ? FT.TREES : FT.EMPTY;
+      setTile(c * 2, r * 2, v); setTile(c * 2 + 1, r * 2, v);
+      setTile(c * 2, r * 2 + 1, v); setTile(c * 2 + 1, r * 2 + 1, v);
+    }
+  for (const [fx, fy] of RING) setTile(fx, fy, FT.BRICK); // 基地砖墙保护圈
+  queue = buildQueue(stage);
+  enemies = []; bullets = []; explosions = []; powerups = [];
+  spawnT = 90; spawnIdx = 0;
+  shovelT = 0; ringSaved = null;
+  baseAlive = true; overPending = 0; clearPending = 0;
+  game.killed = [0, 0, 0];
+  player = {
+    x: PLAYER_SPAWN.x, y: PLAYER_SPAWN.y, dir: 0,
+    alive: true, shield: 120, level: 0, anim: 0, respawnT: 0, fireCd: 0,
+  };
+}
+
+/* ---------- 碰撞 ---------- */
+function rectHitsTiles(x, y, w, h, solidFn) {
+  const fx0 = Math.max(0, Math.floor(x / 4)), fy0 = Math.max(0, Math.floor(y / 4));
+  const fx1 = Math.min(FN - 1, Math.floor((x + w - 1) / 4)), fy1 = Math.min(FN - 1, Math.floor((y + h - 1) / 4));
+  for (let fy = fy0; fy <= fy1; fy++)
+    for (let fx = fx0; fx <= fx1; fx++)
+      if (solidFn(tileAt(fx, fy))) return true;
+  return false;
+}
+const overlap = (ax, ay, aw, ah, bx, by, bw, bh) =>
+  ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+function rectHitsBase(x, y, w, h) {
+  return baseAlive && overlap(x, y, w, h, BASE.x, BASE.y, BASE.w, BASE.h);
+}
+function rectHitsTank(x, y, w, h, self) {
+  if (player && player.alive && player !== self &&
+      overlap(x, y, w, h, player.x, player.y, TANK, TANK)) return true;
+  for (const e of enemies)
+    if (e !== self && e.spawnFx <= 0 &&
+        overlap(x, y, w, h, e.x, e.y, TANK, TANK)) return true;
+  return false;
+}
+function canOccupy(t, nx, ny) {
+  if (nx < 0 || ny < 0 || nx > FWP - TANK || ny > FWP - TANK) return false;
+  return !rectHitsTiles(nx, ny, TANK, TANK, solidTank) &&
+         !rectHitsBase(nx, ny, TANK, TANK) &&
+         !rectHitsTank(nx, ny, TANK, TANK, t);
+}
+/* 逐像素推进,返回是否真的移动了 */
+function tryMove(t, dir, speed) {
+  const d = DIR[dir];
+  let moved = false;
+  for (let i = 0, n = Math.ceil(speed); i < n; i++) {
+    const stepLen = Math.min(1, speed - i);
+    if (stepLen <= 0) break;
+    if (canOccupy(t, t.x + d.x * stepLen, t.y + d.y * stepLen)) {
+      t.x += d.x * stepLen; t.y += d.y * stepLen;
+      moved = true;
+    } else break;
+  }
+  if (moved) t.anim++;
+  return moved;
+}
+/* 转向时把垂直轴向 4px 网格对齐(贴角转弯不卡墙);
+ * 已对齐则保持;未对齐时选"能继续往前走"的对齐位 */
+function snapTurn(t, dir) {
+  t.dir = dir;
+  const horiz = dir === 1 || dir === 3;
+  const v = horiz ? t.y : t.x;
+  const base = Math.floor(v / 4) * 4;
+  const d = DIR[dir];
+  const cands = [base, base + 4].sort((a, b) => Math.abs(a - v) - Math.abs(b - v));
+  for (const cand of cands) {
+    const nx = horiz ? t.x : cand, ny = horiz ? cand : t.y;
+    if (cand === v) return;                        // 已对齐,直接转向
+    if (canOccupy(t, nx, ny) && canOccupy(t, nx + d.x, ny + d.y)) {
+      t.x = nx; t.y = ny;
+      return;
+    }
+  }
+}
+
+/* ---------- 开炮 ---------- */
+function fireBullet(t, byPlayer) {
+  const d = DIR[t.dir];
+  const cx = t.x + TANK / 2, cy = t.y + TANK / 2;
+  bullets.push({
+    x: cx + d.x * 9 - 2, y: cy + d.y * 9 - 2,
+    dir: t.dir, spd: 0, byPlayer, owner: t,
+    power: byPlayer && t.level >= 3 ? 2 : 1,
+    bspd: byPlayer ? (t.level >= 1 ? 4 : 2.5) : ETYPE[t.type].bspd,
+  });
+  Snd.fire();
+}
+const playerBullets = () => bullets.filter(b => b.byPlayer).length;
+
+/* ---------- 击毁 / 爆炸 ---------- */
+function addExplosion(x, y, big) {
+  explosions.push({ x, y, t: 0, big });
+  if (big) Snd.boom(); else Snd.boomS();
+}
+function killEnemy(e, byBullet) {
+  addExplosion(e.x + 8, e.y + 8, true);
+  game.killed[e.type]++;
+  if (byBullet) game.score += ETYPE[e.type].score;
+  enemies.splice(enemies.indexOf(e), 1);
+  /* 随机掉落道具(18%) */
+  if (Math.random() < 0.18) spawnPowerup();
+}
+function hitPlayer() {
+  if (!player.alive || player.shield > 0) return;
+  addExplosion(player.x + 8, player.y + 8, true);
+  player.alive = false;
+  player.level = 0;
+  game.lives--;
+  if (game.lives <= 0) { overPending = 80; }
+  else player.respawnT = 70;
+}
+function hitBase() {
+  if (!baseAlive) return;
+  baseAlive = false;
+  addExplosion(BASE.x + 8, BASE.y + 8, true);
+  overPending = 80;
+}
+
+/* ---------- 道具 ---------- */
+function spawnPowerup(kind, x, y) {
+  if (kind === undefined) kind = (Math.random() * 4) | 0;
+  if (x === undefined) {
+    /* 找一块 16x16 全空地(树林可)的随机位置 */
+    let ok = false;
+    for (let i = 0; i < 30 && !ok; i++) {
+      x = 4 * ((Math.random() * 22) | 0);
+      y = 4 * ((Math.random() * 20) | 0);
+      ok = !rectHitsTiles(x, y, 16, 16, t => t === FT.BRICK || t === FT.STEEL || t === FT.RIVER) &&
+           !overlap(x, y, 16, 16, BASE.x - 4, BASE.y - 4, 24, 24);
+    }
+    if (!ok) return;
+  }
+  powerups.push({ x, y, kind, t: 0 });
+  Snd.powerIn();
+}
+function applyPowerup(kind) {
+  Snd.powerGet();
+  if (kind === 0) {                                  // 星星:火力升级
+    player.level = Math.min(3, player.level + 1);
+  } else if (kind === 1) {                           // 铁锹:基地砖墙变钢墙 10 秒
+    if (!ringSaved) ringSaved = RING.map(([fx, fy]) => tileAt(fx, fy));
+    RING.forEach(([fx, fy]) => setTile(fx, fy, FT.STEEL));
+    shovelT = 600;
+  } else if (kind === 2) {                           // 炸弹:全屏敌人清除
+    for (const e of enemies.slice()) killEnemy(e, false);
+  } else {                                           // 坦克:+1 命
+    game.lives = Math.min(9, game.lives + 1);
+  }
+}
+
+/* ---------- 刷怪 ---------- */
+function spawnAreaFree(s) {
+  return !rectHitsTiles(s.x, s.y, TANK, TANK, solidTank) &&
+         !rectHitsTank(s.x, s.y, TANK, TANK, null);
+}
+function stepSpawn() {
+  if (!queue.length || enemies.length >= MAX_ONSCREEN) return;
+  if (--spawnT > 0) return;
+  for (let i = 0; i < SPAWNS.length; i++) {
+    const s = SPAWNS[(spawnIdx + i) % SPAWNS.length];
+    if (spawnAreaFree(s)) {
+      spawnIdx = (spawnIdx + i + 1) % SPAWNS.length;
+      const type = queue.shift();
+      enemies.push({
+        x: s.x, y: s.y, dir: 2, type, hp: ETYPE[type].hp,
+        anim: 0, turnT: 40, fireT: 60 + ((Math.random() * 90) | 0),
+        spawnFx: 45,                                  // 出生闪烁(无敌且不动)
+      });
+      spawnT = 180;
+      return;
+    }
+  }
+  spawnT = 30;                                        // 三个出生点都被堵,稍后再试
+}
+
+/* ---------- 敌方 AI:随机转向 + 朝基地偏好 ---------- */
+function aiPickDir(e) {
+  let d;
+  if (Math.random() < 0.55) {                         // 朝基地(底部中央)偏好
+    const horizToBase = e.x + 8 < BASE.x + 8 ? 1 : 3;
+    d = e.y < BASE.y ? (Math.random() < 0.65 ? 2 : horizToBase) : horizToBase;
+  } else {
+    d = (Math.random() * 4) | 0;
+  }
+  snapTurn(e, d);
+  e.turnT = 30 + ((Math.random() * 90) | 0);
+}
+function stepEnemy(e) {
+  if (e.spawnFx > 0) { e.spawnFx--; return; }
+  if (--e.turnT <= 0) aiPickDir(e);
+  const moved = tryMove(e, e.dir, ETYPE[e.type].speed);
+  if (!moved) e.turnT = 0;                            // 被堵立刻重新选向
+  if (--e.fireT <= 0) {
+    if (!bullets.some(b => b.owner === e)) fireBullet(e, false);
+    e.fireT = (e.type === 1 ? 40 : 60) + ((Math.random() * 120) | 0);
+  }
+}
+
+/* ---------- 玩家 ---------- */
+function stepPlayer() {
+  if (!player.alive) {
+    if (game.lives > 0 && --player.respawnT <= 0) {
+      if (!rectHitsTank(PLAYER_SPAWN.x, PLAYER_SPAWN.y, TANK, TANK, null)) {
+        player.x = PLAYER_SPAWN.x; player.y = PLAYER_SPAWN.y;
+        player.dir = 0; player.alive = true; player.shield = 120;
+      } else player.respawnT = 20;
+    }
+    return;
+  }
+  if (player.shield > 0) player.shield--;
+  if (player.fireCd > 0) player.fireCd--;
+  /* 方向:最近按下且仍按住的方向优先 */
+  if (hit('up')) lastDir = 0;
+  if (hit('right')) lastDir = 1;
+  if (hit('down')) lastDir = 2;
+  if (hit('left')) lastDir = 3;
+  let want = -1;
+  if (lastDir >= 0) {
+    const k = ['up', 'right', 'down', 'left'][lastDir];
+    if (keys[k]) want = lastDir; else lastDir = -1;
+  }
+  if (want < 0) {
+    if (keys.up) want = 0; else if (keys.right) want = 1;
+    else if (keys.down) want = 2; else if (keys.left) want = 3;
+  }
+  if (want >= 0) {
+    if (want !== player.dir) snapTurn(player, want);
+    tryMove(player, player.dir, 1.2);
+  }
+  /* 开炮:按住连发,同屏 1 发(2 级火力后 2 发) */
+  const maxB = player.level >= 2 ? 2 : 1;
+  if (keys.a && player.fireCd <= 0 && playerBullets() < maxB) {
+    fireBullet(player, true);
+    player.fireCd = 8;
+  }
+  /* 吃道具 */
+  for (const p of powerups.slice())
+    if (overlap(player.x, player.y, TANK, TANK, p.x, p.y, 16, 16)) {
+      powerups.splice(powerups.indexOf(p), 1);
+      applyPowerup(p.kind);
+    }
+}
+
+/* ---------- 子弹 ---------- */
+function blastTiles(b) {
+  /* 子弹 4x4 覆盖到的细分格 */
+  let fx0 = Math.floor(b.x / 4), fy0 = Math.floor(b.y / 4);
+  let fx1 = Math.floor((b.x + 3) / 4), fy1 = Math.floor((b.y + 3) / 4);
+  const cx0 = fx0, cy0 = fy0, cx1 = fx1, cy1 = fy1;
+  let hit = false;
+  for (let fy = cy0; fy <= cy1; fy++)
+    for (let fx = cx0; fx <= cx1; fx++)
+      if (solidShot(tileAt(fx, fy))) hit = true;
+  if (!hit) return false;
+  /* 命中:垂直于弹道的两侧各多扫 1 格,一次打掉约 8px 宽 */
+  if (b.dir === 0 || b.dir === 2) { fx0--; fx1++; } else { fy0--; fy1++; }
+  let broke = false, clanged = false;
+  for (let fy = Math.max(0, fy0); fy <= Math.min(FN - 1, fy1); fy++)
+    for (let fx = Math.max(0, fx0); fx <= Math.min(FN - 1, fx1); fx++) {
+      const t = tileAt(fx, fy);
+      if (t === FT.BRICK) { setTile(fx, fy, FT.EMPTY); broke = true; }
+      else if (t === FT.STEEL) {
+        if (b.power >= 2) { setTile(fx, fy, FT.EMPTY); broke = true; }
+        else clanged = true;
+      }
+    }
+  if (broke) Snd.brick(); else if (clanged) Snd.steel();
+  return true;
+}
+function killBullet(b, spark) {
+  const i = bullets.indexOf(b);
+  if (i >= 0) bullets.splice(i, 1);
+  if (spark) addExplosion(b.x + 2, b.y + 2, false);
+}
+function stepBullets() {
+  for (const b of bullets.slice()) {
+    let dead = false;
+    for (let i = 0, n = Math.ceil(b.bspd); i < n && !dead; i++) {
+      const stepLen = Math.min(1, b.bspd - i);
+      if (stepLen <= 0) break;
+      const d = DIR[b.dir];
+      b.x += d.x * stepLen; b.y += d.y * stepLen;
+      /* 出界 */
+      if (b.x < 0 || b.y < 0 || b.x > FWP - 4 || b.y > FWP - 4) {
+        killBullet(b, true); dead = true; break;
+      }
+      /* 地形 */
+      if (blastTiles(b)) { killBullet(b, false); dead = true; break; }
+      /* 基地 */
+      if (rectHitsBase(b.x, b.y, 4, 4)) { killBullet(b, false); hitBase(); dead = true; break; }
+      /* 坦克 */
+      if (b.byPlayer) {
+        for (const e of enemies.slice())
+          if (e.spawnFx <= 0 && overlap(b.x, b.y, 4, 4, e.x, e.y, TANK, TANK)) {
+            killBullet(b, false); dead = true;
+            if (--e.hp <= 0) killEnemy(e, true);
+            else Snd.steel();
+            break;
+          }
+      } else if (player && player.alive &&
+                 overlap(b.x, b.y, 4, 4, player.x, player.y, TANK, TANK)) {
+        killBullet(b, false); hitPlayer(); dead = true; break;
+      }
+      if (dead) break;
+      /* 子弹对撞(敌我抵消) */
+      for (const o of bullets.slice())
+        if (o !== b && o.byPlayer !== b.byPlayer &&
+            overlap(b.x, b.y, 4, 4, o.x, o.y, 4, 4)) {
+          killBullet(o, false); killBullet(b, false); dead = true; break;
+        }
+    }
+  }
+}
+
+/* ---------- 主逻辑 ---------- */
+function startGame() {
+  game.score = 0; game.lives = 3; game.stage = 1;
+  startStage();
+}
+function startStage() {
+  loadStage(game.stage);
+  game.state = ST.INTRO; game.t = 0;
+  clearPressed();
+}
+function stepPlay() {
+  stepPlayer();
+  for (const e of enemies.slice()) stepEnemy(e);
+  stepBullets();
+  stepSpawn();
+  for (const ex of explosions.slice()) {
+    if (++ex.t >= (ex.big ? 24 : 10)) explosions.splice(explosions.indexOf(ex), 1);
+  }
+  for (const p of powerups) p.t++;
+  /* 铁锹到期:钢墙还原成原来的地形(最后 2 秒闪烁提示) */
+  if (shovelT > 0 && --shovelT === 0 && ringSaved) {
+    RING.forEach(([fx, fy], i) => setTile(fx, fy, ringSaved[i]));
+    ringSaved = null;
+  }
+  /* 基地被毁 / 命数耗尽 -> Game Over 过场 */
+  if (overPending > 0 && --overPending === 0) {
+    game.state = ST.OVER; game.overT = 0;
+    Snd.over();
+    return;
+  }
+  /* 全歼 20 辆 -> 过关 */
+  if (!queue.length && !enemies.length && overPending <= 0) {
+    if (clearPending <= 0) clearPending = explosions.length ? 50 : 30;
+    if (--clearPending === 0) {
+      game.state = ST.CLEAR; game.t = 0;
+      Snd.clear();
+    }
+  }
+}
+function step() {
+  game.frame++;
+  switch (game.state) {
+    case ST.TITLE:
+      if (hit('start')) { Snd.start(); startGame(); }
+      break;
+    case ST.INTRO:                          // 黑屏 "STAGE N"
+      if (++game.t >= 80) { game.state = ST.REVEAL; game.revealN = 0; }
+      break;
+    case ST.REVEAL:                         // 地图逐格显现
+      game.revealN += 3;
+      if (game.revealN >= CELLS * CELLS) { game.state = ST.PLAY; clearPressed(); }
+      break;
+    case ST.PLAY: stepPlay(); break;
+    case ST.CLEAR:                          // 战绩结算
+      game.t++;
+      if (game.t > 60 && hit('start')) {
+        if (game.stage >= MAPS.length) { game.state = ST.WIN; game.t = 0; Snd.win(); }
+        else { game.stage++; startStage(); }
+      }
+      break;
+    case ST.WIN:
+      game.t++;
+      if (game.t > 40 && hit('start')) game.state = ST.TITLE;
+      break;
+    case ST.OVER:
+      game.overT++;
+      if (game.overT > 50 && hit('start')) game.state = ST.TITLE;
+      break;
+  }
+}
+
+/* ---------- 精灵点位图(16x16,自动右侧补 '.') ---------- */
+const EAGLE = pad([
+  ".......00.......",
+  "......0220......",
+  "......0220......",
+  ".....022220.....",
+  "...0.022220.0...",
+  "..020022220020..",
+  "..022002200220..",
+  "...0220220220...",
+  "....02222220....",
+  ".....022220.....",
+  "....02200220....",
+  "...0220..0220...",
+  "...020....020...",
+  "..0220....0220..",
+  "..000000000000..",
+  "..000000000000..",
+], 16);
+const EAGLE_DEAD = pad([
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+  "................",
+  ".....0....0.....",
+  "..0.00.00..0..",
+  ".00000.00.0000..",
+  ".0000000000000..",
+  "..000000000000..",
+  "..000000000000..",
+], 16);
+const ICONS = [
+  pad([ /* 星星 */
+    "......00......",
+    ".....0220.....",
+    ".....0220.....",
+    "..0002222000..",
+    ".022222222220.",
+    "..0222222220..",
+    "...02222220...",
+    "..0220000220..",
+    ".0220....0220.",
+    ".000......000.",
+  ], 16),
+  pad([ /* 铁锹 */
+    ".......000....",
+    "......02220...",
+    ".....022020...",
+    "....022220....",
+    "...022220.....",
+    "..022200......",
+    ".022200.......",
+    "02200.........",
+    "0000..........",
+  ], 16),
+  pad([ /* 炸弹 */
+    ".....0.0......",
+    "....0...0.....",
+    ".....0.0......",
+    "....00000.....",
+    "..002222200...",
+    ".02222222220..",
+    ".02222222220..",
+    ".02222222220..",
+    ".02222222220..",
+    "..002222200...",
+    "....00000.....",
+  ], 16),
+  pad([ /* 坦克(命) */
+    "..00....00....",
+    ".0220000220...",
+    ".0220000220...",
+    ".0222222220...",
+    ".0202222020...",
+    ".0222222220...",
+    ".0220000220...",
+    "..00....00....",
+  ], 16),
+];
+
+/* ---------- 地形绘制(细分格 4x4) ---------- */
+function drawFineTile(fx, fy) {
+  const t = tileAt(fx, fy);
+  if (t === FT.EMPTY || t === FT.TREES) return;      // 树林后画
+  const px = FX + fx * 4, py = FY + fy * 4;
+  if (t === FT.BRICK) {
+    R(px, py, 4, 4, 1);
+    R(px, py + 3, 4, 1, 0);                          // 砖缝
+    R(px + (fy % 2 === 0 ? 1 : 3), py, 1, 3, 0);
+  } else if (t === FT.STEEL) {
+    R(px, py, 4, 4, 1);
+    R(px + 1, py + 1, 2, 2, 3);                      // 钢钉亮芯
+  } else if (t === FT.RIVER) {
+    R(px, py, 4, 4, 1);
+    const off = (game.frame >> 4) % 2;               // 波浪动画
+    R(px + off, py + 1, 2, 1, 3);
+    R(px + 2 - off, py + 3, 2, 1, 3);
+  }
+}
+function drawTrees() {
+  for (let fy = 0; fy < FN; fy++)
+    for (let fx = 0; fx < FN; fx++)
+      if (tileAt(fx, fy) === FT.TREES) {
+        const px = FX + fx * 4, py = FY + fy * 4;
+        R(px, py, 4, 4, 2);
+        R(px + (fx % 2), py + 1, 1, 1, 0);
+        R(px + 2 - (fy % 2), py + 2, 1, 1, 0);
+      }
+}
+
+/* ---------- 坦克绘制 ---------- */
+function drawTank(t, kind) {
+  const px = FX + Math.floor(t.x), py = FY + Math.floor(t.y);
+  if (t.spawnFx > 0) {                               // 出生闪烁星
+    if ((game.frame >> 2) % 2 === 0) {
+      const c = t.spawnFx % 3;
+      R(px + 7, py + 2, 2, 12, c); R(px + 2, py + 7, 12, 2, c);
+    }
+    return;
+  }
+  const vert = t.dir === 0 || t.dir === 2;
+  /* 履带(随移动滚动) */
+  const phase = t.anim % 4;
+  if (vert) { R(px, py, 3, 16, 0); R(px + 13, py, 3, 16, 0); }
+  else { R(px, py, 16, 3, 0); R(px, py + 13, 16, 3, 0); }
+  for (let i = 0; i < 4; i++) {
+    const o = (i * 4 + phase) % 16;
+    if (vert) { R(px, py + o, 3, 1, 2); R(px + 13, py + o, 3, 1, 2); }
+    else { R(px + o, py, 1, 3, 2); R(px + o, py + 13, 1, 3, 2); }
+  }
+  /* 车体 */
+  const hullC = kind === 0 ? 2 : kind === 3 ? 0 : 1;
+  R(px + 3, py + 3, 10, 10, hullC);
+  if (kind === 2) {                                  // 快速:条纹
+    if (vert) { R(px + 4, py + 5, 8, 1, 3); R(px + 4, py + 10, 8, 1, 3); }
+    else { R(px + 5, py + 4, 1, 8, 3); R(px + 10, py + 4, 1, 8, 3); }
+  } else if (kind === 3) {                           // 装甲:按残血变色铆钉
+    const sh = t.hp >= 3 ? 3 : t.hp === 2 ? 2 : 1;
+    R(px + 4, py + 4, 2, 2, sh); R(px + 10, py + 4, 2, 2, sh);
+    R(px + 4, py + 10, 2, 2, sh); R(px + 10, py + 10, 2, 2, sh);
+  }
+  /* 炮塔 + 炮管 */
+  R(px + 6, py + 6, 4, 4, kind === 0 ? 3 : 2);
+  const cx = px + 8, cy = py + 8;
+  if (t.dir === 0) R(cx - 1, py, 2, 8, 0);
+  else if (t.dir === 1) R(cx, cy - 1, 8, 2, 0);
+  else if (t.dir === 2) R(cx - 1, cy, 2, 8, 0);
+  else R(px, cy - 1, 8, 2, 0);
+  /* 出生保护罩 */
+  if (kind === 0 && t.shield > 0 && (game.frame >> 2) % 2 === 0) {
+    R(px - 1, py - 1, 6, 1, 3); R(px - 1, py - 1, 1, 6, 3);
+    R(px + 12, py - 1, 6, 1, 3); R(px + 17, py - 1, 1, 6, 3);
+    R(px - 1, py + 16, 6, 1, 3); R(px - 1, py + 11, 1, 6, 3);
+    R(px + 12, py + 16, 6, 1, 3); R(px + 17, py + 11, 1, 6, 3);
+  }
+}
+
+/* ---------- 爆炸:十字形 3 帧,闪烁 ---------- */
+function drawExplosion(ex) {
+  const c = (ex.t >> 1) % 2 === 0 ? 0 : 2;
+  const cx = FX + Math.floor(ex.x), cy = FY + Math.floor(ex.y);
+  if (!ex.big) {
+    R(cx - 3, cy - 1, 6, 2, c); R(cx - 1, cy - 3, 2, 6, c);
+    return;
+  }
+  const phase = Math.min(2, (ex.t / 8) | 0);
+  const s = [6, 10, 14][phase];
+  R(cx - s, cy - 2, s * 2, 4, c);                    // 横臂
+  R(cx - 2, cy - s, 4, s * 2, c);                    // 竖臂
+  if (phase >= 1) {                                  // 斜角火星
+    const q = s - 4;
+    R(cx - q, cy - q, 3, 3, c); R(cx + q - 2, cy - q, 3, 3, c);
+    R(cx - q, cy + q - 2, 3, 3, c); R(cx + q - 2, cy + q - 2, 3, 3, c);
+  }
+  R(cx - 2, cy - 2, 4, 4, 3);                        // 亮芯
+}
+
+/* ---------- 战场 / 信息栏 ---------- */
+function drawField(revealN) {
+  if (revealN === undefined) {
+    R(FX, FY, FWP, FWP, 3);
+    for (let fy = 0; fy < FN; fy++)
+      for (let fx = 0; fx < FN; fx++) drawFineTile(fx, fy);
+  } else {
+    R(FX, FY, FWP, FWP, 0);                          // 未显现处保持黑屏
+    for (let i = 0; i < revealN && i < CELLS * CELLS; i++) {
+      const r = (i / CELLS) | 0, c = i % CELLS;
+      R(FX + c * CELL, FY + r * CELL, CELL, CELL, 3);
+      for (let dy = 0; dy < 2; dy++)
+        for (let dx = 0; dx < 2; dx++)
+          drawFineTile(c * 2 + dx, r * 2 + dy);
+    }
+    return;
+  }
+  drawBmp(baseAlive ? EAGLE : EAGLE_DEAD, FX + BASE.x, FY + BASE.y);
+  for (const p of powerups)
+    if ((game.frame >> 3) % 2 === 0) drawBmp(ICONS[p.kind], FX + p.x, FY + p.y);
+  if (player && player.alive) drawTank(player, 0);
+  for (const e of enemies) drawTank(e, e.type + 1);
+  for (const b of bullets) {
+    R(FX + Math.floor(b.x), FY + Math.floor(b.y), 4, 4, 0);
+    R(FX + Math.floor(b.x) + 1, FY + Math.floor(b.y) + 1, 2, 2, 3);
+  }
+  drawTrees();                                       // 树林遮挡坦克
+  for (const ex of explosions) drawExplosion(ex);
+}
+function drawMiniTank(x, y, kind) {
+  R(x, y, 2, 6, 0); R(x + 4, y, 2, 6, 0);
+  R(x + 2, y + 1, 2, 4, kind === 3 ? 0 : kind === 2 ? 2 : 1);
+}
+function drawFlag(x, y) {
+  R(x, y, 1, 9, 0);
+  R(x + 1, y, 4, 1, 0); R(x + 1, y + 1, 3, 1, 0); R(x + 1, y + 2, 2, 1, 0);
+}
+function drawPanel() {
+  const PX = 112;
+  const remaining = queue.length + enemies.length;
+  for (let i = 0; i < remaining; i++)                // 剩余敌军图标阵列
+    drawMiniTank(PX + 8 + (i % 2) * 12, 4 + ((i / 2) | 0) * 8, 1);
+  drawText('IP', PX + 8, 88, 0);                     // 玩家命数
+  drawText(String(Math.max(0, game.lives)), PX + 28, 88, 0);
+  drawFlag(PX + 8, 100);                             // 当前关数
+  drawText(String(game.stage), PX + 28, 100, 0);
+  drawText('SCORE', 4, 116, 0);
+  drawText(String(game.score).padStart(6, '0'), 4, 126, 0);
+}
+
+/* ---------- 各状态画面 ---------- */
+function drawTitle() {
+  R(0, 0, W, H, 3);
+  drawText('BATTLE', 8, 22, 0, 3);
+  drawText('CITY', 32, 50, 0, 3);
+  drawTank({ x: 72, y: 84, dir: 0, anim: (game.frame >> 3) % 4, spawnFx: 0, shield: 0 }, 0);
+  drawMiniTank(20, 92, 1); drawMiniTank(134, 92, 3);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 122, 0); // 闪烁,灵魂所在
+}
+function drawIntro() {
+  R(0, 0, W, H, 0);                                  // 黑屏
+  drawText('STAGE ' + game.stage, 52, 64, 3);
+}
+function drawClear() {
+  R(0, 0, W, H, 3);
+  drawText('STAGE ' + game.stage + ' CLEAR', 28, 14, 0);
+  for (let k = 0; k < 3; k++) {
+    const y = 36 + k * 18;
+    drawMiniTank(20, y + 1, k + 1);
+    drawText('x' + String(game.killed[k]).padStart(2, '0'), 32, y, 0);
+    drawText(String(game.killed[k] * ETYPE[k].score).padStart(5, ' '), 72, y, 0);
+  }
+  drawText('TOTAL', 20, 94, 0);
+  drawText(String(game.score).padStart(6, '0'), 72, 94, 0);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 122, 0);
+}
+function drawOver() {
+  R(0, 0, W, H, 0);
+  drawText('GAME OVER', 44, 44, 3);
+  drawText('SCORE ' + String(game.score).padStart(6, '0'), 32, 68, 3);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 100, 3);
+}
+function drawWin() {
+  R(0, 0, W, H, 3);
+  drawText('YOU WIN!', 16, 30, 0, 2);
+  drawText('TOTAL SCORE', 36, 66, 0);
+  drawText(String(game.score).padStart(6, '0'), 44, 78, 0);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 110, 0);
+}
+function render() {
+  switch (game.state) {
+    case ST.TITLE: drawTitle(); break;
+    case ST.INTRO: drawIntro(); break;
+    case ST.REVEAL: R(0, 0, W, H, 3); drawField(game.revealN); drawPanel(); break;
+    case ST.PLAY: R(0, 0, W, H, 3); drawField(); drawPanel(); break;
+    case ST.CLEAR: drawClear(); break;
+    case ST.OVER: drawOver(); break;
+    case ST.WIN: drawWin(); break;
+  }
+}
+
+/* ---------- 输入:键盘 + 触屏(按住连发 / 单次触发都可靠) ---------- */
+const keys = { left: 0, right: 0, up: 0, down: 0, a: 0, b: 0, start: 0, select: 0 };
+const pressed = {};                    // 按下沿,逻辑帧消费,绝不丢输入
+const KEYMAP = {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+  KeyX: 'a', KeyZ: 'b', Enter: 'start', ShiftLeft: 'select', ShiftRight: 'select',
+};
+window.addEventListener('keydown', e => {
+  const k = KEYMAP[e.code];
+  if (!k) return;
+  e.preventDefault();
+  Snd.init();                          // 首次按键才初始化音频
+  if (!keys[k]) pressed[k] = 1;
+  keys[k] = 1;
+});
+window.addEventListener('keyup', e => {
+  const k = KEYMAP[e.code];
+  if (k) keys[k] = 0;
+});
+function hit(k) { if (pressed[k]) { pressed[k] = 0; return true; } return false; }
+function clearPressed() { for (const k in pressed) pressed[k] = 0; }
+
+/* 触屏按钮(pointer 事件,鼠标同样可用) */
+document.querySelectorAll('[data-k]').forEach(el => {
+  const k = el.getAttribute('data-k');
+  const down = e => {
+    e.preventDefault(); Snd.init();
+    if (!keys[k]) pressed[k] = 1;
+    keys[k] = 1;
+    el.classList.add('on');
+    if (el.setPointerCapture && e.pointerId !== undefined) {
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+  };
+  const up = e => { e.preventDefault(); keys[k] = 0; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+});
+
+/* ---------- 主循环:requestAnimationFrame + 固定 60fps 逻辑帧 ---------- */
+let lastTs = 0, acc = 0;
+function frameLoop(ts) {
+  requestAnimationFrame(frameLoop);
+  if (!lastTs) lastTs = ts;
+  let dt = ts - lastTs;
+  lastTs = ts;
+  if (dt > 250) dt = 250;                      // 切后台回来不追帧
+  acc += dt;
+  while (acc >= 1000 / 60) { step(); acc -= 1000 / 60; }
+  render();
+}
+
+/* ---------- 画布整数倍放大(3~5 倍,像素锐利) ---------- */
+function fit() {
+  const ui = document.getElementById('ui');
+  const chrome = (ui ? ui.offsetHeight : 120) + 64;
+  const availW = window.innerWidth - 20, availH = window.innerHeight - chrome;
+  let s = Math.floor(Math.min(availW / 160, availH / 144));
+  s = Math.max(3, Math.min(5, s));
+  cv.style.width = 160 * s + 'px';
+  cv.style.height = 144 * s + 'px';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', fit);
+fit();
+requestAnimationFrame(frameLoop);
+
+/* ---------- 离屏测试钩子(不影响游戏本身) ---------- */
+window.__test = {
+  ST, game, keys, pressed, step, render, tileAt, setTile, FT, MAPS, ETYPE,
+  BASE, RING, SPAWNS, startGame, startStage, loadStage, spawnPowerup, applyPowerup,
+  killEnemy, hitBase, hitPlayer, fireBullet, stepPlay,
+  key(k, down) { if (down && !keys[k]) pressed[k] = 1; keys[k] = down ? 1 : 0; },
+  get player() { return player; },
+  get enemies() { return enemies; },
+  get bullets() { return bullets; },
+  get queue() { return queue; },
+  get powerups() { return powerups; },
+  get explosions() { return explosions; },
+  get baseAlive() { return baseAlive; },
+  get shovelT() { return shovelT; },
+  countTiles(v) {
+    let n = 0;
+    for (let i = 0; i < FG.length; i++) if (FG[i] === v) n++;
+    return n;
+  },
+};
+</script>
+</body>
+</html>

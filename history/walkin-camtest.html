@@ -1,0 +1,29 @@
+<!doctype html>
+<!--
+  机位调试页（开发工具，不参与游戏流程）：直接打开某一幕的走入历史场景，便于调
+  js/walkin.js 里 CAMERA_START 的初始机位。用法：node tools/serve.mjs 后浏览器打开
+  http://localhost:8080/walkin-camtest.html?scene=cNN （默认 c01）；场景就绪后
+  window.__READY 置 true，供 CDP 截图脚本轮询。
+--><html lang="zh-CN"><head><meta charset="utf-8"><title>机位调试</title>
+<style>html,body{margin:0;height:100%}#choice-view{position:fixed;inset:0}</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js",
+    "three/addons/postprocessing/Pass.js": "./vendor/Pass.js",
+    "@sparkjsdev/spark": "./vendor/spark.module.min.js"
+  }
+}
+</script>
+</head>
+<body><div id="choice-view"></div>
+<script type="module">
+import "./js/walkin.js";
+window.SHY_WALKIN.open(new URLSearchParams(location.search).get("scene") || "c01");
+(function poll(){
+  var st = window.SHY_WALKIN.debugState();
+  if (st && st.mesh && st.mesh.isInitialized) { setTimeout(function(){ window.__READY = true; }, 800); }
+  else setTimeout(poll, 300);
+})();
+</script>
+</body></html>

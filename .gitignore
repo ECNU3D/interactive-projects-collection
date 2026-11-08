@@ -1,0 +1,56 @@
+# Runtime dependencies and local environments (install them on your own platform)
+node_modules/
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Credentials and private configuration
+.env
+.env.*
+!.env.example
+mini_max_api
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+.npmrc
+.pypirc
+.netrc
+.envrc
+secrets.*
+credentials.*
+
+# Local history, tooling state, and generated intermediate files
+.git/
+.worktrees/
+.claude/
+.codex/
+.superpowers/
+.playwright-cli/
+.tripo/
+.cache/
+.responsive-shots/
+.vscode/
+.idea/
+dist/
+build/
+output/
+productions/
+test-results/
+playwright-report/
+*.log
+*.tmp
+*.bak
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+
+# Three.js browser distribution is a required static asset, not a local build cache
+!三国/vendor/three/build/
+!三国/vendor/three/build/three.module.js

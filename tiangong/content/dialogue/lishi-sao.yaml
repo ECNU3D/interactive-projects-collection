@@ -1,0 +1,41 @@
+id: lishi_sao
+name: 打扫力士
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "male-qn-daxuesheng"
+  speed: 1.0
+  pitch: 2
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣，刚扫净的道儿，您走中间。"
+  - id: greet_02
+    text: "大圣。落英日日有，老力日日清。"
+
+topics:
+  - id: saodao
+    label: "扫它做甚"
+    source: "第5回"
+    lines:
+      - id: w_sao_saodao_01
+        speaker: pc
+        text: "园里又没外人，扫它做甚？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: saodao_02
+        text: "蟠桃会近了，赴会的仙家要从这道上过。道儿不净，是老力的不是。"
+      - id: w_sao_saodao_03
+        speaker: pc
+        text: "我老孙的园子，脏些怕甚么。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: saodao_04
+        text: "大圣的园子，娘娘的会场。脏了道儿，罪落不到大圣身上，落得到老力身上。"
+
+fallback:
+  - id: fb_01
+    text: "老力只管扫地。"
+  - id: fb_02
+    text: "大圣问别个去。"
+bye:
+  - id: bye_01
+    text: "大圣慢走。"

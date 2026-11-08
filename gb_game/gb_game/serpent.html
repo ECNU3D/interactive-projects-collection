@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>SNAKE · GB</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  /* ============ 页面 chrome(Game Boy 机身风) ============ */
+  html,body{
+    margin:0; padding:0; background:#c4bebb;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none; user-select:none;
+    touch-action:none; overscroll-behavior:none;
+  }
+  #wrap{
+    min-height:100vh; box-sizing:border-box;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:14px 10px; gap:10px;
+  }
+  /* 机身屏幕外框:灰紫机身 + 深色镜面框 + 圆角 */
+  #bezel{
+    background:#5c5660; padding:16px 18px 12px; border-radius:16px;
+    box-shadow: inset 0 2px 0 #7d7681, inset 0 -4px 0 #463f4b, 0 8px 22px rgba(40,30,45,.35);
+  }
+  #frame{
+    background:#221e26; padding:10px; border-radius:10px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.7);
+  }
+  canvas#gb{
+    display:block; width:480px; height:432px; /* JS 会根据窗口改成整数倍 */
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    background:#9bbc0f; border-radius:2px;
+  }
+  #caption{
+    margin-top:8px; text-align:center; color:#a79ea9; font-size:10px; letter-spacing:3px;
+  }
+  /* 常驻按键说明 */
+  #hint{ color:#4a444f; font-size:12px; letter-spacing:1px; text-align:center; }
+  /* ============ 触屏虚拟按键(半透明) ============ */
+  #touch{
+    width:100%; max-width:560px;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:0 6px; box-sizing:border-box;
+  }
+  .pad{ display:grid; grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,46px); gap:4px; }
+  .tbtn{
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(38,32,44,.30); color:#2c2731;
+    border-radius:10px; font-size:18px; font-weight:bold;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .tbtn.on{ background:rgba(38,32,44,.62); color:#12100f; }
+  .tbtn.empty{ background:transparent; pointer-events:none; }
+  .abtn{ width:56px; height:56px; border-radius:50%; font-size:20px; }
+  .sbtn{ width:52px; height:22px; border-radius:12px; font-size:10px; letter-spacing:1px; }
+  #mid{ display:flex; flex-direction:column; gap:10px; align-items:center; }
+  #ab{ display:flex; gap:14px; align-items:center; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="bezel">
+    <div id="frame"><canvas id="gb" width="160" height="144"></canvas></div>
+    <div id="caption">SNAKE &middot; GB STYLE</div>
+  </div>
+  <div id="ui">
+    <div id="hint">&#8592;&#8593;&#8595;&#8594; 转向 &nbsp; ENTER(START) 开始 &nbsp; 每吃 5 个果子多一块石头并提速</div>
+    <div id="touch">
+      <div class="pad">
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="up">&#9650;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="left">&#9664;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="right">&#9654;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="down">&#9660;</div>
+        <div class="tbtn empty"></div>
+      </div>
+      <div id="mid">
+        <div class="tbtn sbtn" data-k="select">SELECT</div>
+        <div class="tbtn sbtn" data-k="start">START</div>
+      </div>
+      <div id="ab">
+        <div class="tbtn abtn" data-k="b">B</div>
+        <div class="tbtn abtn" data-k="a">A</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+ * SNAKE · Game Boy 风格贪吃蛇(单文件,零依赖)
+ * 操作:方向键=十字键(转向)  Enter=Start  Shift=Select
+ * 规则:20x16 场地,吃果 +10 分长 1 节;每 5 个果子出一块永久石头并提速
+ *       (8 -> 最高 15 格/秒);每 30 秒出现限时 8 秒的闪烁大果子,
+ *       +50 分并缩短蛇身 2 节;撞墙/石头/自己即死。
+ * ===================================================================== */
+
+/* ---------- 基本常量 ---------- */
+const W = 160, H = 144;                          // GB 逻辑分辨率 160x144
+const PAL = ['#0f380f', '#306230', '#8bac0f', '#9bbc0f']; // DMG 4 色绿
+const COLS = 20, ROWS = 16, CELL = 8;            // 场地 20 列 x 16 行,格 8px
+const FX = 0, FY = 16;                           // 顶部 16px 留给 HUD
+
+const cv = document.getElementById('gb');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+/* 全部画面只允许用 fillRect 画 */
+function R(x, y, w, h, c) {
+  ctx.fillStyle = PAL[c];
+  ctx.fillRect(x | 0, y | 0, w, h);
+}
+
+/* ---------- 8-bit 芯片音效(Web Audio 合成,无音频文件) ---------- */
+const Snd = (() => {
+  let ac = null, master = null, noiseBuf = null;
+  function init() {                       // 首次按键后才创建 AudioContext
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain();
+    master.gain.value = 0.14;
+    master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  function sq(freq, delay, dur, vol, slideTo) {   // 方波
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(delay, dur, vol, hp) {           // 噪声通道
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const s = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+    s.buffer = noiseBuf;
+    s.loop = true;
+    f.type = hp ? 'highpass' : 'lowpass';
+    f.frequency.value = hp ? 1800 : 900;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t); s.stop(t + dur + 0.02);
+  }
+  const N = n => 440 * Math.pow(2, (n - 69) / 12); // MIDI 音号 -> 频率
+  return {
+    init,
+    start()  { sq(N(72), 0, 0.07, 0.45); sq(N(79), 0.07, 0.12, 0.45); },
+    eat()    { sq(880, 0, 0.06, 0.4, 1560); },                         // 吃果"叮"
+    bigEat() { [72, 76, 79, 84].forEach((n, i) => sq(N(n), i * 0.05, 0.08, 0.4)); }, // 大果子上行
+    stone()  { noise(0, 0.08, 0.4, false); sq(120, 0, 0.09, 0.4, 60); },             // 石头落地"咚"
+    bigOut() { sq(N(84), 0, 0.06, 0.35); sq(N(88), 0.07, 0.09, 0.35); },             // 大果子出现
+    diePop(i){ sq(520 * Math.pow(2, -i / 9), 0, 0.05, 0.4); },         // 逐节消失,音高下行
+    over()   { [76, 72, 69, 65, 62, 57].forEach((n, i) => sq(N(n), i * 0.14, 0.15, 0.45)); },
+  };
+})();
+
+/* ---------- 8x8 手绘像素字体(画布文字只能用它) ---------- */
+const FONT = (() => {
+  const F = {};
+  const def = (ch, rows) => { F[ch] = rows; };
+  def(' ', ["........","........","........","........","........","........","........","........"]);
+  def('0', [".###....","#...#...","#..##...","#.#.#...","##..#...","#...#...",".###....","........"]);
+  def('1', ["..#.....",".##.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('2', [".###....","#...#...","....#...","..##....",".#......","#.......","#####...","........"]);
+  def('3', ["####....","....#...","....#...",".###....","....#...","....#...","####....","........"]);
+  def('4', ["...##...",".#.#....","#..#....","#####...","...#....","...#....","...#....","........"]);
+  def('5', ["#####...","#.......","####....","....#...","....#...","#...#...",".###....","........"]);
+  def('6', [".###....","#.......","#.......","####....","#...#...","#...#...",".###....","........"]);
+  def('7', ["#####...","....#...","...#....","...#....","..#.....","..#.....","..#.....","........"]);
+  def('8', [".###....","#...#...","#...#...",".###....","#...#...","#...#...",".###....","........"]);
+  def('9', [".###....","#...#...","#...#...",".####...","....#...","....#...",".###....","........"]);
+  def('A', [".###....","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('B', ["####....","#...#...","#...#...","####....","#...#...","#...#...","####....","........"]);
+  def('C', [".####...","#.......","#.......","#.......","#.......","#.......",".####...","........"]);
+  def('D', ["####....","#...#...","#...#...","#...#...","#...#...","#...#...","####....","........"]);
+  def('E', ["#####...","#.......","#.......","####....","#.......","#.......","#####...","........"]);
+  def('F', ["#####...","#.......","#.......","####....","#.......","#.......","#.......","........"]);
+  def('G', [".####...","#.......","#.......","#.###...","#...#...","#...#...",".####...","........"]);
+  def('H', ["#...#...","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('I', [".###....","..#.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('J', ["..###...","...#....","...#....","...#....","...#....","#..#....",".##.....","........"]);
+  def('K', ["#...#...","#..#....","#.#.....","##......","#.#.....","#..#....","#...#...","........"]);
+  def('L', ["#.......","#.......","#.......","#.......","#.......","#.......","#####...","........"]);
+  def('M', ["#...#...","##.##...","#.#.#...","#.#.#...","#...#...","#...#...","#...#...","........"]);
+  def('N', ["#...#...","##..#...","#.#.#...","#..##...","#...#...","#...#...","#...#...","........"]);
+  def('O', [".###....","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('P', ["####....","#...#...","#...#...","####....","#.......","#.......","#.......","........"]);
+  def('Q', [".###....","#...#...","#...#...","#...#...","#.#.#...","#..#....",".##.#...","........"]);
+  def('R', ["####....","#...#...","#...#...","####....","#.#.....","#..#....","#...#...","........"]);
+  def('S', [".####...","#.......","#.......",".###....","....#...","....#...","####....","........"]);
+  def('T', ["#####...","..#.....","..#.....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('U', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('V', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".#.#....","........"]);
+  def('W', ["#...#...","#...#...","#...#...","#.#.#...","#.#.#...","##.##...","#...#...","........"]);
+  def('X', ["#...#...","#...#...",".#.#....","..#.....",".#.#....","#...#...","#...#...","........"]);
+  def('Y', ["#...#...","#...#...",".#.#....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('Z', ["#####...","....#...","...#....","..#.....",".#......","#.......","#####...","........"]);
+  def('!', ["..#.....","..#.....","..#.....","..#.....","..#.....","........","..#.....","........"]);
+  def('.', ["........","........","........","........","........","..##....","..##....","........"]);
+  def('-', ["........","........","........",".###....","........","........","........","........"]);
+  def(':', ["........","..##....","..##....","........","..##....","..##....","........","........"]);
+  def('*', ["........",".#...#..","..#.#...","...#....","..#.#...",".#...#..","........","........"]);
+  return F;
+})();
+
+/* 画文字:逐像素 fillRect,等宽 8px,可整数放大 */
+function drawText(str, x, y, color, scale) {
+  scale = scale || 1;
+  str = String(str).toUpperCase();
+  for (let i = 0; i < str.length; i++) {
+    const g = FONT[str[i]] || FONT[' '];
+    for (let r = 0; r < 8; r++) {
+      const row = g[r];
+      for (let c = 0; c < 8; c++) {
+        if (row[c] === '#') R(x + i * 8 * scale + c * scale, y + r * scale, scale, scale, color);
+      }
+    }
+  }
+}
+
+/* ---------- 输入:键盘 + 触屏(按下沿可靠入队,不丢输入) ---------- */
+const keys = { left: 0, right: 0, up: 0, down: 0, a: 0, b: 0, start: 0, select: 0 };
+const pressed = {};                    // 按下沿,逻辑帧消费,绝不丢输入
+const KEYMAP = {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+  KeyX: 'a', KeyZ: 'b', Enter: 'start', ShiftLeft: 'select', ShiftRight: 'select',
+};
+window.addEventListener('keydown', e => {
+  const k = KEYMAP[e.code];
+  if (!k) return;
+  e.preventDefault();
+  Snd.init();                          // 首次按键才初始化音频
+  if (!keys[k]) pressed[k] = 1;
+  keys[k] = 1;
+});
+window.addEventListener('keyup', e => {
+  const k = KEYMAP[e.code];
+  if (k) keys[k] = 0;
+});
+function hit(k) { if (pressed[k]) { pressed[k] = 0; return true; } return false; }
+function clearPressed() { for (const k in pressed) pressed[k] = 0; }
+
+/* 触屏按钮(pointer 事件,鼠标同样可用) */
+document.querySelectorAll('[data-k]').forEach(el => {
+  const k = el.getAttribute('data-k');
+  const down = e => {
+    e.preventDefault(); Snd.init();
+    if (!keys[k]) pressed[k] = 1;
+    keys[k] = 1;
+    el.classList.add('on');
+    if (el.setPointerCapture && e.pointerId !== undefined) {
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+  };
+  const up = e => { e.preventDefault(); keys[k] = 0; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+});
+
+/* ---------- 游戏状态 ---------- */
+const ST = { TITLE: 0, PLAY: 1, DYING: 2, OVER: 3 };
+const game = { state: ST.TITLE, frame: 0, score: 0, overT: 0, dieT: 0, dieN: 0, dieWait: 0 };
+let hi = 0;                            // HI-SCORE(页面内存变量,不用 localStorage)
+
+let snake = [];                        // [{x,y}],索引 0 = 头
+let dir = { x: 1, y: 0 };              // 当前移动方向
+let dirQueue = [];                     // 待生效的转向(最多缓存 2 个)
+let stones = new Uint8Array(COLS * ROWS); // 永久石头
+let food = null;                       // 普通果子 {x,y}
+let big = null;                        // 大果子 {x,y,ttl}(帧)
+let bigTimer = 0;                      // 距下一次大果子的帧数
+let foods = 0;                         // 已吃普通果子数
+let speed = 8;                         // 移动速度(格/秒),8 -> 15
+let moveAcc = 0;                       // 移动计时累加器(支持非整数帧间隔)
+
+const BIG_EVERY = 30 * 60;             // 每 30 秒一个大果子
+const BIG_TTL = 8 * 60;                // 大果子存在 8 秒
+
+function startGame() {
+  snake = [{ x: 9, y: 8 }, { x: 8, y: 8 }, { x: 7, y: 8 }]; // 3 节居中,朝右
+  dir = { x: 1, y: 0 };
+  dirQueue = [];
+  stones = new Uint8Array(COLS * ROWS);
+  food = null; big = null;
+  bigTimer = BIG_EVERY;
+  foods = 0; speed = 8; moveAcc = 0;
+  game.score = 0;
+  spawnFood();
+  clearPressed();
+  game.state = ST.PLAY;
+}
+
+/* 找一个空闲格(不在蛇身/石头/果子/大果子上),没有则返回 null */
+function randFree() {
+  const free = [];
+  for (let y = 0; y < ROWS; y++)
+    for (let x = 0; x < COLS; x++) {
+      if (stones[y * COLS + x]) continue;
+      if (snake.some(s => s.x === x && s.y === y)) continue;
+      if (food && food.x === x && food.y === y) continue;
+      if (big && big.x === x && big.y === y) continue;
+      free.push({ x, y });
+    }
+  if (!free.length) return null;
+  return free[(Math.random() * free.length) | 0];
+}
+
+function spawnFood() {
+  const c = randFree();
+  food = c;                            // 场地被占满时不再出果子(理论极端情况)
+}
+
+function addStone() {
+  const c = randFree();
+  if (c) stones[c.y * COLS + c.x] = 1;
+  Snd.stone();
+}
+
+/* 转向入队:禁止 180° 直接掉头,也忽略与末段方向重复的输入 */
+function pushDir(dx, dy) {
+  const last = dirQueue.length ? dirQueue[dirQueue.length - 1] : dir;
+  if (dx === -last.x && dy === -last.y) return;
+  if (dx === last.x && dy === last.y) return;
+  if (dirQueue.length < 2) dirQueue.push({ x: dx, y: dy });
+}
+
+function stepMove() {
+  if (dirQueue.length) dir = dirQueue.shift();
+  const hx = snake[0].x + dir.x, hy = snake[0].y + dir.y;
+  if (hx < 0 || hx >= COLS || hy < 0 || hy >= ROWS) return die();   // 撞墙
+  if (stones[hy * COLS + hx]) return die();                          // 撞石头
+  const eatFood = food && hx === food.x && hy === food.y;
+  const eatBig = big && hx === big.x && hy === big.y;
+  const grow = eatFood || eatBig;
+  /* 不生长时尾巴会让位,碰撞检查排除尾节 */
+  const lim = grow ? snake.length : snake.length - 1;
+  for (let i = 0; i < lim; i++)
+    if (snake[i].x === hx && snake[i].y === hy) return die();        // 撞自己
+  snake.unshift({ x: hx, y: hy });
+  if (!grow) snake.pop();
+  if (eatFood) {
+    game.score += 10;
+    foods++;
+    Snd.eat();
+    if (foods % 5 === 0) {                 // 每 5 个果子:石头 + 提速一档
+      addStone();
+      speed = Math.min(15, speed + 1);
+    }
+    spawnFood();
+  }
+  if (eatBig) {
+    game.score += 50;
+    Snd.bigEat();
+    big = null;
+    bigTimer = BIG_EVERY;
+    /* 缩短 2 节:本步头进 + 共退 3 尾,保底留 2 节 */
+    for (let p = 0; p < 3 && snake.length > 2; p++) snake.pop();
+  }
+  if (game.score > hi) hi = game.score;
+}
+
+function die() {
+  game.state = ST.DYING;
+  game.dieT = 0; game.dieN = 0; game.dieWait = 0;
+  dirQueue = [];
+  if (game.score > hi) hi = game.score;
+}
+
+function stepPlay() {
+  /* 转向:按下沿入队 */
+  if (hit('up')) pushDir(0, -1);
+  if (hit('down')) pushDir(0, 1);
+  if (hit('left')) pushDir(-1, 0);
+  if (hit('right')) pushDir(1, 0);
+  hit('a'); hit('b'); hit('select');       // 本游戏不用,清掉避免残留
+  /* 大果子计时 */
+  if (big) {
+    if (--big.ttl <= 0) { big = null; bigTimer = BIG_EVERY; }
+  } else if (--bigTimer <= 0) {
+    const c = randFree();
+    if (c) { big = { x: c.x, y: c.y, ttl: BIG_TTL }; Snd.bigOut(); }
+    else bigTimer = 600;                   // 没空位,10 秒后再试
+  }
+  /* 移动:speed 格/秒 -> 每帧累加,满 60 走一格 */
+  moveAcc += speed;
+  while (moveAcc >= 60 && game.state === ST.PLAY) {
+    moveAcc -= 60;
+    stepMove();
+  }
+}
+
+/* 死亡动画:蛇身从尾到头逐节闪烁消失,音高下行 */
+function stepDying() {
+  game.dieT++;
+  if (snake.length) {
+    if (game.dieT % 6 === 0) {
+      Snd.diePop(game.dieN++);
+      snake.pop();
+      if (!snake.length) game.dieWait = 18;
+    }
+  } else if (--game.dieWait <= 0) {
+    game.state = ST.OVER;
+    game.overT = 0;
+    Snd.over();
+  }
+}
+
+function step() {
+  game.frame++;
+  switch (game.state) {
+    case ST.TITLE:
+      if (hit('start')) { startGame(); Snd.start(); }
+      break;
+    case ST.PLAY: stepPlay(); break;
+    case ST.DYING: stepDying(); break;
+    case ST.OVER:
+      game.overT++;
+      if (game.overT > 30 && hit('start')) game.state = ST.TITLE;
+      break;
+  }
+}
+
+/* ---------- 渲染 ---------- */
+/* 像素苹果:'.'空 '0'果身(最深) '1'梗叶(深) '3'高光(最浅) */
+const APPLE = [
+  "...11...",
+  "..1.11..",
+  ".000000.",
+  "00330000",
+  "00000000",
+  "00000000",
+  ".000000.",
+  "..0000..",
+];
+function drawApple(sx, sy, body) {
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++) {
+      const ch = APPLE[r][c];
+      if (ch === '.') continue;
+      const ci = ch === '0' ? body : (ch === '1' ? 1 : 3);
+      R(sx + c, sy + r, 1, 1, ci);
+    }
+}
+
+function drawStone(sx, sy) {
+  R(sx, sy, 8, 8, 1);
+  R(sx, sy, 8, 1, 0); R(sx, sy + 7, 8, 1, 0);
+  R(sx, sy, 1, 8, 0); R(sx + 7, sy, 1, 8, 0);
+  R(sx + 3, sy + 3, 2, 2, 0);
+}
+
+/* 蛇头:深色 + 一对 2px 眼睛(随方向移动) */
+function drawHead(sx, sy, d) {
+  R(sx, sy, 8, 8, 0);
+  let e;
+  if (d.x > 0) e = [[5, 1], [5, 5]];
+  else if (d.x < 0) e = [[1, 1], [1, 5]];
+  else if (d.y < 0) e = [[1, 1], [5, 1]];
+  else e = [[1, 5], [5, 5]];
+  for (const [ex, ey] of e) R(sx + ex, sy + ey, 2, 2, 3);
+}
+
+/* 蛇身:深浅交替的格子;i 为距头的节号 */
+function drawBody(sx, sy, i, flash) {
+  R(sx, sy, 8, 8, flash ? 3 : (i % 2 === 1 ? 1 : 2));
+}
+
+function drawSnake(fx, fy, cells, d, flashTail) {
+  for (let i = cells.length - 1; i >= 0; i--) {
+    const sx = fx + cells[i].x * CELL, sy = fy + cells[i].y * CELL;
+    if (i === 0) drawHead(sx, sy, d);
+    else drawBody(sx, sy, i, flashTail && i === cells.length - 1);
+  }
+}
+
+function drawHUD() {
+  drawText('SC', 2, 4, 0);
+  drawText(String(game.score).padStart(6, '0'), 26, 4, 0);
+  drawText('HI', 88, 4, 0);
+  drawText(String(hi).padStart(6, '0'), 112, 4, 0);
+  R(0, 15, W, 1, 1);                       // HUD 与场地之间的分隔线
+}
+
+function drawPlay() {
+  drawHUD();
+  for (let y = 0; y < ROWS; y++)
+    for (let x = 0; x < COLS; x++)
+      if (stones[y * COLS + x]) drawStone(FX + x * CELL, FY + y * CELL);
+  if (food) drawApple(FX + food.x * CELL, FY + food.y * CELL, 0);
+  if (big && (game.frame >> 2) % 2 === 0) {  // 大果子:浅色果身 + 深色描边,闪烁
+    const bx = FX + big.x * CELL, by = FY + big.y * CELL;
+    R(bx, by, 8, 1, 0); R(bx, by + 7, 8, 1, 0);
+    R(bx, by, 1, 8, 0); R(bx + 7, by, 1, 8, 0);
+    drawApple(bx, by, 1);
+  }
+  /* 死亡动画:即将消失的尾节先闪烁 3 帧 */
+  const flashTail = game.state === ST.DYING && snake.length > 0 && game.dieT % 6 < 3;
+  drawSnake(FX, FY, snake, dir, flashTail);
+}
+
+/* 标题:大字 SNAKE + 一条盘成 S 形的像素蛇 + 闪烁 PRESS START */
+function drawTitle() {
+  drawText('SNAKE', 20, 14, 0, 3);
+  drawText('HI ' + String(hi).padStart(6, '0'), 44, 46, 0);
+  /* 盘蛇:三行蛇形走位,头朝右去够一颗苹果 */
+  const coil = [];
+  for (let x = 3; x <= 16; x++) coil.push({ x, y: 8 });
+  coil.push({ x: 16, y: 9 });
+  for (let x = 16; x >= 3; x--) coil.push({ x, y: 10 });
+  coil.push({ x: 3, y: 11 });
+  for (let x = 3; x <= 16; x++) coil.push({ x, y: 12 });
+  const snakeCells = coil.slice().reverse(); // 索引 0 = 头
+  drawSnake(0, 8, snakeCells, { x: 1, y: 0 }, false);
+  drawApple(18 * CELL, 12 * CELL + 8, 0);    // 蛇头前方的苹果
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 126, 0); // 闪烁,灵魂所在
+}
+
+function drawOver() {
+  R(0, 0, W, H, 0);
+  drawText('GAME OVER', 44, 40, 3);
+  drawText('SCORE ' + String(game.score).padStart(6, '0'), 32, 64, 3);
+  drawText('HI ' + String(hi).padStart(6, '0'), 44, 78, 3);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 104, 3);
+}
+
+function render() {
+  R(0, 0, W, H, 3);                        // 背景 = 最浅色
+  switch (game.state) {
+    case ST.TITLE: drawTitle(); break;
+    case ST.PLAY:
+    case ST.DYING: drawPlay(); break;
+    case ST.OVER: drawOver(); break;
+  }
+}
+
+/* ---------- 主循环:requestAnimationFrame + 固定 60fps 逻辑帧 ---------- */
+let lastTs = 0, acc = 0;
+function frameLoop(ts) {
+  requestAnimationFrame(frameLoop);
+  if (!lastTs) lastTs = ts;
+  let dt = ts - lastTs;
+  lastTs = ts;
+  if (dt > 250) dt = 250;                  // 切后台回来不追帧
+  acc += dt;
+  while (acc >= 1000 / 60) { step(); acc -= 1000 / 60; }
+  render();
+}
+
+/* ---------- 画布整数倍放大(3~5 倍,像素锐利) ---------- */
+function fit() {
+  const ui = document.getElementById('ui');
+  const chrome = (ui ? ui.offsetHeight : 120) + 64;
+  const availW = window.innerWidth - 20, availH = window.innerHeight - chrome;
+  let s = Math.floor(Math.min(availW / 160, availH / 144));
+  s = Math.max(3, Math.min(5, s));
+  cv.style.width = 160 * s + 'px';
+  cv.style.height = 144 * s + 'px';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', fit);
+fit();
+requestAnimationFrame(frameLoop);
+
+/* ---------- 离屏测试钩子(不影响游戏本身) ---------- */
+window.__test = {
+  ST, game, keys, pressed, step, render, startGame, stepMove, randFree,
+  key(k, down) { if (down && !keys[k]) pressed[k] = 1; keys[k] = down ? 1 : 0; },
+  get snake() { return snake; },
+  get dir() { return dir; },
+  get dirQueue() { return dirQueue; },
+  get food() { return food; },
+  setFood(x, y) { food = { x, y }; },
+  get big() { return big; },
+  setBig(x, y, ttl) { big = { x, y, ttl }; },
+  get bigTimer() { return bigTimer; },
+  setBigTimer(t) { bigTimer = t; },
+  get stones() { return stones; },
+  setStone(x, y, v) { stones[y * COLS + x] = v; },
+  get foods() { return foods; },
+  setFoods(n) { foods = n; },
+  get speed() { return speed; },
+  get hi() { return hi; },
+  setHi(v) { hi = v; },
+  setSnake(cells, d) { snake = cells.slice(); dir = { x: d.x, y: d.y }; dirQueue = []; },
+};
+</script>
+</body>
+</html>

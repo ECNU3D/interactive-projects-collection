@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>宝可梦体素建模示例 · 路线A 手工精模</title>
+<style>
+  :root{
+    --mc-gold:#FCDC5F; --mc-gray:#AAAAAA;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; }
+  html,body{ width:100%; height:100%; overflow:hidden; background:#000;
+    font-family:'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif; }
+  #scene{ position:absolute; inset:0; display:block; }
+
+  /* ===== Minecraft 工具提示风格面板 ===== */
+  .mc-panel{
+    position:absolute; color:#fff; padding:12px 14px;
+    background:rgba(16,0,22,.92);
+    border:2px solid #5b21b6;
+    box-shadow: inset 0 0 0 2px #2a0a55, 0 4px 0 rgba(0,0,0,.4);
+  }
+  .mc-panel h1{
+    font-size:15px; letter-spacing:1px; color:var(--mc-gold);
+    text-shadow:2px 2px 0 #3e3308; margin-bottom:6px;
+  }
+  .mc-panel p{ font-size:12px; line-height:1.7; color:#e8e8e8; text-shadow:1px 1px 0 #222; }
+  .mc-panel .dim{ color:var(--mc-gray); }
+  #info{ left:16px; top:16px; width:300px; }
+  #stats{ right:16px; top:16px; text-align:right; }
+  #hint{ right:16px; bottom:16px; padding:8px 12px; }
+  #hint p{ font-size:11px; }
+
+  /* ===== Minecraft 按钮 ===== */
+  .mc-btn{
+    display:inline-block; cursor:pointer; color:#fff;
+    font-family:inherit; font-size:13px; font-weight:700;
+    text-shadow:2px 2px 0 #383838; letter-spacing:1px;
+    padding:9px 16px; border:2px solid #000;
+    background:linear-gradient(#9c9c9c,#6e6e6e);
+    box-shadow: inset 2px 2px 0 #bdbdbd, inset -2px -2px 0 #494949;
+  }
+  .mc-btn:hover{
+    background:linear-gradient(#8fa0e6,#5f6fbb); color:#fffbc9;
+    box-shadow: inset 2px 2px 0 #b3c0f5, inset -2px -2px 0 #3c477e;
+  }
+  .mc-btn:active{ transform:translateY(2px); }
+
+  /* ===== 底部热键栏(选择精灵) ===== */
+  #hotbar{
+    position:absolute; left:50%; bottom:18px; transform:translateX(-50%);
+    display:flex; align-items:flex-end; gap:0; padding:4px;
+    background:#1d1d1f; border:3px solid #000;
+    box-shadow: inset 0 0 0 2px #4a4a4a, 0 6px 0 rgba(0,0,0,.45);
+  }
+  .slot{
+    width:64px; height:64px; margin:1px; cursor:pointer; position:relative;
+    background:#8b8b8b;
+    border:3px solid; border-color:#373737 #ffffff #ffffff #373737;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+  }
+  .slot:hover{ background:#9d9d9d; }
+  .slot.sel{ outline:4px solid #fff; outline-offset:1px; z-index:2; }
+  .slot .sq{ width:22px; height:22px; border:2px solid rgba(0,0,0,.55);
+    box-shadow: inset -4px -4px 0 rgba(0,0,0,.22), inset 4px 4px 0 rgba(255,255,255,.28); }
+  .slot .nm{ font-size:11px; font-weight:700; color:#fff; text-shadow:1px 1px 0 #333; }
+  #bar-btns{ position:absolute; left:50%; bottom:98px; transform:translateX(-50%); display:flex; gap:10px; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div class="mc-panel" id="info">
+  <h1>◆ 路线A · 手工体素精模</h1>
+  <p>用代码逐方块搭建的 Minecraft 风格宝可梦。真 3D 模型，任何角度可看，部件分组可做动画。</p>
+  <p class="dim" style="margin-top:6px">审查要点：辨识度 / 体型比例 / 脸部表情。点击下方槽位聚焦单只查看。</p>
+</div>
+<div class="mc-panel" id="stats"><p id="statsText" class="dim"></p></div>
+<div class="mc-panel" id="hint"><p class="dim">左键拖动旋转 · 滚轮缩放 · 右键平移</p></div>
+
+<div id="bar-btns">
+  <button class="mc-btn" id="btnRot">自动旋转：开</button>
+  <button class="mc-btn" id="btnAll">总览全部</button>
+</div>
+<div id="hotbar"></div>
+
+<script src="../assets/lib/three.min.js"></script>
+<script src="../assets/lib/OrbitControls.js"></script>
+<script>
+/* ================= 体素建造器 ================= */
+class Vox {
+  constructor(){ this.map = new Map(); }
+  k(x,y,z){ return x+'|'+y+'|'+z; }
+  set(x,y,z,c){ this.map.set(this.k(x,y,z), {x,y,z,c}); }
+  del(x,y,z){ this.map.delete(this.k(x,y,z)); }
+  /* 范围自动归一化,支持镜像时传入反向区间 */
+  nrm(a,b){ return a<=b?[a,b]:[b,a]; }
+  box(x1,x2,y1,y2,z1,z2,c){
+    [x1,x2]=this.nrm(x1,x2); [y1,y2]=this.nrm(y1,y2); [z1,z2]=this.nrm(z1,z2);
+    for(let x=x1;x<=x2;x++)for(let y=y1;y<=y2;y++)for(let z=z1;z<=z2;z++) this.set(x,y,z,c);
+  }
+  /* 倒角盒:去掉所有棱边体素,得到圆润的"胶囊"感 */
+  bevelBox(x1,x2,y1,y2,z1,z2,c){
+    [x1,x2]=this.nrm(x1,x2); [y1,y2]=this.nrm(y1,y2); [z1,z2]=this.nrm(z1,z2);
+    for(let x=x1;x<=x2;x++)for(let y=y1;y<=y2;y++)for(let z=z1;z<=z2;z++){
+      const e=(x===x1||x===x2)+(y===y1||y===y2)+(z===z1||z===z2);
+      if(e>=2) continue;
+      this.set(x,y,z,c);
+    }
+  }
+  list(){ return [...this.map.values()]; }
+}
+
+/* ================= 四只精灵的建模 ================= */
+function buildPikachu(){
+  const v=new Vox();
+  const Y=0xFFD93B, EAR=0x26221E, EYE=0x1A1A1A, W=0xFFFFFF,
+        CHEEK=0xE8483F, M=0x8C4A2F, BR=0x9C6528;
+  v.bevelBox(-3,3,0,5,-3,3,Y);                      // 身体
+  v.box(-2,2,4,4,-3,-3,BR); v.box(-2,2,2,2,-3,-3,BR); // 背部两道棕纹
+  v.box(-3,-1,0,0,3,4,Y);  v.box(1,3,0,0,3,4,Y);    // 前伸的脚
+  for(const s of [1,-1]){
+    v.box(s*4,s*5,2,4,-1,1,Y);                      // 手臂
+  }
+  v.bevelBox(-5,5,5,12,-4,3,Y);                     // 大头
+  for(const s of [1,-1]){
+    v.box(s*2,s*3,9,10,3,3,EYE); v.set(s*2,10,3,W); // 眼睛+高光
+    v.box(s*3,s*4,7,8,3,3,CHEEK);                   // 红脸颊
+  }
+  v.set(-1,8,3,M); v.set(1,8,3,M); v.set(0,7,3,M);  // w 形嘴
+  v.set(0,10,3,0x6B4A2F);                           // 鼻子
+  for(const s of [1,-1]){                           // 斜向外的长耳朵
+    v.box(s*2,s*3,13,14,-2,-1,Y);
+    v.box(s*3,s*4,15,16,-2,-1,Y);
+    v.box(s*4,s*5,17,18,-2,-1,EAR);
+  }
+  v.box(0,1,3,4,-4,-4,BR);                          // 尾巴棕色基部
+  v.box(1,2,4,6,-5,-5,Y);                           // 闪电尾:第一段
+  v.box(2,3,6,8,-6,-6,Y);                           //        第二段
+  v.box(3,7,8,12,-6,-6,Y);                          //        大尾刃
+  v.del(6,8,-6); v.del(7,8,-6); v.del(7,9,-6);      //        斜切成闪电形
+  v.del(3,11,-6); v.del(3,12,-6);
+  return v;
+}
+
+function buildCharmander(){
+  const v=new Vox();
+  const O=0xF0862F, C=0xF7D77E, EYE=0x1A1A1A, W=0xFFFFFF, M=0xA33B22,
+        R=0xE83B23, FO=0xFF9027, FY=0xFFE04A;
+  v.bevelBox(-3,3,0,5,-2,3,O);                      // 身体
+  v.box(-2,2,1,4,3,3,C);                            // 奶油色肚皮
+  v.box(-3,-1,0,0,3,4,O); v.box(1,3,0,0,3,4,O);     // 脚
+  for(const s of [1,-1]) v.box(s*4,s*5,3,4,0,2,O);  // 手臂
+  v.bevelBox(-4,4,5,12,-3,4,O);                     // 头
+  for(const s of [1,-1]){
+    v.box(s*2,s*3,9,10,4,4,EYE); v.set(s*2,10,4,W); // 眼睛
+  }
+  v.box(-2,2,7,7,4,4,M);                            // 大嘴
+  v.box(0,1,2,3,-4,-3,O);                           // 尾巴
+  v.box(0,1,3,6,-6,-5,O);
+  v.box(0,1,7,9,-6,-4,R);                           // 尾巴火焰:红
+  v.box(0,1,10,10,-6,-5,FO);                        //           橙
+  v.set(0,11,-5,FY); v.set(1,11,-6,FY);             //           黄尖
+  return v;
+}
+
+function buildSquirtle(){
+  const v=new Vox();
+  const BL=0x79C1E4, SB=0xB5713C, CR=0xEFE0AE, CB=0xF2E4B4,
+        EYE=0x5E2C1E, W=0xFFFFFF, M=0x2F5D6B;
+  v.bevelBox(-3,3,0,6,-2,2,BL);                     // 身体
+  v.box(-2,2,1,5,2,2,CB);                           // 肚皮
+  for(let x=-3;x<=3;x++)for(let y=1;y<=5;y++){      // 背甲(棕色+奶油边)
+    const rim=(x===-3||x===3||y===1||y===5);
+    v.set(x,y,-3, rim?CR:SB);
+  }
+  v.box(-2,2,2,4,-4,-4,SB);                         // 背甲鼓包
+  v.box(-3,-1,0,0,2,4,BL); v.box(1,3,0,0,2,4,BL);   // 脚
+  for(const s of [1,-1]) v.box(s*4,s*5,3,4,0,2,BL); // 手臂
+  v.bevelBox(-4,4,6,13,-4,3,BL);                    // 圆头
+  for(const s of [1,-1]){
+    v.box(s*2,s*3,10,11,3,3,EYE); v.set(s*2,11,3,W);// 大眼睛
+  }
+  v.box(-1,1,8,8,3,3,M); v.set(-2,9,3,M); v.set(2,9,3,M); // 微笑
+  v.box(0,1,1,3,-4,-3,BL);                          // 卷尾巴
+  v.box(1,2,3,5,-5,-4,BL);
+  v.box(-1,1,5,6,-5,-5,BL);
+  return v;
+}
+
+function buildBulbasaur(){
+  const v=new Vox();
+  const BG=0x6FC0A8, SP=0x35836B, BD=0x3F9C50, BT=0x7ED063,
+        EYE=0xD8433C, W=0xFFFFFF, M=0x2E5C4E;
+  v.bevelBox(-3,3,1,6,-4,2,BG);                     // 四足身体
+  v.box(-3,-2,0,1,1,2,BG);  v.box(2,3,0,1,1,2,BG);  // 前腿
+  v.box(-3,-2,0,1,-4,-3,BG); v.box(2,3,0,1,-4,-3,BG);// 后腿
+  v.bevelBox(-4,4,3,9,1,7,BG);                      // 前伸的宽头
+  for(const s of [1,-1]){
+    v.box(s*2,s*3,6,7,7,7,EYE); v.set(s*2,7,7,W);   // 红眼睛
+  }
+  v.box(-2,2,4,4,7,7,M); v.set(-3,5,7,M); v.set(3,5,7,M); // 大嘴
+  for(const s of [1,-1]){                           // 尖耳
+    v.box(s*2,s*3,10,11,3,4,BG);
+    v.set(s*2,10,4,SP);
+  }
+  v.bevelBox(-2,2,6,11,-4,0,BD);                    // 背上的种子球茎
+  v.box(-1,1,11,12,-3,-1,BT); v.set(0,13,-2,BT);    // 球茎尖
+  // 身上的深色斑点
+  [[3,5,-1],[-3,4,-2],[3,3,0],[-3,5,1],[4,6,4],[-4,5,3],[4,4,5],[-1,9,5],[2,9,3]]
+    .forEach(p=>v.set(p[0],p[1],p[2],SP));
+  return v;
+}
+
+/* ================= 体素 → 合并网格 =================
+   只生成暴露在空气中的面(同 Minecraft 地形做法):
+   相邻同色方块之间没有内部面,表面完全无缝,没有边界线 */
+const FACES=[
+  {n:[ 1,0,0], v:[[1,0,1],[1,0,0],[1,1,0],[1,1,1]]},
+  {n:[-1,0,0], v:[[0,0,0],[0,0,1],[0,1,1],[0,1,0]]},
+  {n:[0, 1,0], v:[[0,1,1],[1,1,1],[1,1,0],[0,1,0]]},
+  {n:[0,-1,0], v:[[0,0,0],[1,0,0],[1,0,1],[0,0,1]]},
+  {n:[0,0, 1], v:[[0,0,1],[1,0,1],[1,1,1],[0,1,1]]},
+  {n:[0,0,-1], v:[[1,0,0],[0,0,0],[0,1,0],[1,1,0]]},
+];
+function buildVoxelMesh(list, has){
+  const pos=[], nor=[], col=[], idx=[];
+  const c=new THREE.Color();
+  for(const vx of list){
+    c.setHex(vx.c);
+    for(const f of FACES){
+      if(has(vx.x+f.n[0], vx.y+f.n[1], vx.z+f.n[2])) continue;   // 被邻居挡住的面不生成
+      const base=pos.length/3;
+      for(const cv of f.v){
+        pos.push(vx.x-0.5+cv[0], vx.y+cv[1], vx.z-0.5+cv[2]);
+        nor.push(f.n[0],f.n[1],f.n[2]);
+        col.push(c.r,c.g,c.b);
+      }
+      idx.push(base,base+1,base+2, base,base+2,base+3);
+    }
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('normal',   new THREE.Float32BufferAttribute(nor,3));
+  g.setAttribute('color',    new THREE.Float32BufferAttribute(col,3));
+  g.setIndex(idx);
+  const mesh=new THREE.Mesh(g, new THREE.MeshLambertMaterial({vertexColors:true}));
+  mesh.castShadow=true; mesh.receiveShadow=true;
+  return mesh;
+}
+function meshFromVox(v, scale){
+  const list=v.list();
+  const has=(x,y,z)=>v.map.has(x+'|'+y+'|'+z);
+  const mesh=buildVoxelMesh(list, has);
+  const g=new THREE.Group(); g.add(mesh); g.scale.setScalar(scale);
+  return {group:g, count:list.length};
+}
+
+/* ================= 场景 ================= */
+const canvas=document.getElementById('scene');
+const renderer=new THREE.WebGLRenderer({canvas, antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFShadowMap;
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x8FD1FF);
+scene.fog=new THREE.Fog(0xC5E8FF, 55, 140);
+
+const camera=new THREE.PerspectiveCamera(50, innerWidth/innerHeight, .1, 300);
+camera.position.set(0, 11, 33);
+
+const controls=new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping=true; controls.dampingFactor=.08;
+controls.maxPolarAngle=Math.PI*0.52; controls.minDistance=4; controls.maxDistance=60;
+controls.target.set(0,3.2,0);
+
+scene.add(new THREE.HemisphereLight(0xd9ecff, 0x8a6b4a, .75));
+const sun=new THREE.DirectionalLight(0xfff3d6, .95);
+sun.position.set(18,32,14); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.normalBias=0.06;
+sun.shadow.camera.left=-45; sun.shadow.camera.right=45;
+sun.shadow.camera.top=45; sun.shadow.camera.bottom=-45;
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0xffffff,.28));
+
+/* 草地(棋盘格纹理) */
+function checkerTexture(c1,c2){
+  const cv=document.createElement('canvas'); cv.width=cv.height=8;
+  const g=cv.getContext('2d');
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++){
+    g.fillStyle=((x+y)&1)?c1:c2; g.fillRect(x,y,1,1);
+  }
+  const t=new THREE.CanvasTexture(cv);
+  t.magFilter=t.minFilter=THREE.NearestFilter;
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  return t;
+}
+const groundTex=checkerTexture('#79b94c','#6fb045');
+groundTex.repeat.set(24,14);
+const ground=new THREE.Mesh(
+  new THREE.PlaneGeometry(120,70),
+  new THREE.MeshLambertMaterial({map:groundTex})
+);
+ground.rotation.x=-Math.PI/2; ground.receiveShadow=true;
+scene.add(ground);
+
+/* 云 */
+for(let i=0;i<7;i++){
+  const w=6+Math.random()*8;
+  const cl=new THREE.Mesh(
+    new THREE.BoxGeometry(w,0.8,3+Math.random()*3),
+    new THREE.MeshLambertMaterial({color:0xffffff,transparent:true,opacity:.85})
+  );
+  cl.position.set(-50+Math.random()*100, 26+Math.random()*6, -30+Math.random()*40);
+  cl.userData.spd=.01+Math.random()*.02;
+  cl.name='cloud'; scene.add(cl);
+}
+
+/* 草方块基座 */
+function noiseTexture(base, vary){
+  const cv=document.createElement('canvas'); cv.width=cv.height=8;
+  const g=cv.getContext('2d');
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++){
+    const f=1+(Math.random()*2-1)*vary;
+    g.fillStyle=`rgb(${Math.min(255,base[0]*f)|0},${Math.min(255,base[1]*f)|0},${Math.min(255,base[2]*f)|0})`;
+    g.fillRect(x,y,1,1);
+  }
+  const t=new THREE.CanvasTexture(cv);
+  t.magFilter=t.minFilter=THREE.NearestFilter;
+  return t;
+}
+function pedestal(x){
+  const grass=new THREE.MeshLambertMaterial({map:noiseTexture([124,189,75],.12)});
+  const dirtSide=new THREE.MeshLambertMaterial({map:noiseTexture([138,90,59],.14)});
+  const m=new THREE.Mesh(new THREE.BoxGeometry(6,1.2,6),
+    [dirtSide,dirtSide,grass,dirtSide,dirtSide,dirtSide]);
+  m.position.set(x,.6,0); m.castShadow=true; m.receiveShadow=true;
+  scene.add(m);
+}
+
+/* 名牌 */
+function nametag(cn,en,count){
+  const cv=document.createElement('canvas'); cv.width=512; cv.height=160;
+  const g=cv.getContext('2d');
+  g.fillStyle='rgba(0,0,0,.4)';
+  g.fillRect(96,10,320,140);
+  g.textAlign='center'; g.fillStyle='#fff';
+  g.font='700 52px "PingFang SC", sans-serif';
+  g.fillText(cn,256,72);
+  g.fillStyle='#cfcfcf'; g.font='700 30px "PingFang SC", monospace';
+  g.fillText(en+' · '+count+' 体素',256,122);
+  const t=new THREE.CanvasTexture(cv);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true}));
+  sp.scale.set(6.4,2,1);
+  return sp;
+}
+
+/* ================= 摆放四只精灵 ================= */
+const MODELS=[
+  {cn:'皮卡丘',   en:'Pikachu',    build:buildPikachu,    color:'#FFD93B'},
+  {cn:'小火龙',   en:'Charmander', build:buildCharmander, color:'#F0862F'},
+  {cn:'杰尼龟',   en:'Squirtle',   build:buildSquirtle,   color:'#79C1E4'},
+  {cn:'妙蛙种子', en:'Bulbasaur',  build:buildBulbasaur,  color:'#6FC0A8'},
+];
+const SPACING=13, SCALE=0.26;
+const groups=[];
+let totalVox=0;
+MODELS.forEach((m,i)=>{
+  const x=(i-(MODELS.length-1)/2)*SPACING;
+  pedestal(x);
+  const {group,count}=meshFromVox(m.build(), SCALE);
+  group.position.set(x,1.2,0);
+  scene.add(group); groups.push(group);
+  m.count=count; totalVox+=count;
+  const tag=nametag(m.cn,m.en,count);
+  tag.position.set(x, 8.6, 0);
+  scene.add(tag);
+});
+document.getElementById('statsText').innerHTML=
+  MODELS.map(m=>`${m.cn} <span style="color:#fff">${m.count}</span> 体素`).join('<br>')+
+  `<br>合计 <span style="color:var(--mc-gold)">${totalVox}</span> · 每只 1 次 draw call`;
+
+/* ================= UI:热键栏与聚焦 ================= */
+const hotbar=document.getElementById('hotbar');
+let camGoal=null;
+function focusOn(i){
+  document.querySelectorAll('.slot').forEach((s,j)=>s.classList.toggle('sel', j===i));
+  if(i===-1){ camGoal={pos:new THREE.Vector3(0,11,33), tgt:new THREE.Vector3(0,3.2,0)}; return; }
+  const x=(i-(MODELS.length-1)/2)*SPACING;
+  camGoal={pos:new THREE.Vector3(x+1.5,5.5,11), tgt:new THREE.Vector3(x,3.4,0)};
+}
+MODELS.forEach((m,i)=>{
+  const s=document.createElement('div'); s.className='slot';
+  s.innerHTML=`<div class="sq" style="background:${m.color}"></div><div class="nm">${m.cn}</div>`;
+  s.onclick=()=>focusOn(i);
+  hotbar.appendChild(s);
+});
+document.getElementById('btnAll').onclick=()=>focusOn(-1);
+/* URL 参数(便于截图/调试): ?static=1 关闭旋转, ?yaw=0.5 初始朝向, ?focus=0..3 聚焦某只 */
+const qs=new URLSearchParams(location.search);
+let autoRot=!qs.get('static');
+const yaw=parseFloat(qs.get('yaw')||'0');
+groups.forEach(g=>g.rotation.y=yaw);
+if(qs.get('focus')!==null && qs.get('focus')!==undefined && qs.get('focus')!=='') focusOn(+qs.get('focus'));
+const btnRot=document.getElementById('btnRot');
+btnRot.textContent='自动旋转：'+(autoRot?'开':'关');
+btnRot.onclick=()=>{
+  autoRot=!autoRot;
+  btnRot.textContent='自动旋转：'+(autoRot?'开':'关');
+};
+controls.addEventListener('start',()=>{ camGoal=null; });
+
+/* ================= 主循环 ================= */
+const clock=new THREE.Clock();
+function tick(){
+  requestAnimationFrame(tick);
+  const dt=clock.getDelta(), t=clock.elapsedTime;
+  groups.forEach((g,i)=>{
+    if(autoRot) g.rotation.y+=dt*.6;
+    g.position.y=1.2+Math.sin(t*1.8+i*1.4)*.12;   // 待机浮动
+  });
+  scene.traverse(o=>{ if(o.name==='cloud'){ o.position.x+=o.userData.spd; if(o.position.x>60)o.position.x=-60; }});
+  if(camGoal){
+    camera.position.lerp(camGoal.pos,.14);
+    controls.target.lerp(camGoal.tgt,.16);
+    if(camera.position.distanceTo(camGoal.pos)<.05) camGoal=null;
+  }
+  controls.update();
+  renderer.render(scene,camera);
+}
+function resize(){
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+}
+addEventListener('resize',resize); resize(); tick();
+</script>
+</body>
+</html>

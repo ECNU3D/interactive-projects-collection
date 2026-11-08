@@ -1,0 +1,118 @@
+id: wukong_common
+name: 齐天大圣（玩家）
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Unrestrained_Young_Man"
+  speed: 1.15
+  pitch: 2
+  emotion: happy
+
+greet:
+  - id: w_cm_greet_01
+    text: "老孙便是。"
+    quote: true
+    voice_setting: { emotion: happy, speed: 1.2 }
+  - id: w_cm_greet_02
+    text: "老孙来也。"
+    voice_setting: { emotion: happy, speed: 1.2 }
+  - id: w_cm_greet_03
+    text: "都出来，陪老孙说句话。"
+    voice_setting: { emotion: happy, speed: 1.15 }
+
+topics:
+  - id: zide
+    label: "得意自夸"
+    source: "第4回、第5回、第7回"
+    lines:
+      - id: w_cm_zide_01
+        speaker: pc
+        text: "我乃齐天大圣，就请我老孙做个席尊，有何不可？"
+        quote: true
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: w_cm_zide_02
+        speaker: pc
+        text: "皇帝轮流做，明年到我家。"
+        quote: true
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: w_cm_zide_03
+        speaker: pc
+        text: "天上一日，就是下界一年。"
+        quote: true
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: w_cm_zide_04
+        speaker: pc
+        text: "花果山的猴儿们，这会儿不知怎样想老孙。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+  - id: xixue
+    label: "骂人解闷"
+    source: "第4回"
+    lines:
+      - id: w_cm_xixue_01
+        speaker: pc
+        text: "(chuckle)脓包，<#0.15#>脓包。"
+        quote: true
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: w_cm_xixue_02
+        speaker: pc
+        text: "你是那路毛神？老孙不曾会你。"
+        voice_setting: { emotion: calm, speed: 1.1 }
+      - id: w_cm_xixue_03
+        speaker: pc
+        text: "好狠，好狠。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+  - id: suyan
+    label: "俗谚随口"
+    source: "第3回、第5回"
+    lines:
+      - id: w_cm_suyan_01
+        speaker: pc
+        text: "今朝有酒今朝醉，莫管门前是与非。"
+        quote: true
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: w_cm_suyan_02
+        speaker: pc
+        text: "美不美，乡中水。"
+        quote: true
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: w_cm_suyan_03
+        speaker: pc
+        text: "亲不亲，故乡人。"
+        quote: true
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: w_cm_suyan_04
+        speaker: pc
+        text: "赊三不敌见二，老孙只信到手的。"
+        voice_setting: { emotion: calm, speed: 1.1 }
+  - id: bima
+    label: "弼马温旧怨"
+    source: "第4回"
+    lines:
+      - id: w_cm_bima_01
+        speaker: pc
+        text: "养马者，乃后生小辈下贱之役，岂是待我的？"
+        quote: true
+        voice_setting: { emotion: angry, speed: 1.25 }
+      - id: w_cm_bima_02
+        speaker: pc
+        text: "那玉帝不会用人。老孙这样的本事，教去看马！"
+        voice_setting: { emotion: angry, speed: 1.25 }
+
+fallback:
+  - id: w_cm_fb_01
+    text: "聒噪，<#0.15#>聒噪。"
+    quote: true
+    voice_setting: { emotion: happy, speed: 1.15 }
+  - id: w_cm_fb_02
+    text: "这话老孙不爱听。"
+    voice_setting: { emotion: calm, speed: 1.1 }
+  - id: w_cm_fb_03
+    text: "有这等事？有这等事？"
+    voice_setting: { emotion: surprised, speed: 1.2 }
+
+bye:
+  - id: w_cm_bye_01
+    text: "走，走，走。"
+    voice_setting: { emotion: happy, speed: 1.2 }
+  - id: w_cm_bye_02
+    text: "老孙去也。"
+    voice_setting: { emotion: happy, speed: 1.15 }

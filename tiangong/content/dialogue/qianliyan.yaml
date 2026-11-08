@@ -1,0 +1,54 @@
+id: qianliyan
+name: 千里眼
+model: speech-2.6-hd
+voice_setting:
+  voice_id: "male-qn-jingying"
+  speed: 1.1
+  pitch: 0
+  emotion: fluent
+
+greet:
+  - id: greet_01
+    text: "报——齐天大圣至南天门。"
+  - id: greet_02
+    text: "大圣离门楼还有三十丈，我便看见了。"
+
+topics:
+  - id: jinguang
+    label: "当年那道金光"
+    source: "第1回"
+    lines:
+      - id: jinguang_01
+        text: "大圣出世那一日，金光直冲斗府。是我在南天门外，头一个看见的。"
+      - id: w_qly_jinguang_02
+        speaker: pc
+        text: "哦？那时你便认得老孙？"
+        voice_setting: { emotion: surprised }
+      - id: jinguang_03
+        text: "不认得。只当是哪处宝贝放光。后来才知晓，是花果山一块仙石迸裂。"
+      - id: jinguang_04
+        text: "那道金光，我到如今还记得。"
+  - id: zoubao
+    label: "看得真，听得明"
+    source: "第3回"
+    lines:
+      - id: zoubao_01
+        text: "后来大圣在龙宫得宝，在幽冥销籍，我看得真，听得明，一一奏明过天庭。"
+      - id: w_qly_zoubao_02
+        speaker: pc
+        text: "你既看得这样真，老孙是仙是妖，你说说。"
+        voice_setting: { emotion: happy }
+      - id: zoubao_03
+        text: "大圣名注仙箓，自然是仙。"
+      - id: zoubao_04
+        text: "只是我这双眼，看过的仙多，看过的妖也多。看得真，是差事；看得真又记在心里，便不是差事了。我不记。"
+
+fallback:
+  - id: fb_01
+    text: "看见的，不都能说。"
+  - id: fb_02
+    text: "大圣，门楼上风大，眼酸。"
+
+bye:
+  - id: bye_01
+    text: "大圣慢走。你走到哪里，我看得见哪里。"

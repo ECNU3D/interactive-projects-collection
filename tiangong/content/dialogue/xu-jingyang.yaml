@@ -1,0 +1,92 @@
+# 许旌阳｜四大天师·进言｜通明殿
+# 依据：文档 01 §2.2（谨慎·多事）；考据 research §2.2（第5回进言为蟠桃园之祸直接起因）
+id: xu_jingyang
+name: 许旌阳
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Gentleman"
+  speed: 0.98
+  pitch: 0
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣。园中桃子，可还齐整？"
+  - id: greet_02
+    text: "大圣驾到，可是园中有事？"
+
+topics:
+  - id: yinzou
+    label: "请天师引奏上灵霄殿"
+    source: "第3回、第31回；引奏准入流程为本作增补（文档01 §5.3）"
+    lines:
+      - id: w_xjy_yinzou_01
+        speaker: pc
+        text: "许天师，老孙要见玉帝，走个正路，你引奏一回。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: yinzou_01
+        text: "正路只有一条：递本，候宣。快不得，也错不得。"
+      - id: w_xjy_yinzou_02
+        speaker: pc
+        text: "老孙的筋斗云快，写本也快。"
+        voice_setting: { emotion: happy, speed: 1.05 }
+      - id: yinzou_02
+        text: "本快，规矩不快。大圣把事目写明，老道这便上殿引奏，你只在阶下候旨。"
+  - id: jinyan
+    label: "蟠桃园差事的来历"
+    source: "第5回"
+    lines:
+      - id: w_xjy_jinyan_01
+        speaker: pc
+        text: "老孙管蟠桃园这桩差事，是谁在玉帝面前提的？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: jinyan_01
+        text: "是老道进的言。"
+      - id: jinyan_02
+        text: "今有齐天大圣无事闲游，结交天上众星宿，不论高低，俱称朋友，恐后闲中生事。不若与他一件事管，庶免别生事端。"
+        quote: true
+      - id: w_xjy_jinyan_02
+        speaker: pc
+        text: "好嘛，绕了半日，这差事原来是你塞给老孙的。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: jinyan_03
+        text: "一件事管，强似终日闲游。大圣，园里三千六百株，你看得过来么？"
+  - id: xianyou
+    label: "交游遍天宫"
+    source: "第5回、第51回"
+    lines:
+      - id: w_xjy_xianyou_01
+        speaker: pc
+        text: "老孙与天上众星宿，不论高低，俱是朋友。这也有碍着你？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: xianyou_01
+        text: "朋友多是好事。只怕大圣今日游到东家，明日游到西家，误了园里的正事。"
+      - id: w_xjy_xianyou_02
+        speaker: pc
+        text: "桃子又不长脚，误不了。"
+        voice_setting: { emotion: happy, speed: 1.05 }
+      - id: xianyou_02
+        text: "这猴头还是如此放刁。"
+        quote: true
+  - id: chaoyi
+    label: "朝上的礼数"
+    source: "自拟对话，依据文档01 §2.2 语体"
+    lines:
+      - id: w_xjy_chaoyi_01
+        speaker: pc
+        text: "许天师，玉帝整日高坐，你们都怕他么？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: chaoyi_01
+        text: "不是怕，是敬。礼数在，三界才有个头绪。"
+      - id: chaoyi_02
+        text: "老道多嘴一句：大圣在殿外怎样都使得，进了殿，话到嘴边留半句。"
+
+fallback:
+  - id: fb_01
+    text: "大圣，话不可乱说。"
+  - id: fb_02
+    text: "这个么，老道没有听见。"
+
+bye:
+  - id: bye_01
+    text: "大圣回园去罢，桃子要紧。"

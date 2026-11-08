@@ -1,0 +1,66 @@
+id: yuma_jiancheng
+name: 御马监监丞
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Sincere_Adult"
+  speed: 0.98
+  pitch: -1
+  emotion: sad
+
+greet:
+  - id: greet_01
+    text: "大、大圣……您怎么回来了。"
+  - id: greet_02
+    text: "下官参见大圣。"
+
+topics:
+  - id: pinji
+    label: "弼马温是几品官"
+    source: "第4回"
+    lines:
+      - id: w_jc_pinji_01
+        speaker: pc
+        text: "监丞，老孙再问你一遍：那弼马温，是个几品？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: pinji_02
+        text: "没有品从。"
+        quote: true
+      - id: w_jc_pinji_03
+        speaker: pc
+        text: "没品？想是大之极也？"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: pinji_04
+        text: "不大，不大，只唤做『未入流』。"
+        quote: true
+      - id: pinji_05
+        text: "末等。这样官儿最低最小，只可与他看马。"
+        quote: true
+      - id: w_jc_pinji_06
+        speaker: pc
+        text: "养马者，乃后生小辈下贱之役，岂是待我的？"
+        quote: true
+        voice_setting: { emotion: angry, speed: 1.25 }
+      - id: pinji_07
+        text: "(sighs)大圣……当日这话，是众口一词，不是下官一人讲的。"
+    next:
+      - { label: "马儿如今可好？", goto: maqun }
+      - { label: "罢了。", goto: __end }
+  - id: maqun
+    label: "马儿如今可好"
+    source: "第4回"
+    lines:
+      - id: w_jc_maqun_01
+        speaker: pc
+        text: "那些马儿，如今可肥？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: maqun_02
+        text: "托大圣的福，肉肥膘满。只是大圣当日养马，是真上过心的——下官到如今也没想明白，您怎么说走就走了。"
+
+fallback:
+  - id: fb_01
+    text: "下官只管马，天上的事不晓得。"
+  - id: fb_02
+    text: "大圣折杀下官了。"
+bye:
+  - id: bye_01
+    text: "大圣……得空常回来。马见生人，不贴耳了。"

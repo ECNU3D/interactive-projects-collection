@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>水泊梁山 · 沉浸式体验</title>
+<style>
+  :root{
+    --ink:#1c1a14; --paper:#efe6d0; --paper2:#e2d5b4;
+    --cinnabar:#8a2f22; --gold:#c9a03a; --lake:#3d5a66;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0e0d0a;
+    font-family:"Kaiti SC","STKaiti","KaiTi","Songti SC","STSong",serif;}
+  #app{position:fixed;inset:0}
+  #app canvas{display:block}
+
+  /* ---------- 标题画面 ---------- */
+  #title{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:26px;
+    background:#0e1216;
+    transition:opacity .9s ease;overflow:hidden}
+  #title.hidden{opacity:0;pointer-events:none}
+  #title-art{position:absolute;inset:0;width:100%;height:100%}
+  #title::before{content:'';position:absolute;inset:0;
+    background:radial-gradient(ellipse at 50% 30%,transparent 0%,rgba(10,12,14,.55) 70%)}
+  #title::after{content:'';position:absolute;inset:0;pointer-events:none;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
+    mix-blend-mode:overlay;opacity:.1}
+  .title-inner{position:relative;text-align:center}
+  .title-seal{display:inline-block;background:var(--cinnabar);color:#f0e2c4;
+    padding:6px 12px;font-size:15px;letter-spacing:6px;border-radius:3px;
+    box-shadow:0 2px 12px rgba(0,0,0,.5);margin-bottom:22px}
+  h1.big{font-size:clamp(56px,11vw,128px);color:#f2e8cf;letter-spacing:.12em;
+    text-shadow:0 4px 30px rgba(0,0,0,.85),0 0 2px #000;font-weight:700}
+  h1.big span{color:var(--gold)}
+  .title-sub{color:#d8c9a4;font-size:clamp(15px,2.2vw,22px);letter-spacing:.5em;margin-top:10px;
+    text-shadow:0 2px 10px rgba(0,0,0,.8)}
+  .title-quote{color:rgba(226,213,180,.62);margin-top:26px;font-size:14px;letter-spacing:.2em;line-height:2}
+  #start-btn{margin-top:38px;position:relative;background:none;cursor:pointer;
+    border:1px solid var(--gold);color:#f0e2c4;font-family:inherit;
+    font-size:21px;letter-spacing:.4em;padding:15px 58px 15px 66px;
+    transition:all .3s ease;background:rgba(20,16,10,.4)}
+  #start-btn:hover{background:var(--cinnabar);border-color:var(--cinnabar);
+    box-shadow:0 6px 26px rgba(138,47,34,.5);transform:translateY(-2px)}
+  .title-ctl{color:rgba(216,201,164,.55);font-size:13px;letter-spacing:.15em;margin-top:20px;line-height:2}
+
+  /* ---------- HUD ---------- */
+  .hud{position:fixed;z-index:20;pointer-events:none}
+  #logo{top:18px;left:20px;display:flex;align-items:center;gap:12px}
+  #logo .seal{width:46px;height:46px;background:var(--cinnabar);color:#f0e2c4;
+    display:flex;align-items:center;justify-content:center;font-size:19px;line-height:1.1;
+    border-radius:4px;box-shadow:0 3px 14px rgba(0,0,0,.55);text-align:center;
+    writing-mode:vertical-rl;letter-spacing:2px;padding:4px}
+  #logo .info{color:#f0e2c4;text-shadow:0 2px 8px #000;font-size:15px;letter-spacing:.2em}
+  #logo .info small{display:block;color:#cbb98d;font-size:12px;margin-top:4px;letter-spacing:.1em}
+  #logo .info b{color:var(--gold)}
+
+  #minimap{top:18px;right:18px;width:200px;height:200px;border-radius:50%;
+    border:2px solid rgba(201,160,58,.75);box-shadow:0 4px 24px rgba(0,0,0,.6);
+    background:#2e4048}
+  #map-label{top:222px;right:18px;color:#d8c9a4;font-size:12px;letter-spacing:.2em;
+    text-shadow:0 1px 6px #000;text-align:center;width:200px}
+
+  #controls-hint{left:20px;bottom:18px;color:rgba(240,226,196,.85);
+    font-size:13.5px;letter-spacing:.12em;line-height:2;text-shadow:0 2px 8px #000}
+  #controls-hint b{color:var(--gold);border:1px solid rgba(201,160,58,.55);
+    padding:0 5px;border-radius:3px;margin-right:4px;font-size:12px}
+
+  #interact-prompt{left:50%;bottom:190px;transform:translateX(-50%);
+    background:rgba(28,22,14,.82);border:1px solid rgba(201,160,58,.7);
+    color:#f0e2c4;padding:9px 26px;font-size:17px;letter-spacing:.15em;border-radius:4px;
+    opacity:0;transition:opacity .25s;white-space:nowrap}
+  #interact-prompt b{color:var(--gold);border:1px solid var(--gold);
+    padding:0 7px;margin-right:9px;border-radius:3px}
+  #interact-hint{left:50%;bottom:132px;transform:translateX(-50%);
+    color:rgba(240,226,196,.6);font-size:13px;letter-spacing:.3em;
+    text-shadow:0 2px 8px #000;transition:opacity 2s}
+  #interact-hint.fade{opacity:0}
+
+  /* ---------- 地名横幅 ---------- */
+  #loc-banner{top:64px;left:50%;transform:translateX(-50%) translateY(-16px);text-align:center;
+    opacity:0;transition:all .6s ease}
+  #loc-banner.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #loc-title{font-size:44px;color:#f2e8cf;letter-spacing:.35em;
+    text-shadow:0 3px 20px #000,0 0 2px #000}
+  #loc-sub{font-size:15px;color:rgba(216,201,164,.8);letter-spacing:.25em;margin-top:6px;
+    text-shadow:0 2px 8px #000}
+  #loc-banner .rule{width:280px;height:1px;margin:12px auto 0;
+    background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+
+  /* ---------- 对话框 ---------- */
+  #dialog{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(30px);
+    width:min(880px,94vw);z-index:40;display:flex;gap:0;
+    background:linear-gradient(180deg,rgba(30,24,16,.94),rgba(22,17,11,.96));
+    border:1px solid rgba(201,160,58,.65);border-radius:6px;
+    box-shadow:0 14px 60px rgba(0,0,0,.7);
+    opacity:0;pointer-events:none;visibility:hidden;transition:all .3s ease;overflow:hidden}
+  #dialog.open{opacity:1;pointer-events:auto;visibility:visible;transform:translateX(-50%) translateY(0)}
+  #dialog::before{content:'';position:absolute;inset:5px;border:1px solid rgba(201,160,58,.28);
+    border-radius:4px;pointer-events:none}
+  #dlg-portrait{width:218px;height:218px;flex:none;margin:14px 0 14px 14px;
+    border:1px solid rgba(201,160,58,.6);border-radius:4px;overflow:hidden;
+    box-shadow:0 6px 24px rgba(0,0,0,.5);background:var(--paper2);position:relative}
+  #dlg-portrait canvas{width:100%;height:100%;display:block}
+  #dlg-portrait img{width:100%;height:100%;object-fit:cover;object-position:50% 18%;display:block}
+  #dlg-portrait::after{content:'';position:absolute;inset:0;pointer-events:none;
+    box-shadow:inset 0 0 34px rgba(30,20,8,.35);border-radius:3px}
+  .dlg-right{flex:1;padding:20px 24px 14px;display:flex;flex-direction:column;min-width:0}
+  #dlg-name{font-size:27px;color:#f2e8cf;letter-spacing:.18em}
+  #dlg-meta{font-size:13.5px;color:var(--gold);letter-spacing:.14em;margin:6px 0 12px}
+  #dlg-text{flex:1;color:#e8dcc0;font-size:16.5px;line-height:1.95;letter-spacing:.06em;
+    text-align:justify;min-height:120px;white-space:pre-wrap}
+  #dlg-hint{text-align:right;color:rgba(216,201,164,.55);font-size:12.5px;
+    letter-spacing:.2em;margin-top:8px}
+  .dlg-close{position:absolute;top:8px;right:12px;color:rgba(216,201,164,.5);
+    font-size:13px;letter-spacing:.1em}
+
+  /* ---------- 帮助 ---------- */
+  #help{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:60;
+    width:min(560px,92vw);background:rgba(26,21,13,.96);border:1px solid rgba(201,160,58,.6);
+    border-radius:8px;padding:28px 34px;color:#e8dcc0;box-shadow:0 20px 80px rgba(0,0,0,.8)}
+  #help h3{color:var(--gold);letter-spacing:.3em;font-size:20px;margin-bottom:16px;text-align:center}
+  #help table{width:100%;border-collapse:collapse;font-size:15px}
+  #help td{padding:7px 4px;letter-spacing:.1em;border-bottom:1px dashed rgba(201,160,58,.2)}
+  #help td:first-child{color:var(--gold);width:130px}
+  #help .note{margin-top:14px;font-size:13px;color:#cbb98d;line-height:1.9}
+
+  /* ---------- 全屏地图 ---------- */
+  #fullscreen-map{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    z-index:55;border:2px solid rgba(201,160,58,.8);border-radius:8px;
+    box-shadow:0 20px 90px rgba(0,0,0,.85);background:#2e4048;
+    width:min(78vmin,720px);height:min(86vmin,800px)}
+  #map-tip{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);z-index:56;
+    color:#e8dcc0;font-size:14px;letter-spacing:.2em;display:none;text-shadow:0 2px 8px #000}
+
+  /* ---------- 其他 ---------- */
+  #audio-ctl{position:fixed;top:18px;right:236px;z-index:30;display:flex;gap:8px}
+  #audio-btn,#bgm-btn{pointer-events:auto;
+    background:rgba(28,22,14,.8);border:1px solid rgba(201,160,58,.65);color:#f0e2c4;
+    font-family:inherit;font-size:13px;letter-spacing:.15em;padding:7px 14px;border-radius:4px;
+    cursor:pointer}
+  #audio-btn:hover,#bgm-btn:hover{background:var(--cinnabar)}
+  #vignette{position:fixed;inset:0;z-index:10;pointer-events:none;
+    background:radial-gradient(ellipse at center,transparent 55%,rgba(14,10,4,.42) 100%)}
+  .loading-flash{position:fixed;inset:0;background:#0e0d0a;z-index:99;
+    display:flex;align-items:center;justify-content:center;color:#cbb98d;
+    letter-spacing:.6em;font-size:16px;transition:opacity .8s}
+</style>
+<script type="importmap">
+{ "imports": { "three": "./libs/three.module.js", "three/addons/": "./libs/jsm/" } }
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="vignette"></div>
+
+<!-- HUD -->
+<div class="hud" id="logo">
+  <div class="seal">梁山泊</div>
+  <div class="info">水泊梁山 · 沉浸之旅
+    <small>已拜会 <b id="met-count">0</b> / 108 将</small>
+  </div>
+</div>
+<canvas class="hud" id="minimap" width="200" height="200"></canvas>
+<div class="hud" id="map-label">就近地图 · M 看全泊</div>
+<div id="audio-ctl">
+  <button id="bgm-btn">♫ 配乐：关</button>
+  <button id="audio-btn">♪ 音效：关</button>
+</div>
+<div class="hud" id="controls-hint">
+  <b>W A S D</b>行走&nbsp;&nbsp;<b>Shift</b>疾行&nbsp;&nbsp;<b>拖拽鼠标</b>转视角<br>
+  <b>E</b>交谈&nbsp;&nbsp;<b>M</b>地图&nbsp;&nbsp;<b>H</b>帮助&nbsp;&nbsp;<b>入水</b>自动乘船
+</div>
+<div class="hud" id="interact-prompt"></div>
+<div class="hud" id="interact-hint">按 E 与好汉交谈 · 入水自动驾船 · 绕泊东行可至金沙滩</div>
+<div class="hud" id="loc-banner">
+  <div id="loc-title"></div>
+  <div class="rule"></div>
+  <div id="loc-sub"></div>
+</div>
+
+<!-- 对话框 -->
+<div id="dialog">
+  <div id="dlg-portrait"></div>
+  <div class="dlg-right">
+    <div id="dlg-name"></div>
+    <div id="dlg-meta"></div>
+    <div id="dlg-text"></div>
+    <div id="dlg-hint"></div>
+  </div>
+  <div class="dlg-close">ESC 关闭</div>
+</div>
+
+<!-- 帮助 -->
+<div id="help">
+  <h3>行 走 指 南</h3>
+  <table>
+    <tr><td>W A S D / 方向键</td><td>行走</td></tr>
+    <tr><td>Shift</td><td>疾行</td></tr>
+    <tr><td>拖拽鼠标</td><td>环视（视角决定走向）</td></tr>
+    <tr><td>滚轮</td><td>拉近 / 拉远</td></tr>
+    <tr><td>E</td><td>与好汉交谈（靠近时）</td></tr>
+    <tr><td>M</td><td>梁山泊全图</td></tr>
+    <tr><td>ESC</td><td>关闭对话 / 地图</td></tr>
+  </table>
+  <div class="note">
+    你自李家道口朱贵酒店出发，可下水驾船绕泊而行（深水在东侧），于金沙滩、
+    鸭嘴滩等处登岸；亦可循南路官道过三关天险，直上宛子城忠义堂。
+    一百单八将各守其位——旱寨水寨、关隘医馆、马厩船坞，皆有弟兄讲述自家生平。
+    烟波深处芦花如雪，且慢行，且细听。
+  </div>
+</div>
+
+<canvas id="fullscreen-map" width="720" height="800"></canvas>
+<div id="map-tip">M / ESC 收起全图 · 红点为一百单八将 · 蓝箭为你</div>
+
+<!-- 标题画面 -->
+<div id="title">
+  <svg id="title-art" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="skyG" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#1a222c"/><stop offset=".45" stop-color="#3a4148"/>
+        <stop offset=".72" stop-color="#8c7a58"/><stop offset="1" stop-color="#c8a068"/>
+      </linearGradient>
+      <radialGradient id="moonG" cx=".5" cy=".5" r=".5">
+        <stop offset="0" stop-color="#ffe8b0" stop-opacity=".95"/>
+        <stop offset=".25" stop-color="#f4cf8a" stop-opacity=".5"/>
+        <stop offset="1" stop-color="#f4cf8a" stop-opacity="0"/>
+      </radialGradient>
+      <linearGradient id="waterG" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#2c3a40"/><stop offset="1" stop-color="#151d22"/>
+      </linearGradient>
+    </defs>
+    <rect width="1600" height="900" fill="url(#skyG)"/>
+    <circle cx="1120" cy="300" r="210" fill="url(#moonG)"/>
+    <circle cx="1120" cy="300" r="46" fill="#f7e3ae" opacity=".92"/>
+    <!-- 远山 -->
+    <path d="M0 560 Q 180 430 340 520 T 700 480 Q 850 420 980 500 T 1330 470 Q 1480 430 1600 500 V900 H0 Z" fill="#4a5158" opacity=".55"/>
+    <path d="M0 640 Q 220 500 420 590 T 820 550 Q 980 500 1120 570 T 1600 560 V900 H0 Z" fill="#31383f" opacity=".8"/>
+    <!-- 主峰梁山 -->
+    <path d="M320 900 Q 480 640 610 560 Q 700 610 760 700 Q 830 780 880 900 Z" fill="#1d2329"/>
+    <path d="M610 560 Q 655 585 700 625 Q 660 640 640 615 Q 628 595 610 560 Z" fill="#2b333b"/>
+    <!-- 水面 -->
+    <rect x="0" y="690" width="1600" height="210" fill="url(#waterG)"/>
+    <g stroke="#c9a96a" stroke-width="2" opacity=".28">
+      <line x1="120" y1="740" x2="330" y2="740"/><line x1="980" y1="756" x2="1260" y2="756"/>
+      <line x1="520" y1="790" x2="760" y2="790"/><line x1="1330" y1="810" x2="1560" y2="810"/>
+      <line x1="240" y1="840" x2="470" y2="840"/><line x1="820" y1="862" x2="1100" y2="862"/>
+    </g>
+    <ellipse cx="1120" cy="700" rx="90" ry="10" fill="#e8cf98" opacity=".35"/>
+    <!-- 孤帆 -->
+    <g opacity=".85">
+      <path d="M410 726 L470 726 L456 742 L424 742 Z" fill="#0f1418"/>
+      <line x1="440" y1="700" x2="440" y2="740" stroke="#0f1418" stroke-width="3"/>
+      <path d="M442 702 Q 462 716 444 734 Z" fill="#d8cba8"/>
+    </g>
+    <!-- 雁阵 -->
+    <g stroke="#141a1f" stroke-width="4" fill="none" stroke-linecap="round" opacity=".8">
+      <path d="M840 210 q 12 -10 24 0 M864 210 q 12 -10 24 0"/>
+      <path d="M910 240 q 11 -9 22 0 M932 240 q 11 -9 22 0"/>
+      <path d="M880 178 q 10 -8 20 0 M900 178 q 10 -8 20 0"/>
+    </g>
+    <!-- 雾带 -->
+    <ellipse cx="500" cy="640" rx="420" ry="26" fill="#a89a80" opacity=".16"/>
+    <ellipse cx="1180" cy="600" rx="380" ry="20" fill="#a89a80" opacity=".12"/>
+    <!-- 芦苇前景 -->
+    <g stroke="#0c0f12" stroke-width="5" fill="none" stroke-linecap="round">
+      <path d="M60 900 Q 66 780 52 700"/><path d="M96 900 Q 108 800 128 736"/>
+      <path d="M148 900 Q 142 810 156 748"/><path d="M190 900 Q 204 812 226 764"/>
+      <path d="M1400 900 Q 1388 790 1370 724"/><path d="M1450 900 Q 1462 806 1480 752"/>
+      <path d="M1510 900 Q 1502 816 1518 760"/><path d="M1560 900 Q 1574 824 1592 780"/>
+    </g>
+    <g fill="#0c0f12">
+      <ellipse cx="52" cy="692" rx="7" ry="18" transform="rotate(-14 52 692)"/>
+      <ellipse cx="130" cy="728" rx="6" ry="16" transform="rotate(12 130 728)"/>
+      <ellipse cx="157" cy="740" rx="6" ry="15" transform="rotate(-8 157 740)"/>
+      <ellipse cx="229" cy="756" rx="6" ry="16" transform="rotate(14 229 756)"/>
+      <ellipse cx="1368" cy="716" rx="7" ry="18" transform="rotate(10 1368 716)"/>
+      <ellipse cx="1483" cy="744" rx="6" ry="16" transform="rotate(-12 1483 744)"/>
+      <ellipse cx="1520" cy="752" rx="6" ry="15" transform="rotate(8 1520 752)"/>
+      <ellipse cx="1595" cy="772" rx="6" ry="16" transform="rotate(-10 1595 772)"/>
+    </g>
+  </svg>
+  <div class="title-inner">
+    <div class="title-seal">忠义堂石碣受天文</div>
+    <h1 class="big">水泊<span>梁山</span></h1>
+    <div class="title-sub">八百里烟波 · 一百单八将</div>
+    <div class="title-quote">「山排巨浪，水接遥天……宛子城中藏虎豹，蓼儿洼内聚神蛟」</div>
+    <button id="start-btn">入 泊</button>
+    <div class="title-ctl">W A S D 行走 · 鼠标拖拽环视 · E 交谈 · M 地图</div>
+  </div>
+</div>
+
+<script type="module" src="./js/game.js"></script>
+</body>
+</html>

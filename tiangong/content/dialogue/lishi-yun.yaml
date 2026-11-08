@@ -1,0 +1,41 @@
+id: lishi_yun
+name: 运水力士
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "male-qn-daxuesheng"
+  speed: 1.0
+  pitch: 0
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣让让，水沉。"
+  - id: greet_02
+    text: "大圣。今儿第三担了。"
+
+topics:
+  - id: danshui
+    label: "担水的营生"
+    source: "第5回"
+    lines:
+      - id: w_yun_danshui_01
+        speaker: pc
+        text: "天上的树，也要一担一担挑水？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: danshui_02
+        text: "云里长的树，不吃云里的水。一日三担，一担短不得。"
+      - id: w_yun_danshui_03
+        speaker: pc
+        text: "使个法术摄来便是，费这力气做甚。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: danshui_04
+        text: "法术摄的水，桃树不认。老力挑了多少年，树就认这个汗味儿。"
+
+fallback:
+  - id: fb_01
+    text: "老力只会挑水，别的不晓得。"
+  - id: fb_02
+    text: "桶在这儿，大圣要尝一口么？"
+bye:
+  - id: bye_01
+    text: "大圣慢走，仔细桶，莫溅了。"

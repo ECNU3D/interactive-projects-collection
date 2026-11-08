@@ -1,0 +1,59 @@
+id: panzao_lishi
+name: 盘糟力士
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "male-qn-daxuesheng"
+  speed: 1.0
+  pitch: -2
+  emotion: happy
+
+greet:
+  - id: greet_01
+    speaker: npc
+    text: "大圣！你也来搭把手？"
+  - id: greet_02
+    speaker: npc
+    text: "嚯，齐天大圣到长廊下来了。"
+
+topics:
+  - id: panzao
+    label: "盘糟是什么活"
+    source: "第5回"
+    lines:
+      - id: panzao_01
+        speaker: npc
+        text: "糟要盘得匀，酒才出得透。我这膀子力气，全使在这上头了。"
+      - id: w_pz_01
+        speaker: pc
+        text: "这有什么难？老孙一只手替你盘十瓮。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: panzao_02
+        speaker: npc
+        text: "别。大圣力气大，一下就把糟盘碎了。糟碎了，酒就浊。这活儿要的是匀，不是猛。"
+  - id: chaiyi
+    label: "会上的力气活"
+    source: "第5回"
+    lines:
+      - id: chaiyi_01
+        speaker: npc
+        text: "会上千瓮万坛，搬搬抬抬，全是我们几个力士。累是累，闻酒香也闻饱了。"
+      - id: w_pz_02
+        speaker: pc
+        text: "酒香不顶饱。回头讨一坛实在的。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: chaiyi_02
+        speaker: npc
+        text: "嘿嘿，不敢。仙官的数儿记得铁紧，一滴也对得上。"
+
+fallback:
+  - id: fb_01
+    speaker: npc
+    text: "我是个粗人，说不上来。"
+  - id: fb_02
+    speaker: npc
+    text: "手上活儿停不得，大圣恕罪。"
+
+bye:
+  - id: bye_01
+    speaker: npc
+    text: "大圣慢走。"

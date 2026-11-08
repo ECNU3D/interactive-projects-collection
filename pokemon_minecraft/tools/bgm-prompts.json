@@ -1,0 +1,19 @@
+{
+  "model": "music-2.6-free",
+  "tracks": {
+    "title":       { "prompt": "8位芯片音乐, chiptune, 明亮冒险启程, 复古掌机游戏标题曲, 轻快难忘的主旋律", "loop": true },
+    "grassland":   { "prompt": "8位芯片音乐, chiptune, 田园清新, 轻松愉快的探索, 阳光草地", "loop": true },
+    "forest":      { "prompt": "8位芯片音乐, chiptune, 神秘幽静的森林, 木管质感, 微风与鸟鸣意象", "loop": true },
+    "lake":        { "prompt": "8位芯片音乐, chiptune, 舒缓流动, 竖琴般清凉的水边旋律", "loop": true },
+    "volcano":     { "prompt": "8位芯片音乐, chiptune, 低音威压, 紧张灼热, 缓慢有力的鼓点", "loop": true },
+    "snow":        { "prompt": "8位芯片音乐, chiptune, 空灵八音盒, 寒冷寂静, 缓慢飘雪", "loop": true },
+    "night":       { "prompt": "8位芯片音乐, chiptune, 安静月夜, 温柔摇篮曲, 稀疏音符", "loop": true },
+    "village":     { "prompt": "8位芯片音乐, chiptune, 温馨村庄, 手风琴民谣感, 炊烟与集市", "loop": true },
+    "battle_wild": { "prompt": "8位芯片音乐, chiptune, 快节奏战斗, 紧张兴奋, 复古RPG遇敌曲", "loop": true },
+    "battle_gym":  { "prompt": "8位芯片音乐, chiptune, 激烈决战, 强劲鼓点与铜管气势, BOSS战", "loop": true },
+    "victory":     { "prompt": "8位芯片音乐, chiptune, 短促凯旋号角, 胜利喝彩", "loop": false },
+    "evolution":   { "prompt": "8位芯片音乐, chiptune, 神圣渐强, 蜕变的光辉, 高潮收尾", "loop": false },
+    "capture":     { "prompt": "8位芯片音乐, chiptune, 得意短乐句, 收获喜悦", "loop": false },
+    "defeat":      { "prompt": "8位芯片音乐, chiptune, 低沉失落, 缓慢短句", "loop": false }
+  }
+}

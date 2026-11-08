@@ -1,0 +1,85 @@
+id: duowen
+name: 多闻天王
+voice_setting:
+  voice_id: "lengdan_xiongzhang"
+  speed: 0.95
+  pitch: -2
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣。"
+  - id: greet_02
+    text: "来了。"
+  - id: greet_03
+    text: "北天门。多闻当值。"
+
+topics:
+  - id: beimen
+    label: "北天门的风"
+    source: "本作（北天门为自拟）"
+    lines:
+      - id: w_dw_01
+        speaker: pc
+        text: "北天门好冷的风。"
+        voice_setting: { emotion: surprised, speed: 1.2 }
+      - id: beimen_01
+        text: "风硬。站稳。"
+      - id: beimen_02
+        text: "此门偏远，一年到头，云比人多。"
+      - id: w_dw_02
+        speaker: pc
+        text: "这门外望得见甚么？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: beimen_03
+        text: "云海。再往下，是下界。"
+  - id: shaoyan
+    label: "他话少"
+    source: "本作"
+    lines:
+      - id: w_dw_03
+        speaker: pc
+        text: "天王话恁少。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: shaoyan_01
+        text: "话少，省是非。"
+      - id: w_dw_04
+        speaker: pc
+        text: "老孙是个爱说话的，你莫嫌。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: shaoyan_02
+        text: "不嫌。你说，我听。"
+  - id: geshou
+    label: "各守各的"
+    source: "本作"
+    lines:
+      - id: w_dw_05
+        speaker: pc
+        text: "跟老孙到蟠桃园吃酒去，比在这儿吹风强。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: geshou_01
+        text: "你有你的蟠桃园，我有我的北门。各守各的。"
+      - id: geshou_02
+        text: "酒你吃。门，我守。"
+  - id: feng
+    label: "风刮了万年"
+    source: "本作"
+    lines:
+      - id: w_dw_06
+        speaker: pc
+        text: "这风终日这么刮？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: feng_01
+        text: "刮了万年了。"
+      - id: feng_02
+        text: "风把云刮干净，门才看得清。"
+
+fallback:
+  - id: fb_01
+    text: "不知道。"
+  - id: fb_02
+    text: "问别人去。"
+
+bye:
+  - id: bye_01
+    text: "去罢。"

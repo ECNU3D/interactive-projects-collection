@@ -1,0 +1,194 @@
+@font-face { font-family: 'SongLocal'; src: local('Songti SC'), local('STSong'), local('SimSun'), local('Noto Serif CJK SC'); }
+
+:root {
+  --ink: #23201c;
+  --zhu: #9d3a2b;
+  --jin: #c2a04e;
+  --paper: #e8e1cf;
+  --paper2: #d9d1ba;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%; overflow: hidden;
+  background: #c6cec9;
+  font-family: 'SongLocal', 'Songti SC', 'STSong', 'SimSun', 'Noto Serif CJK SC', serif;
+  color: var(--ink);
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#scene { display: block; width: 100%; height: 100%; }
+
+/* 絹本紙紋與暈影 */
+#grain, #vignette { position: fixed; inset: 0; pointer-events: none; }
+#grain {
+  opacity: .10; mix-blend-mode: multiply;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(120,110,90,.18) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(120,110,90,.13) 0 1px, transparent 1px 4px);
+}
+#vignette { box-shadow: inset 0 0 200px 60px rgba(60,55,45,.30); }
+
+/* ---------------- 標題頁 ---------------- */
+#title-screen {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(240,234,216,.96), rgba(206,198,176,.97) 60%, rgba(160,152,132,.98)),
+    #cfc7ae;
+  transition: opacity .9s ease, visibility .9s;
+}
+#title-screen.gone { opacity: 0; visibility: hidden; pointer-events: none; }
+
+.title-frame { display: flex; align-items: flex-start; gap: 28px; }
+.title-vertical {
+  writing-mode: vertical-rl; font-size: clamp(46px, 9vh, 92px); letter-spacing: .30em;
+  margin: 0; font-weight: 600; color: var(--ink);
+  text-shadow: 0 2px 0 rgba(255,255,255,.5), 0 6px 22px rgba(60,50,35,.25);
+}
+.title-col { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.seal {
+  writing-mode: vertical-rl; background: var(--zhu); color: #f6ecd8;
+  padding: 10px 7px; font-size: 19px; letter-spacing: .22em; border-radius: 3px;
+  box-shadow: 0 2px 8px rgba(120,40,25,.35);
+}
+.title-side { display: flex; gap: 14px; padding-top: 12px; }
+.title-sub-vertical {
+  writing-mode: vertical-rl; margin: 0; font-size: clamp(13px, 2vh, 18px);
+  letter-spacing: .30em; color: #4a423a;
+}
+.title-sub-vertical.dim { color: #7d7264; }
+
+.title-bottom { position: absolute; bottom: 7vh; text-align: center; width: 100%; padding: 0 20px; }
+.title-note { margin: 0 0 18px; font-size: 14px; letter-spacing: .16em; color: #6b6153; }
+#enter-btn {
+  font-family: inherit; font-size: 19px; letter-spacing: .34em;
+  padding: 13px 34px 13px 40px; color: #f6ecd8; background: var(--zhu);
+  border: none; border-radius: 2px; cursor: pointer;
+  box-shadow: 0 3px 14px rgba(110,40,26,.36);
+  transition: transform .18s, opacity .3s, background .3s;
+}
+#enter-btn:disabled { background: #9a9282; cursor: default; box-shadow: none; }
+#enter-btn:not(:disabled):hover { transform: translateY(-2px); background: #b1442f; }
+.hint-line { margin: 16px 0 0; font-size: 12.5px; letter-spacing: .12em; color: #6b6153; }
+.hint-line.dim { color: #8c8172; margin-top: 8px; }
+
+/* ---------------- 講解字幕 ---------------- */
+#narration-box {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 5.5vh; z-index: 20;
+  width: min(880px, 88vw); padding: 16px 26px 18px;
+  background: linear-gradient(180deg, rgba(238,231,212,.955), rgba(224,215,192,.955));
+  border-left: 4px solid var(--zhu); border-radius: 2px;
+  box-shadow: 0 8px 34px rgba(40,34,24,.30);
+  transition: opacity .5s; pointer-events: none;
+}
+#narration-box.hidden { opacity: 0; }
+#narration-title {
+  font-size: 16px; letter-spacing: .26em; color: var(--zhu); margin-bottom: 9px; font-weight: 600;
+}
+#narration-text { font-size: 15.5px; line-height: 2.0; letter-spacing: .05em; color: #2e2921; }
+#narration-next { font-size: 13px; line-height: 1.8; color: #8c8172; margin-top: 4px; min-height: 1.2em; }
+
+#narration-box.compact {
+  bottom: auto; top: 12px; width: min(94vw, 700px); padding: 9px 14px 10px; border-left-width: 3px;
+}
+#narration-box.compact #narration-title { font-size: 12px; margin-bottom: 4px; letter-spacing: .18em; }
+#narration-box.compact #narration-text { font-size: 15px; line-height: 1.5; animation: subIn .45s ease; }
+#narration-box.compact #narration-next { font-size: 12px; line-height: 1.4; animation: subIn .45s ease; }
+@keyframes subIn { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: none;} }
+
+/* ---------------- 題名 / 名牌 / 提示 ---------------- */
+#poi-plaque {
+  position: fixed; left: 50%; top: 13vh; transform: translateX(-50%); z-index: 18;
+  padding: 11px 26px; font-size: 21px; letter-spacing: .34em;
+  color: #f0dfa8; background: linear-gradient(180deg, #1d3348, #16273a);
+  border: 2px solid var(--jin); border-radius: 2px;
+  box-shadow: 0 6px 26px rgba(20,26,36,.42);
+  transition: opacity .55s; pointer-events: none;
+}
+#poi-plaque.hidden { opacity: 0; }
+
+#npc-name {
+  position: fixed; left: 50%; top: 46%; transform: translateX(-50%); z-index: 17;
+  padding: 6px 18px; font-size: 15px; letter-spacing: .24em;
+  color: #f6ecd8; background: rgba(157,58,43,.88); border-radius: 2px;
+  transition: opacity .3s; pointer-events: none;
+}
+#npc-name.hidden { opacity: 0; }
+
+#enter-hint {
+  position: fixed; left: 50%; top: 56%; transform: translateX(-50%); z-index: 17;
+  padding: 5px 15px; font-size: 13px; letter-spacing: .18em;
+  color: #2e2921; background: rgba(238,231,212,.88); border-radius: 2px;
+  transition: opacity .3s; pointer-events: none;
+}
+#enter-hint.hidden { opacity: 0; }
+
+/* ---------------- 小地圖 ---------------- */
+#minimap {
+  position: fixed; right: 16px; top: 60px; z-index: 15;
+  width: 180px; height: 180px;
+  background: rgba(236,229,209,.90);
+  border: 2px solid rgba(157,58,43,.55); border-radius: 3px;
+  box-shadow: 0 5px 20px rgba(40,34,24,.28);
+  overflow: hidden;
+}
+#minimap-canvas { width: 100%; height: 100%; display: block; }
+#minimap-label {
+  position: absolute; left: 0; right: 0; bottom: 0; text-align: center;
+  font-size: 12.5px; letter-spacing: .22em; padding: 3px 0;
+  color: #f0dfa8; background: rgba(29,51,72,.86);
+}
+
+/* ---------------- 全圖 ---------------- */
+#bigmap {
+  position: fixed; inset: 0; z-index: 30;
+  background: rgba(30,26,20,.86);
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity .35s;
+}
+#bigmap.hidden { opacity: 0; pointer-events: none; }
+#bigmap-inner {
+  background: #e8e1cf; padding: 10px; border: 3px solid var(--jin); border-radius: 2px;
+  box-shadow: 0 12px 50px rgba(0,0,0,.5);
+  max-height: 92vh; max-width: 94vw;
+}
+#bigmap-canvas { display: block; max-height: 90vh; max-width: 94vw; height: auto; width: auto; cursor: crosshair; }
+#bigmap-tip {
+  position: absolute; bottom: 3vh; left: 50%; transform: translateX(-50%);
+  color: #e8e1cf; font-size: 13px; letter-spacing: .2em;
+}
+
+/* ---------------- 右上按鈕 ---------------- */
+#hud-corner { position: fixed; right: 16px; top: 14px; z-index: 16; display: flex; gap: 8px; }
+#hud-corner button {
+  font-family: inherit; width: 36px; height: 36px; font-size: 16px;
+  color: #f6ecd8; background: rgba(157,58,43,.85);
+  border: 1px solid rgba(246,236,216,.35); border-radius: 2px; cursor: pointer;
+  transition: background .2s, opacity .2s;
+}
+#hud-corner button:hover { background: rgba(177,68,47,.95); }
+#hud-corner button.off { background: rgba(90,85,75,.75); }
+
+/* ---------------- 觸屏搖桿 ---------------- */
+#joystick {
+  position: fixed; left: 26px; bottom: 26px; z-index: 19;
+  width: 118px; height: 118px; border-radius: 50%;
+  background: rgba(236,229,209,.28); border: 2px solid rgba(236,229,209,.5);
+  touch-action: none;
+}
+#joystick.hidden { display: none; }
+#joy-knob {
+  position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px;
+  border-radius: 50%; background: rgba(157,58,43,.8); border: 2px solid rgba(246,236,216,.6);
+}
+
+@media (max-width: 700px) {
+  #minimap { width: 124px; height: 124px; top: 56px; right: 10px; }
+  #minimap-label { font-size: 11px; letter-spacing: .14em; }
+  #narration-box { bottom: 3vh; padding: 12px 16px; }
+  #poi-plaque { font-size: 17px; padding: 8px 18px; top: 10vh; }
+  .title-bottom { bottom: 5vh; }
+}

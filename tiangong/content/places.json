@@ -1,0 +1,359 @@
+{
+  "_comment": "区域表（文档 02 §2 content/places.json）。坐标为世界坐标（米）。五层结构本身是「本作设定」（文档 01 §5.3）。",
+  "layers": {
+    "1": {
+      "name": "天门",
+      "baseY": 0,
+      "cloudY": -42
+    },
+    "2": {
+      "name": "宫城",
+      "baseY": 140,
+      "cloudY": 96
+    },
+    "3": {
+      "name": "内苑",
+      "baseY": 280,
+      "cloudY": 234
+    },
+    "4": {
+      "name": "月天",
+      "baseY": 430,
+      "cloudY": 392
+    },
+    "5": {
+      "name": "离恨天",
+      "baseY": 560,
+      "cloudY": 522
+    }
+  },
+  "places": [
+    {
+      "id": "nantianmen",
+      "name": "南天门",
+      "layer": 1,
+      "center": [
+        0,
+        0,
+        620
+      ],
+      "radius": 120,
+      "music": {
+        "base": 1,
+        "melody": 0.3,
+        "grand": 0.4
+      },
+      "reverb": "outdoor"
+    },
+    {
+      "id": "dongtianmen",
+      "name": "东天门",
+      "layer": 1,
+      "center": [
+        660,
+        0,
+        60
+      ],
+      "radius": 80,
+      "music": {
+        "base": 1,
+        "melody": 0.4,
+        "grand": 0
+      },
+      "reverb": "outdoor"
+    },
+    {
+      "id": "xitianmen",
+      "name": "西天门",
+      "layer": 1,
+      "center": [
+        -660,
+        0,
+        60
+      ],
+      "radius": 80,
+      "music": {
+        "base": 1,
+        "melody": 0.4,
+        "grand": 0
+      },
+      "reverb": "outdoor"
+    },
+    {
+      "id": "beitianmen",
+      "name": "北天门",
+      "layer": 1,
+      "center": [
+        0,
+        0,
+        -660
+      ],
+      "radius": 80,
+      "music": {
+        "base": 1,
+        "melody": 0.4,
+        "grand": 0
+      },
+      "reverb": "outdoor"
+    },
+    {
+      "id": "tianhe",
+      "name": "天河渡口",
+      "layer": 1,
+      "center": [
+        0,
+        0,
+        950
+      ],
+      "radius": 110,
+      "music": {
+        "base": 1,
+        "melody": 0.5,
+        "grand": 0
+      },
+      "reverb": "outdoor"
+    },
+    {
+      "id": "gongdianhai",
+      "name": "宫殿海",
+      "layer": 2,
+      "center": [
+        0,
+        140,
+        0
+      ],
+      "radius": 460,
+      "music": {
+        "base": 1,
+        "melody": 0.6,
+        "grand": 0
+      },
+      "reverb": "palace"
+    },
+    {
+      "id": "shouxingtai",
+      "name": "寿星台",
+      "layer": 2,
+      "center": [
+        -40,
+        140,
+        300
+      ],
+      "radius": 90,
+      "music": {
+        "base": 1,
+        "melody": 0.6,
+        "grand": 0
+      },
+      "reverb": "palace"
+    },
+    {
+      "id": "chaoshenglou",
+      "name": "朝圣楼",
+      "layer": 2,
+      "center": [
+        0,
+        140,
+        150
+      ],
+      "radius": 70,
+      "music": {
+        "base": 1,
+        "melody": 0.3,
+        "grand": 0.5
+      },
+      "reverb": "palace"
+    },
+    {
+      "id": "tongmingdian",
+      "name": "通明殿",
+      "layer": 2,
+      "center": [
+        0,
+        140,
+        20
+      ],
+      "radius": 80,
+      "music": {
+        "base": 1,
+        "melody": 0.5,
+        "grand": 0.2
+      },
+      "reverb": "hall"
+    },
+    {
+      "id": "lingxiaodian",
+      "name": "灵霄宝殿",
+      "layer": 2,
+      "center": [
+        0,
+        140,
+        -230
+      ],
+      "radius": 110,
+      "music": {
+        "base": 1,
+        "melody": 0.3,
+        "grand": 0.9
+      },
+      "reverb": "lingxiao"
+    },
+    {
+      "id": "douniugong",
+      "name": "斗牛宫",
+      "layer": 2,
+      "center": [
+        -330,
+        140,
+        90
+      ],
+      "radius": 80,
+      "music": {
+        "base": 1,
+        "melody": 0.4,
+        "grand": 0
+      },
+      "reverb": "hall"
+    },
+    {
+      "id": "yumajian",
+      "name": "御马监",
+      "layer": 2,
+      "center": [
+        340,
+        140,
+        140
+      ],
+      "radius": 100,
+      "music": {
+        "base": 1,
+        "melody": 0.4,
+        "grand": 0
+      },
+      "reverb": "outdoor"
+    },
+    {
+      "id": "pixiangdian",
+      "name": "披香殿",
+      "layer": 2,
+      "center": [
+        -270,
+        140,
+        -130
+      ],
+      "radius": 60,
+      "music": {
+        "base": 1,
+        "melody": 0.2,
+        "grand": 0
+      },
+      "reverb": "hall"
+    },
+    {
+      "id": "zhanyaotai",
+      "name": "斩妖台",
+      "layer": 2,
+      "center": [
+        390,
+        140,
+        -270
+      ],
+      "radius": 70,
+      "music": {
+        "base": 0,
+        "melody": 0,
+        "grand": 0
+      },
+      "reverb": "outdoor"
+    },
+    {
+      "id": "pantaoyuan",
+      "name": "蟠桃园",
+      "layer": 3,
+      "center": [
+        0,
+        280,
+        90
+      ],
+      "radius": 260,
+      "music": {
+        "base": 1,
+        "melody": 0.8,
+        "grand": 0
+      },
+      "reverb": "garden",
+      "track": "pantaoyuan"
+    },
+    {
+      "id": "qitian-fu",
+      "name": "齐天大圣府",
+      "layer": 3,
+      "center": [
+        310,
+        280,
+        90
+      ],
+      "radius": 80,
+      "music": {
+        "base": 1,
+        "melody": 0.7,
+        "grand": 0
+      },
+      "reverb": "garden"
+    },
+    {
+      "id": "yaochi",
+      "name": "瑶池",
+      "layer": 3,
+      "center": [
+        -290,
+        280,
+        -60
+      ],
+      "radius": 110,
+      "music": {
+        "base": 1,
+        "melody": 0.6,
+        "grand": 0.2
+      },
+      "reverb": "hall",
+      "track": "yaochi"
+    },
+    {
+      "id": "guanghangong",
+      "name": "广寒宫",
+      "layer": 4,
+      "center": [
+        -750,
+        430,
+        -350
+      ],
+      "radius": 130,
+      "music": {
+        "base": 0.6,
+        "melody": 0,
+        "grand": 0
+      },
+      "reverb": "moon",
+      "track": "guanghangong"
+    },
+    {
+      "id": "doushuaigong",
+      "name": "兜率宫",
+      "layer": 5,
+      "center": [
+        460,
+        560,
+        260
+      ],
+      "radius": 120,
+      "music": {
+        "base": 0.7,
+        "melody": 0,
+        "grand": 0
+      },
+      "reverb": "danfang",
+      "track": "doushuaigong"
+    }
+  ]
+}

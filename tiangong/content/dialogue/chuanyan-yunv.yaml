@@ -1,0 +1,57 @@
+# 传言玉女｜通明殿收表
+# 依据：文档 01 §2.4（程式化）；考据 research §4.9（第3回：傍有传言玉女接上表文）
+id: chuanyan_yunv
+name: 传言玉女
+model: speech-2.6-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Crisp_Girl"
+  speed: 1.05
+  pitch: 1
+  emotion: fluent
+
+greet:
+  - id: greet_01
+    text: "大圣。表章在此交接。"
+  - id: greet_02
+    text: "有旨传旨，有表传表。"
+
+topics:
+  - id: chuanyan
+    label: "传言的职事"
+    source: "第3回"
+    lines:
+      - id: w_yunv_chuanyan_01
+        speaker: pc
+        text: "玉女，你这传言，整日都传些甚么？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: chuanyan_01
+        text: "上传下，下传上。旨意出门，表章进殿，都要过手。"
+      - id: w_yunv_chuanyan_02
+        speaker: pc
+        text: "老孙托你传句口信给玉帝，行么？"
+        voice_setting: { emotion: happy, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: chuanyan_02
+        text: "不敢。口信不传，只传表章，落在纸上才算数。"
+  - id: zhishi
+    label: "错一字是大事"
+    source: "自拟对话，依据文档01 §2.4"
+    lines:
+      - id: w_yunv_zhishi_01
+        speaker: pc
+        text: "整日传话，你不嫌烦么？"
+        voice_setting: { emotion: happy, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: zhishi_01
+        text: "烦不烦，是职事。错一字，才是大事。"
+
+fallback:
+  - id: fb_01
+    text: "此非传言之事。"
+  - id: fb_02
+    text: "玉女不敢妄言。"
+
+bye:
+  - id: bye_01
+    text: "大圣请回。"

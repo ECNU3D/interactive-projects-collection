@@ -1,0 +1,86 @@
+# 丘弘济｜四大天师·引奏｜通明殿
+# 依据：文档 01 §2.2（中立、程式化引奏语）；考据 research §2.2（第3回奏敖广表文、第6回引观音）
+id: qiu_hongji
+name: 丘弘济
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Sincere_Adult"
+  speed: 1.0
+  pitch: 0
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣。"
+  - id: greet_02
+    text: "大圣有表么？"
+  - id: greet_03
+    text: "有表递表，无表请回。"
+
+topics:
+  - id: yinzou
+    label: "请天师引奏上灵霄殿"
+    source: "第3回、第31回；引奏准入流程为本作增补（文档01 §5.3）"
+    lines:
+      - id: w_qhj_yinzou_01
+        speaker: pc
+        text: "丘天师，烦你引老孙上灵霄殿，见一见玉帝。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: yinzou_01
+        text: "见驾须先递表。表到，老道即奏；表不到，老道不敢开口。"
+      - id: w_qhj_yinzou_02
+        speaker: pc
+        text: "表在此，你拿去便是。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: yinzou_02
+        text: "表已收讫。大圣随老道至丹墀候宣，老道引一步，你走一步，错不得。"
+  - id: chengshi
+    label: "引奏的程式"
+    source: "第3回"
+    lines:
+      - id: w_qhj_chengshi_01
+        speaker: pc
+        text: "丘天师，你这引奏，一日要走几遭？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: chengshi_01
+        text: "表有几道，走几遭。"
+      - id: w_qhj_chengshi_02
+        speaker: pc
+        text: "当年东海龙王告老孙的那道表，也是你递的？"
+        voice_setting: { emotion: happy, speed: 1.05 }
+      - id: chengshi_02
+        text: "是老道奏的。表上写甚么，老道念甚么，一字不敢增减。"
+  - id: guiju
+    label: "规矩是铁规矩"
+    source: "自拟对话，依据文档01 §2.2 语体"
+    lines:
+      - id: w_qhj_guiju_01
+        speaker: pc
+        text: "丘天师，若老孙没有表，就想进殿坐坐呢？"
+        voice_setting: { emotion: happy, speed: 1.05 }
+      - id: guiju_01
+        text: "没有表，老道没有这个胆。"
+      - id: guiju_02
+        text: "殿上规矩，不因人而异。大圣是名大圣，规矩是铁规矩。"
+  - id: danchi
+    label: "丹墀下的光景"
+    source: "第4回；文档01 §1.2 F"
+    lines:
+      - id: w_qhj_danchi_01
+        speaker: pc
+        text: "那灵霄殿里，是甚么光景？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: danchi_01
+        text: "老道只在丹墀下奏事，殿内光景，不敢多看。"
+      - id: danchi_02
+        text: "大圣若真想看，递了表，宣你进去，自然看得见。"
+
+fallback:
+  - id: fb_01
+    text: "大圣所问，不在老道职内。"
+  - id: fb_02
+    text: "无表之事，不敢多言。"
+
+bye:
+  - id: bye_01
+    text: "大圣好走。"

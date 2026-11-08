@@ -1,0 +1,41 @@
+id: lishi_xiu
+name: 修桃力士
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "male-qn-daxuesheng"
+  speed: 1.0
+  pitch: 1
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣仔细，莫碰着新结的果。"
+  - id: greet_02
+    text: "大圣来了。树上正匀果儿呢。"
+
+topics:
+  - id: xiutao
+    label: "修桃的讲究"
+    source: "第5回"
+    lines:
+      - id: w_xiu_xiutao_01
+        speaker: pc
+        text: "桃子长便长了，还要怎么修？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: xiutao_02
+        text: "掐虫眼，匀果儿，一枝留几个都有数。疏密定了，果子才长得匀称。"
+      - id: w_xiu_xiutao_03
+        speaker: pc
+        text: "老孙摘个熟的，替你省些工夫。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: xiutao_04
+        text: "摘便摘，莫折枝。果是大圣的，枝是树的。"
+
+fallback:
+  - id: fb_01
+    text: "老力眼里只有果子，别的事不留意。"
+  - id: fb_02
+    text: "这个老力说不好，大圣莫怪。"
+bye:
+  - id: bye_01
+    text: "大圣慢走。"

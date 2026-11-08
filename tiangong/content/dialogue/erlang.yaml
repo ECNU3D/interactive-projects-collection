@@ -1,0 +1,34 @@
+id: erlang
+name: 二郎显圣真君
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Gentle_Youth"
+  speed: 0.95
+  pitch: -1
+  emotion: calm
+
+# 听调不听宣，不在天宫。以下为远眺灌江口时的画外音（共 6 条，文档 01 §3.1）。
+greet:
+  - id: greet_01
+    text: "吾乃玉帝外甥、敕封昭惠灵显王二郎是也。"
+    quote: true
+  - id: greet_02
+    text: "下方云路上的，可是齐天大圣？小圣居灌江口，不常上天。遥遥一礼。"
+
+topics:
+  - id: guanjiang
+    label: "远眺灌江口"
+    source: "第6回"
+    lines:
+      - id: guanjiang_01
+        text: "大圣朝下界望，云尽处那条亮线，便是灌口。小圣的庙在那里，细犬在那里，梅山兄弟也在那里。"
+      - id: w_el_01
+        speaker: pc
+        text: "好大的场面。听闻真君只听调，不听宣。若有一日你与人赌斗，可许旁人帮手？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: guanjiang_02
+        text: "若我输与他，不必列公相助，我自有兄弟扶持；若赢了他，也不必列公绑缚，我自有兄弟动手。"
+        quote: true
+
+bye:
+  - id: bye_01
+    text: "江上风起，小圣回庙了。大圣若过灌口，庙里有清茶。"

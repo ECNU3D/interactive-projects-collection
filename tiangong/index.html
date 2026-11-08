@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>天宫 · 蟠桃会前夕</title>
+  <style>
+    /* 首屏壳：在任何 JS 加载前就有内容（文档 02 §6.4 阶段 0） */
+    html, body { margin: 0; padding: 0; height: 100%; background: #1a1426; overflow: hidden; }
+    #app { position: fixed; inset: 0; }
+    #app canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    #boot {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 1.2em;
+      color: #e8d9b0; background:
+        radial-gradient(ellipse at 50% 120%, #4a3560 0%, #241a38 55%, #14101f 100%);
+      font-family: "Source Han Serif SC", "Songti SC", "STSong", serif;
+      z-index: 100; transition: opacity 1.2s ease; user-select: none;
+    }
+    #boot.hidden { opacity: 0; pointer-events: none; }
+    #boot .title { font-size: clamp(42px, 8vw, 84px); letter-spacing: 0.35em; text-indent: 0.35em; color: #f0e2bc; text-shadow: 0 0 32px rgba(232, 180, 85, 0.45); }
+    #boot .subtitle { font-size: clamp(14px, 2vw, 18px); letter-spacing: 0.5em; text-indent: 0.5em; color: #b9a8cf; }
+    #boot .status { font-size: 13px; color: #8f83ad; letter-spacing: 0.2em; min-height: 1.5em; }
+    #boot .row { display: flex; gap: 1em; margin-top: 1.5em; }
+    #boot button {
+      font-family: inherit; font-size: 17px; letter-spacing: 0.3em; text-indent: 0.3em;
+      color: #f0e2bc; background: rgba(232, 180, 85, 0.08);
+      border: 1px solid rgba(232, 180, 85, 0.55); border-radius: 2px;
+      padding: 0.7em 2.2em; cursor: pointer; transition: background 0.3s, box-shadow 0.3s;
+    }
+    #boot button:hover { background: rgba(232, 180, 85, 0.2); box-shadow: 0 0 24px rgba(232, 180, 85, 0.25); }
+    #boot button:disabled { opacity: 0.35; cursor: wait; }
+    #boot .quote { position: absolute; bottom: 6vh; font-size: 12px; color: #6f6390; letter-spacing: 0.25em; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="boot">
+    <div class="title">天　宫</div>
+    <div class="subtitle">蟠 桃 会 前 夕</div>
+    <div class="status" id="boot-status">正在铺陈云海……</div>
+    <div class="row">
+      <button id="boot-enter" disabled>入天门</button>
+      <button id="boot-settings">设置</button>
+    </div>
+    <div class="quote">金光万道滚红霓，瑞气千条喷紫雾</div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+id: chiguo
+name: 持国天王
+voice_setting:
+  voice_id: "male-qn-daxuesheng"
+  speed: 1.0
+  pitch: -2
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣。东天门，朝晖正好。"
+  - id: greet_02
+    text: "齐天大圣。这边请。"
+  - id: greet_03
+    text: "今日云色好。"
+
+topics:
+  - id: dongmen
+    label: "东天门的朝晖"
+    source: "本作（东天门为自拟）"
+    lines:
+      - id: w_cg_01
+        speaker: pc
+        text: "东天门的日头，出来得比南天门早？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: dongmen_01
+        text: "朝晖先到这里。大圣起得早，赶得上。"
+      - id: dongmen_02
+        text: "此门形制与南门一般，只是小些，人少些。"
+      - id: dongmen_03
+        text: "大圣若从下方来，走此门，云路最短。"
+      - id: w_cg_02
+        speaker: pc
+        text: "记下了。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+  - id: guangminggong
+    label: "光明宫的邻居"
+    source: "第55回（昴日星官居东天门光明宫）"
+    lines:
+      - id: w_cg_03
+        speaker: pc
+        text: "左近可有个邻居？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: guangminggong_01
+        text: "光明宫，昴日星官住着。好邻居，话不多，报晓报得准。"
+      - id: w_cg_04
+        speaker: pc
+        text: "星官报晓，天下都知道。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: guangminggong_02
+        text: "嗯。他尽职，小王省心。"
+  - id: menzhu
+    label: "四根门柱"
+    source: "第36回（四大天王名录）"
+    lines:
+      - id: w_cg_05
+        speaker: pc
+        text: "你们四天王，东南西北各守一门，倒像四根门柱。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: menzhu_01
+        text: "门柱就门柱。柱在，殿才在。"
+      - id: menzhu_02
+        text: "大圣是云，我们是柱。云有云的自在，柱有柱的用处。"
+  - id: richu
+    label: "看日出"
+    source: "本作"
+    lines:
+      - id: w_cg_06
+        speaker: pc
+        text: "在这儿看日出，倒是好去处。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: richu_01
+        text: "每日第一缕光，先照此门的瓦。看了万年，还是好。"
+
+fallback:
+  - id: fb_01
+    text: "小王守东门，别的事生疏。"
+  - id: fb_02
+    text: "这话答不上。"
+
+bye:
+  - id: bye_01
+    text: "慢走。明日此时，日头还从这里起。"

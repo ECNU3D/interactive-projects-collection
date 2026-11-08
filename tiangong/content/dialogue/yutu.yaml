@@ -1,0 +1,97 @@
+id: yutu
+name: 玉兔
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "lovely_girl"
+  speed: 1.1
+  pitch: 2
+  emotion: sad
+
+greet:
+  - id: greet_01
+    speaker: npc
+    text: "哎哟，是大圣！可算有个人说话了。"
+  - id: greet_02
+    speaker: npc
+    text: "大圣大圣，你听我这杵声，咚，咚，咚，从早响到晚，烦也不烦？"
+
+topics:
+  - id: daoyao
+    label: "天天捣药，烦不烦"
+    source: "第95回"
+    lines:
+      - id: daoyao_01
+        speaker: npc
+        text: "玄霜仙药，千年一服。千年哪——我就这么捣，捣了一千年，手都酸了。"
+      - id: w_yt_01
+        speaker: pc
+        text: "捣药是长生的功课，多少人想捣还捣不上呢。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: daoyao_02
+        speaker: npc
+        text: "功课功课，谁爱做谁做去！大圣你说句公道话，这药捣出来给谁吃？又不是给我吃。"
+  - id: yuguan
+    label: "玉关金锁"
+    source: "第95回"
+    lines:
+      - id: yuguan_01
+        speaker: npc
+        text: "宫门那把玉关金锁，锁了不知多少年了。我问星君讨钥匙，星君只说：锁着好。"
+      - id: w_yt_02
+        speaker: pc
+        text: "锁着是怕人偷药。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: yuguan_02
+        speaker: npc
+        text: "药有什么好偷的！我看哪，是锁我。我要是出得去，先把下界的花都看一遍！……也就说说。"
+  - id: lengqing
+    label: "宫里没人陪她"
+    source: "第95回"
+    lines:
+      - id: lengqing_01
+        speaker: npc
+        text: "嫦娥姐姐们也忙，排舞的排舞，剪桂的剪桂，没人陪我。只有月亮陪着我——月亮又不会说话。"
+      - id: w_yt_03
+        speaker: pc
+        text: "老孙陪你说。老孙的话，三天三夜说不完。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: lengqing_02
+        speaker: npc
+        text: "那敢情好！你先说说，下界的兔子，也捣药么？"
+      - id: w_yt_04
+        speaker: pc
+        text: "下界的兔子么……(chuckle)只会吃草。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: lengqing_03
+        speaker: npc
+        text: "吃草好哇……吃草自在。"
+  - id: taozi
+    label: "蟠桃园的桃子"
+    source: "第5回"
+    lines:
+      - id: taozi_01
+        speaker: npc
+        text: "听说大圣管着蟠桃园，三千六百株！桃子熟的时候，香不香？"
+      - id: w_yt_05
+        speaker: pc
+        text: "香！后段的桃，紫纹缃核，老孙……老孙还没舍得吃。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: taozi_02
+        speaker: npc
+        text: "那你下回来，捎一个给我尝尝——就说是我说的，玉兔说的！"
+
+fallback:
+  - id: fb_01
+    speaker: npc
+    text: "哎呀，说着说着，杵又停了，回头姐姐要骂。"
+  - id: fb_02
+    speaker: npc
+    text: "不知道不知道，我只知道捣药。"
+
+bye:
+  - id: bye_01
+    speaker: npc
+    text: "大圣常来啊！你一走，宫里又只剩杵声了。"
+  - id: bye_02
+    speaker: npc
+    text: "慢走慢走，替我问问，下界的花开了没有。"

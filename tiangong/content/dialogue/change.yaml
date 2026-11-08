@@ -1,0 +1,106 @@
+id: change
+name: 霓裳仙子
+model: speech-2.6-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Soft_Girl"
+  speed: 0.9
+  pitch: 0
+  emotion: whisper
+
+greet:
+  - id: greet_01
+    speaker: npc
+    text: "大圣怎么到月宫来了。"
+  - id: greet_02
+    speaker: npc
+    text: "宫里冷，大圣请便。"
+
+topics:
+  - id: leng
+    label: "月亮上这么冷"
+    source: "第95回"
+    lines:
+      - id: leng_01
+        speaker: npc
+        text: "下界的人仰头看月亮，只说月亮好看。他们不知道月亮上这样冷。"
+      - id: w_ce_01
+        speaker: pc
+        text: "冷有什么打紧？老孙给你说个热闹去处，瑶池这两日正忙。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: leng_02
+        speaker: npc
+        text: "热闹是瑶池的。我在这儿住惯了，不想挪。"
+  - id: guihua
+    label: "桂花落了就落了"
+    source: "第95回"
+    lines:
+      - id: guihua_01
+        speaker: npc
+        text: "桂花开的时候，我剪几枝供养太阴星君。剩下的，就让它落。落尽了，明年再开。"
+      - id: w_ce_02
+        speaker: pc
+        text: "落在地下多可惜，给老孙泡酒吃。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+        model: speech-2.8-hd
+      - id: guihua_02
+        speaker: npc
+        text: "大圣什么都想着吃。这花沾了酒气，就不是月宫的花了。"
+  - id: baiyue
+    label: "下界有人拜月"
+    source: "第95回"
+    lines:
+      - id: baiyue_01
+        speaker: npc
+        text: "每逢月夕，下界处处有人拜月。他们念的愿心，这里都听得见。"
+      - id: w_ce_03
+        speaker: pc
+        text: "有这等事？有这等事？"
+        voice_setting: { emotion: surprised, speed: 1.2 }
+        model: speech-2.8-hd
+      - id: baiyue_02
+        speaker: npc
+        text: "听得见，应不得。人间的愿，太多太杂，月亮只是听着。"
+  - id: paiwu
+    label: "会上的舞"
+    source: "第5回"
+    lines:
+      - id: paiwu_01
+        speaker: npc
+        text: "姐妹们这几日都在排舞。会上一刻的舞，底下要练上一年。"
+      - id: w_ce_04
+        speaker: pc
+        text: "跳给老孙看看？"
+        voice_setting: { emotion: happy, speed: 1.2 }
+        model: speech-2.8-hd
+      - id: paiwu_02
+        speaker: npc
+        text: "会上的舞，是会上的。大圣要看，会上自然看得见——若你在席上。"
+  - id: shuoyutu
+    label: "玉兔又偷懒了"
+    source: "第95回"
+    lines:
+      - id: shuoyutu_01
+        speaker: npc
+        text: "玉兔那丫头，杵声一停，就知道她又偷懒了。她总说宫里闷——闷什么，药捣成了，也是她的功果。"
+      - id: w_ce_05
+        speaker: pc
+        text: "她倒想下界去耍子。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: shuoyutu_02
+        speaker: npc
+        text: "下界有什么可耍的。由她说去，金锁锁着呢。"
+
+fallback:
+  - id: fb_01
+    speaker: npc
+    text: "我话少，大圣别见怪。"
+  - id: fb_02
+    speaker: npc
+    text: "这些事，大圣问星君去，我不敢乱说。"
+
+bye:
+  - id: bye_01
+    speaker: npc
+    text: "大圣慢走。"

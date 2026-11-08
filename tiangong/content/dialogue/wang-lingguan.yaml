@@ -1,0 +1,13 @@
+id: wang_lingguan
+name: 王灵官
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Unrestrained_Young_Man"
+  speed: 0.95
+  pitch: -4
+  emotion: angry
+
+greet:
+  - id: greet_01
+    text: "泼猴何往？<#0.4#>有吾在此，<#0.25#>切莫猖狂。"
+    quote: true

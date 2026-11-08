@@ -1,0 +1,55 @@
+id: anjing_sili
+name: 安静司仙吏
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "chunzhen_xuedi"
+  speed: 1.0
+  pitch: 0
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣回府了。可要安坐片刻？"
+  - id: greet_02
+    text: "大圣，府里一切如常，安安静静的。"
+
+topics:
+  - id: zhishou
+    label: "安静司管甚么"
+    source: "第4回"
+    lines:
+      - id: w_aj_zhishou_01
+        speaker: pc
+        text: "你这安静司，管些甚么？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: zhishou_02
+        text: "回大圣：管大圣安静。大圣安坐了，小吏便交了差。"
+      - id: w_aj_zhishou_03
+        speaker: pc
+        text: "我老孙天生坐不住。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: zhishou_04
+        text: "坐不住，也请坐。府是玉帝赐的，司是府里设的。小吏别无所求，只求大圣每日安坐一刻——一刻就好。"
+  - id: yujiu
+    label: "案上的御酒"
+    source: "第4回"
+    lines:
+      - id: w_aj_yujiu_01
+        speaker: pc
+        text: "案上那两瓶，是甚么？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: yujiu_02
+        text: "五斗星君送大圣到任时赐的御酒，还有金花十朵。小吏日日拂拭，一滴未动。"
+      - id: w_aj_yujiu_03
+        speaker: pc
+        text: "摆着可惜。改日温来，老孙尝尝。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+
+fallback:
+  - id: fb_01
+    text: "小吏只管府里的事，外头的不晓得。"
+  - id: fb_02
+    text: "大圣说什么便是什么。"
+bye:
+  - id: bye_01
+    text: "大圣慢走。早些回府。"

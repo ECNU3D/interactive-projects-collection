@@ -1,0 +1,59 @@
+id: jiahuo_tongzi
+name: 架火童子
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "chunzhen_xuedi"
+  speed: 1.05
+  pitch: 2
+  emotion: calm
+
+greet:
+  - id: greet_01
+    speaker: npc
+    text: "大圣也来兜率宫？"
+  - id: greet_02
+    speaker: npc
+    text: "小声些，老祖讲道呢。"
+
+topics:
+  - id: jiahuo
+    label: "架火的钟点"
+    source: "第7回"
+    lines:
+      - id: jiahuo_01
+        speaker: npc
+        text: "我管看火添火。武火三刻，文火一炷，半点也错不得。"
+      - id: w_jh_01
+        speaker: pc
+        text: "炉火有什么看头？老孙替你看着，你歇歇。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: jiahuo_02
+        speaker: npc
+        text: "不敢歇。火错一分，丹差一成，老祖要念的。"
+  - id: laozu
+    label: "老祖的脾气"
+    source: "第5回"
+    lines:
+      - id: laozu_01
+        speaker: npc
+        text: "老祖平日和气，只在丹房里最较真。谁碰了他的东西，他念起咒来，我可不敢想。"
+      - id: w_jh_02
+        speaker: pc
+        text: "老官儿那脾气，老孙知道。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: laozu_02
+        speaker: npc
+        text: "大圣跟老祖熟，那是大圣。我们做童子的，还是守着本分好。"
+
+fallback:
+  - id: fb_01
+    speaker: npc
+    text: "我只是个架火的，不懂丹道。"
+  - id: fb_02
+    speaker: npc
+    text: "火不等人，大圣，我得盯着。"
+
+bye:
+  - id: bye_01
+    speaker: npc
+    text: "大圣慢走。"

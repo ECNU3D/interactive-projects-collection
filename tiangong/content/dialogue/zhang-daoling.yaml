@@ -1,0 +1,99 @@
+# 张道陵｜四大天师·传报｜通明殿
+# 依据：文档 01 §2.2（公事公办、干脆）；考据 research/原著考据-人物谱系与时间线.md §2.2、§5（第3、4回）
+id: zhang_daoling
+name: 张道陵
+model: speech-2.6-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Male_Announcer"
+  speed: 1.0
+  pitch: -1
+  emotion: fluent
+
+greet:
+  - id: greet_01
+    text: "大圣今日怎有闲到通明殿？"
+  - id: greet_02
+    text: "表章在此。大圣有本，只管递来。"
+
+topics:
+  - id: yinzou
+    label: "请天师引奏上灵霄殿"
+    source: "第3回、第31回；引奏准入流程为本作增补（文档01 §5.3）"
+    lines:
+      - id: w_zdl_yinzou_01
+        speaker: pc
+        text: "老天师，老孙要到灵霄殿上见玉帝一面，烦你引奏。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: yinzou_01
+        text: "见驾不难，只一条：须有本。大圣将事目写就，老道方好上达。"
+      - id: w_zdl_yinzou_02
+        speaker: pc
+        text: "写就写就，本已在此。老孙的字，龙王也认得。"
+        voice_setting: { emotion: happy, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: yinzou_02
+        text: "不消多说，只与他传报便了。"
+        quote: true
+      - id: yinzou_03
+        text: "大圣且在丹墀下少待，听宣再进，一步也错不得。"
+  - id: zhishou
+    label: "通明殿的职司"
+    source: "第31回；文档01 §1.2 E"
+    lines:
+      - id: w_zdl_zhishou_01
+        speaker: pc
+        text: "老天师，你整日守在这殿上，不闷么？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: zhishou_01
+        text: "四方的表章，都要打老道手里过。闷不闷，由不得我。"
+      - id: w_zdl_zhishou_02
+        speaker: pc
+        text: "这般说来，你倒是天庭的一根门闩。"
+        voice_setting: { emotion: happy, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: zhishou_02
+        text: "门闩也是职分。大圣如今管蟠桃园，桃看得好，胜似老道传一百道表。"
+  - id: jiushi
+    label: "当年丹墀下的事"
+    source: "第4回"
+    lines:
+      - id: w_zdl_jiushi_01
+        speaker: pc
+        text: "老孙初上天那日，丹墀下引路的，可是你？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: jiushi_01
+        text: "那日监丞、监副在丹墀下拜奏，是老道引的。大圣不朝礼，满殿都惊了。"
+      - id: w_zdl_jiushi_02
+        speaker: pc
+        text: "老孙便是。"
+        quote: true
+        voice_setting: { emotion: calm, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: jiushi_02
+        text: "惊归惊，本还是照传。这是通明殿的规矩。"
+  - id: biaozhang
+    label: "案上的表章"
+    source: "第3回；文档01 §1.2 E"
+    lines:
+      - id: w_zdl_biaozhang_01
+        speaker: pc
+        text: "这许多表章，都是告老孙的么？"
+        voice_setting: { emotion: happy, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: biaozhang_01
+        text: "告你的没有。奏水的、奏旱的、奏点卯的，倒有一大摞。"
+      - id: biaozhang_02
+        text: "大圣若无正事，莫要翻动。乱了一页，老道要赔半日功夫。"
+
+fallback:
+  - id: fb_01
+    text: "大圣此言，老道不敢接。"
+  - id: fb_02
+    text: "殿上不问这个。"
+
+bye:
+  - id: bye_01
+    text: "大圣慢走。有本再来。"

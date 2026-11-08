@@ -1,0 +1,15 @@
+id: wangmu
+name: 王母娘娘
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Mature_Woman"
+  speed: 0.95
+  pitch: 0
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "汝等摘了多少蟠桃？"
+    quote: true
+  - id: greet_02
+    text: "仙娥们听真：宝阁的席位再验一遍，请的是哪些上客，一个也错不得。"

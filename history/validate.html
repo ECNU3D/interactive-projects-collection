@@ -1,0 +1,60 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>数据自检</title></head>
+<body><pre id="out">运行中……</pre>
+<script src="data/chapters.js"></script>
+<script src="data/events.js"></script>
+<script src="data/choices.js"></script>
+<script src="data/persons.js"></script>
+<script src="js/score.js"></script>
+<script>
+const R = { pass: 0, fail: 0, messages: [] };
+function ok(cond, msg) { if (cond) R.pass++; else { R.fail++; R.messages.push("✘ " + msg); } }
+const D = window.SHY_DATA || {};
+// —— 章节 ——
+ok(D.chapters && D.chapters.length === 15, "章节数须为15");
+(D.chapters||[]).forEach(c => {
+  ok(c.id && c.title && c.intro && c.intro.length >= 80, `章节${c.id}字段完整且引言≥80字`);
+  ok(c.startYear <= c.endYear, `章节${c.id}年份区间合法`);
+});
+// —— 事件 ——
+ok(D.events && D.events.length >= 70, "节点数须≥70");
+const chapterOf = Object.fromEntries((D.chapters||[]).map(c=>[c.id,c]));
+let prevKey = "";
+(D.events||[]).forEach(e => {
+  ok(chapterOf[e.chapterId], `事件${e.id}的chapterId存在`);
+  ok(/^\d{4}/.test(e.date), `事件${e.id}日期以年份开头`);
+  const y = parseInt(e.date.slice(0,4),10), c = chapterOf[e.chapterId];
+  if (c) ok(y >= c.startYear - 1 && y <= c.endYear + 1, `事件${e.id}(${y})落在章节区间`);
+  ok(e.summary && e.summary.length >= 100, `事件${e.id}正文≥100字`);
+  ok(e.significance && e.extra, `事件${e.id}有意义与钩沉`);
+  const key = e.chapterId + String(e.order).padStart(3,"0");
+  ok(key > prevKey, `事件${e.id}章内顺序递增`); prevKey = key;
+});
+// —— 抉择 ——
+ok(D.choices && D.choices.length >= 25, "抉择点须≥25");
+const eventIds = new Set((D.events||[]).map(e=>e.id));
+(D.choices||[]).forEach(c => {
+  ok(eventIds.has(c.eventId), `抉择${c.id}挂在真实事件上`);
+  ok(["roleplay","insight"].includes(c.kind), `抉择${c.id}类型合法`);
+  ok(c.options.filter(o=>o.correct).length === 1, `抉择${c.id}恰有一个正确项`);
+  c.options.forEach((o,i)=> ok(o.feedback && o.feedback.length >= 60, `抉择${c.id}选项${i}有≥60字解析`));
+  ok(c.scene && c.historyNote && c.panorama, `抉择${c.id}有情境/史实走向/全景图`);
+});
+(D.events||[]).forEach(e => { if (e.choiceId) ok((D.choices||[]).some(c=>c.id===e.choiceId), `事件${e.id}的choiceId存在`); });
+// —— 人物 ——
+ok(D.persons && D.persons.length >= 40, "人物须≥40");
+const personIds = new Set((D.persons||[]).map(p=>p.id));
+(D.events||[]).forEach(e => (e.personIds||[]).forEach(pid => ok(personIds.has(pid), `事件${e.id}引用人物${pid}存在`)));
+(D.relations||[]).forEach(r => ok(personIds.has(r.source) && personIds.has(r.target) && ["师承","同盟","对立","亲属","影响"].includes(r.relation), `关系${r.source}->${r.target}合法`));
+(D.persons||[]).forEach(p => ok(p.bio && p.bio.length >= 100 && p.role, `人物${p.id}小传≥100字`));
+// —— 计分纯函数用例 ——
+if (window.SHY_SCORE) {
+  const S = window.SHY_SCORE;
+  ok(S.comboMultiplier(0)===1.0 && S.comboMultiplier(1)===1.0 && S.comboMultiplier(2)===1.1 && S.comboMultiplier(3)===1.2 && S.comboMultiplier(4)===1.3 && S.comboMultiplier(9)===1.3, "连击倍率表正确");
+  ok(S.scoreForAnswer(true,0)===100 && S.scoreForAnswer(true,2)===110 && S.scoreForAnswer(false,5)===0, "答题得分：首对100、带连击110、答错0");
+  ok(S.LEARN===20 && S.EXTRA===10, "明理分20/探索分10");
+  ok(S.chapterGrade(85,100)==="甲" && S.chapterGrade(60,100)==="乙" && S.chapterGrade(59,100)==="丙", "章节评级阈值 85/60");
+  ok(S.titleForTotal(0)==="初识风云" && S.titleForTotal(1200)==="洞察者" && S.titleForTotal(2400)==="史家" && S.titleForTotal(3600)==="民族脊梁", "称号阈值 0/1200/2400/3600");
+} else { R.fail++; R.messages.push("✘ score.js 未加载"); }
+document.getElementById("out").textContent =
+  `通过 ${R.pass} 项，失败 ${R.fail} 项\n` + R.messages.join("\n");
+</script></body></html>

@@ -1,0 +1,105 @@
+id: taiyin_xingjun
+name: 太阴星君
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Wise_Women"
+  speed: 0.88
+  pitch: -1
+  emotion: calm
+
+greet:
+  - id: greet_01
+    speaker: npc
+    text: "大圣到老身这月宫来，倒是稀客。"
+  - id: greet_02
+    speaker: npc
+    text: "广寒宫冷，大圣受得惯么？"
+
+topics:
+  - id: qinghan
+    label: "这里太冷清了"
+    source: "第19、95回"
+    lines:
+      - id: qinghan_01
+        speaker: npc
+        text: "这宫里只有月色，没有日色。冷是冷，胜在干净。"
+      - id: w_ty_01
+        speaker: pc
+        text: "老太阴，你这儿冷清得慌，何不去下界走走？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: qinghan_02
+        speaker: npc
+        text: "热闹的地方，老身住不惯。千年万年，就守着这一轮月，心里反倒安稳。"
+  - id: yutu
+    label: "那只玉兔"
+    source: "第95回"
+    lines:
+      - id: yutu_01
+        speaker: npc
+        text: "宫里那只捣药的玉兔，大圣见过了？"
+      - id: yutu_03
+        speaker: npc
+        text: "是我广寒宫捣玄霜仙药之玉兔也。"
+        quote: true
+      - id: w_ty_02
+        speaker: pc
+        text: "那丫头一肚子委屈，跟老孙诉了半日苦。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: yutu_02
+        speaker: npc
+        text: "她话多。捣药是长生的功课，她年纪小，还不懂这个。"
+  - id: guishu
+    label: "月中的桂树"
+    source: "第19、95回"
+    lines:
+      - id: guishu_01
+        speaker: npc
+        text: "宫里那株桂树，比下界任何的树都老。花开的时候，满宫都是清气。"
+      - id: w_ty_03
+        speaker: pc
+        text: "老孙的蟠桃园，三千六百株，比这桂树热闹多了。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: guishu_02
+        speaker: npc
+        text: "桃树结果，桂树开花，各守各的本分。大圣的园子好，老身的桂树也不坏。"
+  - id: tie
+    label: "蟠桃会的请帖"
+    source: "第5回"
+    lines:
+      - id: tie_01
+        speaker: npc
+        text: "王母娘娘的蟠桃会，月宫也接了帖。老身正让仙子们备礼。"
+      - id: w_ty_04
+        speaker: pc
+        text: "老孙怎么没听见有人送帖来？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: tie_02
+        speaker: npc
+        text: "帖子是娘娘府里发的，老身做不得主。大圣是体面人，想来不会少了你的。"
+  - id: xuanshuang
+    label: "玄霜仙药"
+    source: "第95回"
+    lines:
+      - id: xuanshuang_01
+        speaker: npc
+        text: "玉兔捣的是玄霜仙药，清露和着桂英，千年才成一服。"
+      - id: w_ty_05
+        speaker: pc
+        text: "千年？老孙一个筋斗就是十万八千里，可等不得。"
+        voice_setting: { emotion: surprised, speed: 1.2 }
+      - id: xuanshuang_02
+        speaker: npc
+        text: "大圣的快，是路快；药里的功夫，是慢出来的。两下说不到一处。"
+
+fallback:
+  - id: fb_01
+    speaker: npc
+    text: "月宫里的事，说与下界人也听不懂。"
+  - id: fb_02
+    speaker: npc
+    text: "老身乏了，改日再叙。"
+
+bye:
+  - id: bye_01
+    speaker: npc
+    text: "大圣慢走。外面云路黑，仔细脚下。"

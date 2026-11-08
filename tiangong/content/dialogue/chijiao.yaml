@@ -1,0 +1,86 @@
+# 赤脚大仙｜上仙｜天宫主轴（游走）
+# 依据：文档 01 §2.2（友善·坦荡、端方、有疑而不驳）；考据 research §2.4（第5、22回）
+id: chijiao
+name: 赤脚大仙
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Lyrical_Voice"
+  speed: 0.92
+  pitch: -1
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣，别来无恙。"
+  - id: greet_02
+    text: "大圣不在蟠桃园，也出来走走？"
+  - id: greet_03
+    text: "大圣这一双步云鞋，踏得云头乱颤。"
+
+topics:
+  - id: fuhui
+    label: "瑶池赴会"
+    source: "第5回"
+    lines:
+      - id: w_cj_fuhui_01
+        speaker: pc
+        text: "赤脚大仙，瑶池的蟠桃会，你可有份？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: fuhui_01
+        text: "(chuckle) 年年有请，年年到老。今年也不例外。"
+      - id: w_cj_fuhui_02
+        speaker: pc
+        text: "你说，这会上可请老孙么？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: fuhui_02
+        text: "帖上名目繁多，老朽不曾细看。大圣是齐天大圣，想来该有你的座。"
+  - id: baolu
+    label: "腰间的宝箓"
+    source: "第5回（腰悬宝箓无生灭）"
+    lines:
+      - id: w_cj_baolu_01
+        speaker: pc
+        text: "大仙腰上挂的，是甚么宝贝？"
+        voice_setting: { emotion: happy, speed: 1.05 }
+      - id: baolu_01
+        text: "一卷宝箓。随老朽多年，丢了可惜，带着也无用。"
+      - id: w_cj_baolu_02
+        speaker: pc
+        text: "无用之物，不如送老孙。"
+        voice_setting: { emotion: happy, speed: 1.05 }
+      - id: baolu_02
+        text: "送不得。这不是物件，是老朽的名分。大圣要名分，自己身上就有，比老朽的响亮。"
+  - id: lishu
+    label: "班列与礼数"
+    source: "自拟对话，依据文档01 §2.2 语体"
+    lines:
+      - id: w_cj_lishu_01
+        speaker: pc
+        text: "大仙，这天宫里排班列坐，有甚么意思？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: lishu_01
+        text: "班列者，上下之分也。大圣嫌它拘束，老朽靠它安心。"
+      - id: lishu_02
+        text: "你筋斗云快，一步千里；老朽走得慢，一步一个脚印，谁也不撞着。"
+  - id: qiuqing
+    label: "求情的嘴"
+    source: "第22回（赤脚大天仙越班启奏）"
+    lines:
+      - id: w_cj_qiuqing_01
+        speaker: pc
+        text: "老孙若有一日在天庭犯了事，你替老孙说话么？"
+        voice_setting: { emotion: happy, speed: 1.05 }
+      - id: qiuqing_01
+        text: "老朽这张嘴，专会替人求情。"
+      - id: qiuqing_02
+        text: "只是大圣这样的，最好别落到要人求情的地步。"
+
+fallback:
+  - id: fb_01
+    text: "大圣这话，老朽答不上来。"
+  - id: fb_02
+    text: "呵呵，由它去罢。"
+
+bye:
+  - id: bye_01
+    text: "大圣慢行。瑶池会上，但愿有你。"

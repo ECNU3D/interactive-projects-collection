@@ -1,0 +1,94 @@
+id: maori
+name: 昴日星官
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Sincere_Adult"
+  speed: 1.05
+  pitch: 1
+  emotion: happy
+
+greet:
+  - id: greet_01
+    text: "大圣来了？今日点卯，你倒比星宿们到得还早。"
+  - id: greet_02
+    text: "(chuckle) 齐天大圣一到，斗牛宫里顿时亮堂了三分。"
+  - id: greet_03
+    text: "老弟，又来寻我们弟兄叙话？"
+
+topics:
+  - id: dianmao
+    label: "点卯的规矩"
+    source: "第5回、第31回"
+    lines:
+      - id: dianmao_01
+        text: "我们二十八宿，三日一点卯。角亢氐房领班，奎娄胃昴跟着，一个也少不得。"
+      - id: w_maori_dianmao_02
+        speaker: pc
+        text: "老孙在天上这些日子，还没点过一回卯。"
+        voice_setting: { emotion: calm }
+      - id: dianmao_03
+        text: "大圣是钦封的齐天大圣，不在卯册上。我们星宿却是日日当值，一刻懒不得。"
+      - id: w_maori_dianmao_04
+        speaker: pc
+        text: "天上一日，就是下界一年。"
+        quote: true
+        voice_setting: { emotion: happy }
+      - id: dianmao_05
+        text: "正是这个理。我们误一日，下界便是一年，谁敢误？"
+    next:
+      - { label: "那块空牌是谁的？", goto: kuipai }
+      - { label: "罢了，不问了。", goto: __end }
+  - id: kuipai
+    label: "奎木狼的空牌"
+    source: "第31回"
+    lines:
+      - id: kuipai_01
+        text: "你问那块空着的牌子？奎木狼的。"
+      - id: kuipai_02
+        text: "他已多日不曾应卯。记卯的簿子上，记了一笔又一笔。"
+      - id: w_maori_kuipai_03
+        speaker: pc
+        text: "这厮倒自在，卯也不点，影也不见。"
+        voice_setting: { emotion: surprised }
+      - id: kuipai_04
+        text: "自在？卯册上写得明白，少一卯是一卯，迟早要查问。天上没有白躲的懒。"
+  - id: guangming
+    label: "东天门光明宫"
+    source: "第55回（居所）"
+    lines:
+      - id: guangming_01
+        text: "斗牛宫只是点卯的去处，我的宫在东天门，唤作光明宫。"
+      - id: guangming_02
+        text: "每日天色将明，先自我宫中亮起，再一处一处亮到南天门去。"
+      - id: w_maori_guangming_03
+        speaker: pc
+        text: "你名里带个日字，又管着天亮，倒是个应景的差事。"
+        voice_setting: { emotion: happy }
+      - id: guangming_04
+        text: "星名是天定的，差事是旨派的。应景不应景，由不得我挑。"
+  - id: dixiong
+    label: "弟兄相称"
+    source: "第5回"
+    lines:
+      - id: dixiong_01
+        text: "大圣如今与天上众星宿不论高低，俱以弟兄相待。我虚长几岁，托大，叫你一声老弟。"
+      - id: w_maori_dixiong_02
+        speaker: pc
+        text: "好说，好说。改日到我齐天府上吃酒。"
+        voice_setting: { emotion: happy }
+      - id: dixiong_03
+        text: "酒便不去了。你那府里设着安静、宁神二司，我去了，怕吵着他们当差。"
+
+fallback:
+  - id: fb_01
+    text: "大圣这话，倒把我问住了。"
+  - id: fb_02
+    text: "星宿的事归星宿管，别处的我不敢乱说。"
+  - id: fb_03
+    text: "你且自便，卯时一到，我还要点名。"
+
+bye:
+  - id: bye_01
+    text: "大圣慢走，来日光明宫坐坐。"
+  - id: bye_02
+    text: "老弟自便。"

@@ -1,0 +1,63 @@
+id: kanlu_daoren
+name: 看炉道人
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "clever_boy"
+  speed: 1.0
+  pitch: 0
+  emotion: calm
+
+greet:
+  - id: greet_01
+    speaker: npc
+    text: "噤声。老祖在丹台上讲道。"
+  - id: greet_02
+    speaker: npc
+    text: "大圣？这兜率宫少有客来。"
+
+topics:
+  - id: bagualu
+    label: "八卦炉的方位"
+    source: "第7回"
+    lines:
+      - id: bagualu_01
+        speaker: npc
+        text: "这炉分乾、坎、艮、震、巽、离、坤、兑八个方位，一刻也离不得人看顾。"
+      - id: w_kl_01
+        speaker: pc
+        text: "老孙就看看，又不动它。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: bagualu_02
+        speaker: npc
+        text: "看也使得。只别伸手——炉里的火不是凡火，挨着就燎去一层皮。"
+      - id: w_kl_02
+        speaker: pc
+        text: "老孙岂是怕火的。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+  - id: hulu
+    label: "那五个葫芦"
+    source: "第5回"
+    lines:
+      - id: hulu_01
+        speaker: npc
+        text: "丹房里那五个葫芦，装的是老祖的九转金丹。老祖吩咐过，谁也不许动。"
+      - id: w_kl_03
+        speaker: pc
+        text: "老孙就揭开闻闻，又不尝。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: hulu_02
+        speaker: npc
+        text: "闻也不许。老祖的规矩大，小道还有几年道童要当呢。"
+
+fallback:
+  - id: fb_01
+    speaker: npc
+    text: "小道只看炉，别的事，问老祖去。"
+  - id: fb_02
+    speaker: npc
+    text: "丹房里的事，小道不敢多嘴。"
+
+bye:
+  - id: bye_01
+    speaker: npc
+    text: "大圣慢走，丹房火重，绕道些。"

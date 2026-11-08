@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>HYPER LODE RUNNER · GB</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  /* ============ 页面 chrome(Game Boy 机身风) ============ */
+  html,body{
+    margin:0; padding:0; background:#c4bebb;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none; user-select:none;
+    touch-action:none; overscroll-behavior:none;
+  }
+  #wrap{
+    min-height:100vh; box-sizing:border-box;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:14px 10px; gap:10px;
+  }
+  /* 机身屏幕外框:灰紫机身 + 深色镜面框 + 圆角 */
+  #bezel{
+    background:#5c5660; padding:16px 18px 12px; border-radius:16px;
+    box-shadow: inset 0 2px 0 #7d7681, inset 0 -4px 0 #463f4b, 0 8px 22px rgba(40,30,45,.35);
+  }
+  #frame{
+    background:#221e26; padding:10px; border-radius:10px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.7);
+  }
+  canvas#gb{
+    display:block; width:480px; height:432px; /* JS 会根据窗口改成整数倍 */
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    background:#9bbc0f; border-radius:2px;
+  }
+  #caption{
+    margin-top:8px; text-align:center; color:#a79ea9; font-size:10px; letter-spacing:3px;
+  }
+  /* 常驻按键说明 */
+  #hint{ color:#4a444f; font-size:12px; letter-spacing:1px; text-align:center; }
+  /* ============ 触屏虚拟按键(半透明) ============ */
+  #touch{
+    width:100%; max-width:560px;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:0 6px; box-sizing:border-box;
+  }
+  .pad{ display:grid; grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,46px); gap:4px; }
+  .tbtn{
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(38,32,44,.30); color:#2c2731;
+    border-radius:10px; font-size:18px; font-weight:bold;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .tbtn.on{ background:rgba(38,32,44,.62); color:#12100f; }
+  .tbtn.empty{ background:transparent; pointer-events:none; }
+  .abtn{ width:56px; height:56px; border-radius:50%; font-size:20px; }
+  .sbtn{ width:52px; height:22px; border-radius:12px; font-size:10px; letter-spacing:1px; }
+  #mid{ display:flex; flex-direction:column; gap:10px; align-items:center; }
+  #ab{ display:flex; gap:14px; align-items:center; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="bezel">
+    <div id="frame"><canvas id="gb" width="160" height="144"></canvas></div>
+    <div id="caption">HYPER LODE RUNNER &middot; GB STYLE</div>
+  </div>
+  <div id="ui">
+    <div id="hint">&#8592;&#8594;&#8593;&#8595; 移动/爬梯/抓杠 &nbsp; Z(B) 挖左下砖 &nbsp; X(A) 挖右下砖 &nbsp; ENTER(START) 开始</div>
+    <div id="touch">
+      <div class="pad">
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="up">&#9650;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="left">&#9664;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="right">&#9654;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="down">&#9660;</div>
+        <div class="tbtn empty"></div>
+      </div>
+      <div id="mid">
+        <div class="tbtn sbtn" data-k="select">SELECT</div>
+        <div class="tbtn sbtn" data-k="start">START</div>
+      </div>
+      <div id="ab">
+        <div class="tbtn abtn" data-k="b">B</div>
+        <div class="tbtn abtn" data-k="a">A</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+ * HYPER LODE RUNNER · Game Boy 风格淘金者(单文件,零依赖)
+ * 操作:方向键=移动/爬梯/抓单杠  Z(B)=挖左下角砖  X(A)=挖右下角砖  Enter=Start
+ * 规则:单屏关卡,收齐全部金块后顶部出现隐藏梯子,爬到最顶过关。
+ *       不能跳!换层只能靠梯子和挖洞。挖开的砖约 5 秒恢复。
+ *       守卫追人,掉进洞里被困几秒;砖恢复时还在洞里就被埋掉,
+ *       从顶部重生;带金块的守卫被埋时掉落金块。3 条命。
+ * ===================================================================== */
+
+/* ---------- 基本常量 ---------- */
+const W = 160, H = 144;                          // GB 逻辑分辨率 160x144
+const PAL = ['#0f380f', '#306230', '#8bac0f', '#9bbc0f']; // DMG 4 色绿
+const HUD_H = 12;                                // 顶部状态栏高度
+const TW = 20, TH = 14, TS = 8;                  // 关卡 20x14 格,每格 8px
+const OX = 0, OY = HUD_H + (((H - HUD_H) - TH * TS) / 2 | 0); // 关卡绘制原点(垂直居中)
+const MOVE_T = 6;                                // 玩家走一格的帧数(10 格/秒)
+const GUARD_T = 8;                               // 守卫走一格的帧数(比玩家慢)
+const FALL_T = 5;                                // 下落一格的帧数
+const DIG_T = 20;                                // 挖掘冷却
+const CRUMBLE_T = 18;                            // 碎裂动画时长(3 帧 x 6)
+const OPEN_T = 300;                              // 洞保持打开约 5 秒
+const FADE_T = 18;                               // 砖恢复渐显时长(3 步)
+const TRAP_T = 150;                              // 守卫被困洞里的帧数(2.5 秒)
+const DEAD_T = 70;                               // 死亡定格时长
+const INV_T = 90;                                // 重生无敌时间
+
+const cv = document.getElementById('gb');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+/* 全部画面只允许用 fillRect 画 */
+function R(x, y, w, h, c) {
+  if (w <= 0 || h <= 0) return;
+  ctx.fillStyle = PAL[c];
+  ctx.fillRect(x | 0, y | 0, w, h);
+}
+
+/* ---------- 8-bit 芯片音效(Web Audio 合成,无音频文件) ---------- */
+const Snd = (() => {
+  let ac = null, master = null, noiseBuf = null;
+  function init() {                       // 首次按键后才创建 AudioContext
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain();
+    master.gain.value = 0.14;
+    master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  function sq(freq, delay, dur, vol, slideTo) {   // 方波
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(delay, dur, vol, hp) {           // 噪声通道
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const s = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+    s.buffer = noiseBuf;
+    s.loop = true;
+    f.type = hp ? 'highpass' : 'lowpass';
+    f.frequency.value = hp ? 1800 : 900;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t); s.stop(t + dur + 0.02);
+  }
+  const N = n => 440 * Math.pow(2, (n - 69) / 12); // MIDI 音号 -> 频率
+  const WIN_M = [72, 76, 79, 84, 76, 79, 84, 88];             // 过关小旋律
+  const WIN_B = [48, 55, 53, 60];
+  const FAN_M = [72, 76, 79, 84, 79, 84, 86, 84, 81, 84, 88, 91, 88, 84, 79, 76]; // 全通号角
+  const FAN_B = [48, 53, 55, 60, 48, 53, 55, 60];
+  return {
+    init,
+    step()   { sq(220, 0, 0.02, 0.12); },                      // 走路轻响
+    dig()    { noise(0, 0.09, 0.4, false); sq(170, 0, 0.07, 0.3, 80); }, // 铲土
+    gold()   { sq(N(88), 0, 0.07, 0.4); sq(N(93), 0.06, 0.1, 0.35); },   // 拿金块"叮"
+    buried() { sq(520, 0, 0.09, 0.4, 180); sq(420, 0.09, 0.09, 0.35, 140); sq(320, 0.18, 0.15, 0.35, 80); }, // 滑稽下行
+    fallIn() { noise(0, 0.05, 0.25, false); sq(150, 0, 0.07, 0.25, 70); }, // 守卫掉洞"咚"
+    reveal() { [72, 76, 79, 84].forEach((n, i) => sq(N(n), i * 0.08, 0.09, 0.4)); }, // 隐藏梯子上行琶音
+    die()    { sq(400, 0, 0.12, 0.4, 150); sq(300, 0.12, 0.12, 0.35, 100); sq(200, 0.24, 0.2, 0.35, 60); },
+    start()  { sq(N(72), 0, 0.07, 0.45); sq(N(79), 0.07, 0.12, 0.45); },
+    clear() {
+      WIN_M.forEach((n, i) => sq(N(n), i * 0.1, 0.1, 0.4));
+      WIN_B.forEach((n, i) => sq(N(n), i * 0.2, 0.2, 0.2));
+    },
+    fanfare() {
+      FAN_M.forEach((n, i) => sq(N(n), i * 0.14, 0.13, 0.4));
+      FAN_B.forEach((n, i) => sq(N(n), i * 0.28, 0.26, 0.2));
+    },
+    over()   { sq(N(64), 0, 0.15, 0.4); sq(N(60), 0.15, 0.15, 0.4); sq(N(55), 0.3, 0.3, 0.4); },
+  };
+})();
+
+/* ---------- 8x8 手绘像素字体(画布文字只能用它) ---------- */
+const FONT = (() => {
+  const F = {};
+  const def = (ch, rows) => { F[ch] = rows; };
+  def(' ', ["........","........","........","........","........","........","........","........"]);
+  def('0', [".###....","#...#...","#..##...","#.#.#...","##..#...","#...#...",".###....","........"]);
+  def('1', ["..#.....",".##.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('2', [".###....","#...#...","....#...","..##....",".#......","#.......","#####...","........"]);
+  def('3', ["####....","....#...","....#...",".###....","....#...","....#...","####....","........"]);
+  def('4', ["...##...",".#.#....","#..#....","#####...","...#....","...#....","...#....","........"]);
+  def('5', ["#####...","#.......","####....","....#...","....#...","#...#...",".###....","........"]);
+  def('6', [".###....","#.......","#.......","####....","#...#...","#...#...",".###....","........"]);
+  def('7', ["#####....","....#...","...#....","...#....","..#.....","..#.....","..#.....","........"]);
+  def('8', [".###....","#...#...","#...#...",".###....","#...#...","#...#...",".###....","........"]);
+  def('9', [".###....","#...#...","#...#...",".####...","....#...","....#...",".###....","........"]);
+  def('A', [".###....","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('B', ["####....","#...#...","#...#...","####....","#...#...","#...#...","####....","........"]);
+  def('C', [".####...","#.......","#.......","#.......","#.......","#.......",".####...","........"]);
+  def('D', ["####....","#...#...","#...#...","#...#...","#...#...","#...#...","####....","........"]);
+  def('E', ["#####...","#.......","#.......","####....","#.......","#.......","#####...","........"]);
+  def('F', ["#####...","#.......","#.......","####....","#.......","#.......","#.......","........"]);
+  def('G', [".####...","#.......","#.......","#.###...","#...#...","#...#...",".####...","........"]);
+  def('H', ["#...#...","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('I', [".###....","..#.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('J', ["..###...","...#....","...#....","...#....","...#....","#..#....",".##.....","........"]);
+  def('K', ["#...#...","#..#....","#.#.....","##......","#.#.....","#..#....","#...#...","........"]);
+  def('L', ["#.......","#.......","#.......","#.......","#.......","#.......","#####...","........"]);
+  def('M', ["#...#...","##.##...","#.#.#...","#.#.#...","#...#...","#...#...","#...#...","........"]);
+  def('N', ["#...#...","##..#...","#.#.#...","#..##...","#...#...","#...#...","#...#...","........"]);
+  def('O', [".###....","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('P', ["####....","#...#...","#...#...","####....","#.......","#.......","#.......","........"]);
+  def('Q', [".###....","#...#...","#...#...","#...#...","#.#.#...","#..#....",".##.#...","........"]);
+  def('R', ["####....","#...#...","#...#...","####....","#.#.....","#..#....","#...#...","........"]);
+  def('S', [".####...","#.......","#.......",".###....","....#...","....#...","####....","........"]);
+  def('T', ["#####...","..#.....","..#.....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('U', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('V', ["#...#...","#...#...","#...#...","#...#...","#...#...",".#.#....","..#.....","........"]);
+  def('W', ["#...#...","#...#...","#...#...","#.#.#...","#.#.#...","##.##...","#...#...","........"]);
+  def('X', ["#...#...","#...#...",".#.#....","..#.....",".#.#....","#...#...","#...#...","........"]);
+  def('Y', ["#...#...","#...#...",".#.#....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('Z', ["#####...","....#...","...#....","..#.....",".#......","#.......","#####...","........"]);
+  def('!', ["..#.....","..#.....","..#.....","..#.....","..#.....","........","..#.....","........"]);
+  def('.', ["........","........","........","........","........","..##....","..##....","........"]);
+  def('-', ["........","........","........",".###....","........","........","........","........"]);
+  def(':', ["........","..##....","..##....","........","..##....","..##....","........","........"]);
+  def('/', ["....#...","....#...","...#....","..#.....",".#......","#.......","#.......","........"]);
+  def('*', ["........","..#.#...","...#....",".#####..","...#....","..#.#...","........","........"]);
+  return F;
+})();
+
+/* 画文字:逐像素 fillRect,等宽 8px,可整数放大 */
+function drawText(str, x, y, color, scale) {
+  scale = scale || 1;
+  str = String(str).toUpperCase();
+  for (let i = 0; i < str.length; i++) {
+    const g = FONT[str[i]] || FONT[' '];
+    for (let r = 0; r < 8; r++) {
+      const row = g[r];
+      for (let c = 0; c < 8; c++) {
+        if (row[c] === '#') R(x + i * 8 * scale + c * scale, y + r * scale, scale, scale, color);
+      }
+    }
+  }
+}
+
+/* ---------- 角色/金块像素图(8x8,'.'=透明) ---------- */
+/* 颜色代号:'#'=最深(0)  '+'=深(1)  '='=浅(2) */
+const SPR_COL = { '#': 0, '+': 1, '=': 2 };
+function drawSpr(rows, sx, sy, sc) {
+  sc = sc || 1;
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++) {
+      const col = SPR_COL[rows[r][c]];
+      if (col !== undefined) R(sx + c * sc, sy + r * sc, sc, sc, col);
+    }
+}
+function mirror(rows) { return rows.map(row => row.split('').reverse().join('')); }
+
+/* 淘金者:尖帽 + 深色身体 */
+const P_RIGHT_A = [
+  "...##...",
+  "..#++#..",
+  "..#+##..",
+  "..#++#..",
+  ".##++##.",
+  "..#++#..",
+  "..#..#..",
+  ".##..##.",
+];
+const P_RIGHT_B = [
+  "...##...",
+  "..#++#..",
+  "..#+##..",
+  "..#++#..",
+  ".##++##.",
+  "..#++#..",
+  "...##...",
+  "..#..#..",
+];
+const P_CLIMB = [                            // 背面爬梯,双臂上举
+  "#..++..#",
+  ".##++##.",
+  "..#++#..",
+  "..#++#..",
+  "..#++#..",
+  "..#++#..",
+  "...##...",
+  "..#..#..",
+];
+const P_HANG = [                             // 抓单杠,手臂直举过头顶
+  "##....##",
+  ".#++++#.",
+  "..#++#..",
+  "..#++#..",
+  "..#++#..",
+  "...##...",
+  "..#..#..",
+  "........",
+];
+/* 守卫:圆头 + 浅色身体,和玩家一眼区分 */
+const G_RIGHT_A = [
+  "..####..",
+  ".#====#.",
+  ".#==##..",
+  ".#====#.",
+  "##====##",
+  "..#==#..",
+  "..#..#..",
+  ".##..##.",
+];
+const G_RIGHT_B = [
+  "..####..",
+  ".#====#.",
+  ".#==##..",
+  ".#====#.",
+  "##====##",
+  "..#==#..",
+  "...##...",
+  "..#..#..",
+];
+const G_CLIMB = [
+  "#..==..#",
+  ".##==##.",
+  "..#==#..",
+  "..#==#..",
+  "..#==#..",
+  "..#==#..",
+  "...##...",
+  "..#..#..",
+];
+const G_HANG = [
+  "##....##",
+  ".#====#.",
+  "..#==#..",
+  "..#==#..",
+  "..#==#..",
+  "...##...",
+  "..#..#..",
+  "........",
+];
+/* 金块:梯形锭,高光闪烁 */
+const GOLD_ROWS = [
+  "........",
+  "........",
+  "........",
+  "..####..",
+  ".#++++#.",
+  "#++++++#",
+  "########",
+  "........",
+];
+function drawGold(sx, sy, sparkle) {
+  drawSpr(GOLD_ROWS, sx, sy);
+  if (sparkle) R(sx + 2, sy + 4, 1, 1, 2);     // 高光点闪烁
+}
+
+/* ---------- 地块画法 ---------- */
+function brickCol(r, c) {                    // 普通砖块像素
+  if (r === 0) return 2;                     // 顶部受光
+  if (r === 3 || r === 7) return 0;          // 横向砖缝
+  if ((r < 3 && c === 3) || (r > 3 && c === 7)) return 0; // 错缝竖砖缝
+  return 1;
+}
+function drawBrick(sx, sy) {
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++) R(sx + c, sy + r, 1, 1, brickCol(r, c));
+}
+/* 碎裂 3 帧:裂缝越来越多(伪随机剔除砖像素) */
+function drawCrumble(sx, sy, f) {
+  const th = [0, 3, 6, 10][f] || 3;
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++) {
+      if ((r * 7 + c * 13) % 16 < th) continue;   // 碎掉的渣不画,露出背景
+      R(sx + c, sy + r, 1, 1, brickCol(r, c));
+    }
+}
+/* 恢复渐显 3 步:从虚到实 */
+function drawFadeIn(sx, sy, f) {
+  const th = [0, 4, 8, 13][f] || 4;
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++) {
+      if ((r * 5 + c * 11) % 16 >= th) continue;
+      R(sx + c, sy + r, 1, 1, brickCol(r, c));
+    }
+}
+function drawConcrete(sx, sy) {              // 混凝土(不可挖)
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++) {
+      let col = 1;
+      if (r === 0 || c === 0 || r === 7 || c === 7) col = 0;
+      else if (r === 1) col = 2;
+      else if ((r === 3 || r === 5) && (c === 3 || c === 5)) col = 0; // 铆钉
+      R(sx + c, sy + r, 1, 1, col);
+    }
+}
+function drawLadder(sx, sy) {
+  R(sx + 1, sy, 1, 8, 0);                    // 左右立杆
+  R(sx + 6, sy, 1, 8, 0);
+  R(sx + 2, sy + 1, 4, 1, 0);                // 横档
+  R(sx + 2, sy + 4, 4, 1, 0);
+  R(sx + 2, sy + 7, 4, 1, 0);
+}
+function drawBar(sx, sy) {
+  R(sx, sy + 3, 8, 2, 0);                    // 横杆
+  R(sx, sy + 2, 1, 1, 0);                    // 端头
+  R(sx + 7, sy + 2, 1, 1, 0);
+}
+
+/* ---------- 5 关字符画(20x14;# 砖 @ 混凝土 H 梯 - 单杠 * 金块 ----------
+ * ---------- P 玩家 G 守卫 g 带金块守卫 ~ 隐藏梯子,可自行加关) ---------- */
+const LEVELS = [
+  [ // 1 教学:梯子就在出生点旁,守卫在远处,砖地可挖陷阱
+    "                    ",
+    "    ~               ",
+    "    H           *   ",
+    "    H############   ",
+    "    H               ",
+    "    H      *        ",
+    "####H#########      ",
+    "    H               ",
+    "    H               ",
+    "    H          G    ",
+    "    H               ",
+    "    H               ",
+    "  P        *        ",
+    "@@##################",
+  ],
+  [ // 2 单杠 + 双层平台,砖地可挖陷阱
+    "                    ",
+    "                ~   ",
+    "       *        H   ",
+    "  #########H####H#  ",
+    "           H    H   ",
+    "     *     H    H   ",
+    "  #########H####H## ",
+    "           H    H   ",
+    "  ----     H    H   ",
+    "        *  H    H   ",
+    "  #########H####H#  ",
+    "           H    H   ",
+    "  P       G    G  * ",
+    "####################",
+  ],
+  [ // 3 砖地可挖陷阱,首个带金块守卫
+    "                    ",
+    "   ~                ",
+    "   H        *       ",
+    "###H##########H     ",
+    "   H          H     ",
+    "   H   *      H*    ",
+    "   H  ########H##   ",
+    "   H          H     ",
+    "   H    ----  H     ",
+    "   H *        H     ",
+    "############# H     ",
+    "              H     ",
+    "  P      g      G   ",
+    "####################",
+  ],
+  [ // 4 缺口单杠桥,三个守卫
+    "                    ",
+    "       ~            ",
+    "   *   H    *       ",
+    "  #####H#######     ",
+    "       H            ",
+    "  *    H    ----    ",
+    "#######H####    ### ",
+    "       H            ",
+    "       H       *    ",
+    "  #####H########### ",
+    "       H            ",
+    "       H            ",
+    "  P     G   g     G ",
+    "####################",
+  ],
+  [ // 5 终关:七金块,双梯纵深
+    "                    ",
+    "    ~               ",
+    " *  H  *        *   ",
+    "####H############## ",
+    "    H               ",
+    "    H   ----   *    ",
+    "    H###########H###",
+    "    H           H   ",
+    " *  H   *       H   ",
+    "####H######     H   ",
+    "    H           H   ",
+    "    H           H   ",
+    " P      g  G      G ",
+    "####################",
+  ],
+];
+
+/* 解析关卡:静态地形 + 金块集合 + 出生点 */
+function parseLevel(rows) {
+  const grid = [];
+  const hidden = new Set();                  // 隐藏梯子格号
+  const gold = new Set();                    // 场上金块格号
+  const guards = [];                         // 守卫出生点
+  let px = 1, py = 1;
+  for (let y = 0; y < TH; y++) {
+    grid.push([]);
+    for (let x = 0; x < TW; x++) {
+      const ch = (rows[y] && rows[y][x]) || ' ';
+      let t = ch;
+      const i = y * TW + x;
+      if (ch === '*') { gold.add(i); t = ' '; }
+      else if (ch === 'P') { px = x; py = y; t = ' '; }
+      else if (ch === 'G' || ch === 'g') { guards.push({ x, y, carry: ch === 'g' }); t = ' '; }
+      else if (ch === '~') { hidden.add(i); }
+      grid[y].push(t);
+    }
+  }
+  return { grid, hidden, gold, guards, px, py };
+}
+
+/* ---------- 输入:键盘 + 触屏(按住连发 / 单次触发都可靠) ---------- */
+const keys = { left: 0, right: 0, up: 0, down: 0, a: 0, b: 0, start: 0, select: 0 };
+const pressed = {};                    // 按下沿,逻辑帧消费,绝不丢输入
+const KEYMAP = {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+  KeyX: 'a', KeyZ: 'b', Enter: 'start', ShiftLeft: 'select', ShiftRight: 'select',
+};
+window.addEventListener('keydown', e => {
+  const k = KEYMAP[e.code];
+  if (!k) return;
+  e.preventDefault();
+  Snd.init();                          // 首次按键才初始化音频
+  if (!keys[k]) pressed[k] = 1;
+  keys[k] = 1;
+});
+window.addEventListener('keyup', e => {
+  const k = KEYMAP[e.code];
+  if (k) keys[k] = 0;
+});
+function hit(k) { if (pressed[k]) { pressed[k] = 0; return true; } return false; }
+function clearPressed() { for (const k in pressed) pressed[k] = 0; }
+
+/* 触屏按钮(pointer 事件,鼠标同样可用) */
+document.querySelectorAll('[data-k]').forEach(el => {
+  const k = el.getAttribute('data-k');
+  const down = e => {
+    e.preventDefault(); Snd.init();
+    if (!keys[k]) pressed[k] = 1;
+    keys[k] = 1;
+    el.classList.add('on');
+    if (el.setPointerCapture && e.pointerId !== undefined) {
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+  };
+  const up = e => { e.preventDefault(); keys[k] = 0; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+});
+
+/* ---------- 游戏状态 ---------- */
+const ST = { TITLE: 0, PLAY: 1, CLEAR: 2, OVER: 3 };
+const game = { state: ST.TITLE, frame: 0, clearT: 0, overT: 0, overAll: false };
+let lv = null;                         // 当前关解析结果
+let level = 0;                         // 当前关号(0-4)
+let score = 0, lives = 3;
+let gold = new Set();                  // 场上金块
+let holes = new Map();                 // 格号 -> {state:'crumble'|'open'|'fade', t}
+let guards = [];                       // 守卫实体
+let revealed = false;                  // 隐藏梯子已出现
+let deadT = 0;                         // 死亡定格计时
+let digCool = 0;                       // 挖掘冷却
+let digBuf = 0, digBufT = 0;           // 挖掘输入缓冲(下落/冷却时不丢)
+const pl = { x: 1, y: 1, sx: 1, sy: 1, mt: 0, ft: 0, face: 1, vert: false, walkF: 0, inv: 0 };
+
+function loadLevel(i) {
+  level = i;
+  lv = parseLevel(LEVELS[i]);
+  gold = new Set(lv.gold);
+  holes = new Map();
+  guards = lv.guards.map((g, n) => ({
+    x: g.x, y: g.y, sx: g.x, sy: g.y, carry: g.carry,
+    trap: 0, stuck: false, gt: (n * 3) % GUARD_T, ft: 0, face: -1, vert: false, walkF: 0, rs: 1237 + n * 997,
+  }));
+  pl.x = pl.sx = lv.px; pl.y = pl.sy = lv.py;
+  pl.mt = 0; pl.ft = 0; pl.face = 1; pl.vert = false; pl.walkF = 0; pl.inv = 30;
+  revealed = false; deadT = 0; digCool = 0; digBuf = 0; digBufT = 0;
+}
+
+/* ---------- 地形查询 ---------- */
+function tileAt(x, y) {
+  if (x < 0 || y < 0 || x >= TW || y >= TH) return '@'; // 界外视同混凝土
+  return lv.grid[y][x];
+}
+function holeAt(x, y) { return holes.get(y * TW + x); }
+function isSolid(x, y) {
+  const c = tileAt(x, y);
+  if (c === '@') return true;
+  if (c === '#') {
+    const h = holeAt(x, y);
+    return !(h && h.state === 'open');   // 只有完全挖开才可穿过
+  }
+  return false;
+}
+function isLadder(x, y) {
+  const c = tileAt(x, y);
+  return c === 'H' || (c === '~' && revealed);
+}
+function isBar(x, y) { return tileAt(x, y) === '-'; }
+/* 站立/悬挂支撑:脚下是实体或梯子顶,或本身在梯子/单杠上 */
+function supported(x, y) {
+  return isLadder(x, y) || isBar(x, y) || isSolid(x, y + 1) || isLadder(x, y + 1);
+}
+function canUp(x, y) { return (isLadder(x, y) || isLadder(x, y - 1)) && !isSolid(x, y - 1); }
+function canDown(x, y) { return !isSolid(x, y + 1) && (isLadder(x, y + 1) || isLadder(x, y) || isBar(x, y)); }
+function canLR(x, y, dx) { return !isSolid(x + dx, y); }
+
+function goldLeft() {
+  let n = gold.size;
+  for (const g of guards) if (g.carry) n++;
+  return n;
+}
+
+/* ---------- 物理:不支撑就一格一格下落;返回是否正在下落 ---------- */
+function physStep(e, fallT) {
+  if (!supported(e.x, e.y)) {
+    if (++e.ft >= fallT) {
+      e.ft = 0;
+      if (!isSolid(e.x, e.y + 1)) e.y++;
+    }
+    return true;
+  }
+  e.ft = 0;
+  return false;
+}
+
+/* ---------- 挖掘 ---------- */
+function tryDig(dx) {
+  const tx = pl.x + dx, ty = pl.y + 1;
+  if (isSolid(tx, pl.y)) return false;             // 洞口斜上方必须是空的
+  if (tileAt(tx, ty) !== '#' || holeAt(tx, ty)) return false; // 只能挖完整砖
+  holes.set(ty * TW + tx, { state: 'crumble', t: CRUMBLE_T });
+  digCool = DIG_T;
+  Snd.dig();
+  return true;
+}
+
+function updateHoles() {
+  for (const [i, h] of holes) {
+    if (--h.t > 0) continue;
+    if (h.state === 'crumble') { h.state = 'open'; h.t = OPEN_T; }
+    else if (h.state === 'open') {               // 开始恢复:先埋掉洞里的
+      h.state = 'fade'; h.t = FADE_T;
+      buryAt(i);
+    } else holes.delete(i);
+  }
+}
+
+function buryAt(i) {
+  const x = i % TW, y = (i / TW) | 0;
+  if (deadT === 0 && pl.x === x && pl.y === y) killPlayer();   // 玩家被埋
+  for (const g of guards) {
+    if (g.x === x && g.y === y) {
+      score += 50;
+      Snd.buried();                              // 滑稽下行音
+      if (g.carry) {                             // 带金块的掉在洞口上方
+        g.carry = false;
+        gold.add((y - 1) * TW + x);
+      }
+      respawnGuard(g);
+    }
+  }
+}
+
+/* 守卫被埋后从顶部重生(找最顶行的空格,自由落体下去) */
+function respawnGuard(g) {
+  for (let x = 0; x < TW; x++) {
+    if (!isSolid(x, 0) && !isSolid(x, 1)) {
+      g.x = x; g.y = 0; g.trap = 0; g.stuck = false; g.ft = 0; g.gt = GUARD_T;
+      return;
+    }
+  }
+  g.x = g.sx; g.y = g.sy; g.trap = 0; g.stuck = false; g.ft = 0;  // 兜底回出生点
+}
+
+/* ---------- 守卫 AI:贪心追人 ---------- */
+function updateGuards() {
+  for (const g of guards) {
+    if (physStep(g, FALL_T)) continue;           // 自由落体中
+    const h = holeAt(g.x, g.y);
+    if (!h || h.state !== 'open') g.stuck = false;
+    if (h && h.state === 'open') {               // 掉进挖开的洞:被困
+      if (!g.stuck) { g.stuck = true; g.trap = TRAP_T; Snd.fallIn(); }
+      else if (g.trap > 0) g.trap--;
+      else {                                     // 时间到:朝玩家一侧斜上爬出
+        const pref = pl.x >= g.x ? 1 : -1;
+        for (const dx of [pref, -pref]) {
+          const nx = g.x + dx, ny = g.y - 1;
+          if (!isSolid(nx, ny) && supported(nx, ny)) { g.x = nx; g.y = ny; g.stuck = false; break; }
+        }
+        /* 出不去就留在洞里,等砖恢复被埋 */
+      }
+      continue;
+    }
+    if (g.gt > 0) { g.gt--; continue; }
+    g.gt = GUARD_T;
+    const dx = pl.x - g.x, dy = pl.y - g.y;
+    let mv = null;
+    if (dy > 0 && canDown(g.x, g.y)) mv = 'D';            // 玩家在下方优先下
+    else if (dy < 0 && canUp(g.x, g.y)) mv = 'U';         // 在上方优先爬
+    else if (dx < 0 && canLR(g.x, g.y, -1)) mv = 'L';
+    else if (dx > 0 && canLR(g.x, g.y, 1)) mv = 'R';
+    if (!mv) {                                   // 被挡住:合法移动里伪随机挑一个
+      const alt = [];
+      if (dx !== 0 && canLR(g.x, g.y, dx < 0 ? -1 : 1)) alt.push(dx < 0 ? 'L' : 'R');
+      if (canUp(g.x, g.y)) alt.push('U');
+      if (canDown(g.x, g.y)) alt.push('D');
+      if (dx !== 0 && canLR(g.x, g.y, dx < 0 ? 1 : -1)) alt.push(dx < 0 ? 'R' : 'L');
+      if (canLR(g.x, g.y, -1)) alt.push('L');
+      if (canLR(g.x, g.y, 1)) alt.push('R');
+      if (alt.length) {
+        g.rs = (g.rs * 1103515245 + 12345) & 0x7fffffff;
+        mv = alt[g.rs % alt.length];
+      }
+    }
+    if (mv === 'U') { g.y--; g.vert = true; }
+    else if (mv === 'D') { g.y++; g.vert = true; }
+    else if (mv === 'L') { g.x--; g.face = -1; g.vert = false; g.walkF ^= 1; }
+    else if (mv === 'R') { g.x++; g.face = 1; g.vert = false; g.walkF ^= 1; }
+  }
+}
+
+/* ---------- 死亡/重生 ---------- */
+function killPlayer() {
+  if (pl.inv > 0 || deadT > 0) return;
+  lives--;
+  deadT = DEAD_T;
+  Snd.die();
+}
+function respawn() {
+  pl.x = pl.sx; pl.y = pl.sy;
+  pl.mt = 0; pl.ft = 0; pl.inv = INV_T;
+  for (const g of guards) { g.x = g.sx; g.y = g.sy; g.trap = 0; g.stuck = false; g.ft = 0; g.gt = GUARD_T; }
+  clearPressed();
+}
+function checkTouch() {
+  if (deadT > 0 || pl.inv > 0) return;
+  for (const g of guards)
+    if (g.x === pl.x && g.y === pl.y) { killPlayer(); return; }
+}
+
+/* ---------- 过关/结束 ---------- */
+function doClear() {
+  score += 250;
+  game.state = ST.CLEAR;
+  game.clearT = 0;
+  Snd.clear();
+}
+function doOver(all) {
+  game.state = ST.OVER;
+  game.overT = 0;
+  game.overAll = all;
+  if (all) Snd.fanfare(); else Snd.over();
+}
+function startGame() {
+  score = 0; lives = 3;
+  loadLevel(0);
+  clearPressed();
+  game.state = ST.PLAY;
+  Snd.start();
+}
+
+/* ---------- 主逻辑帧 ---------- */
+function stepTitle() {
+  hit('up'); hit('down'); hit('left'); hit('right');
+  hit('b'); hit('a'); hit('select');           // 吃掉无关按下沿
+  if (hit('start')) startGame();
+}
+
+function stepPlay() {
+  if (deadT > 0) {                             // 死亡定格,世界冻结
+    if (--deadT === 0) {
+      if (lives <= 0) doOver(false);
+      else respawn();
+    }
+    return;
+  }
+  if (pl.inv > 0) pl.inv--;
+  if (digCool > 0) digCool--;
+  /* 挖掘缓冲:任何时候按下都记住,落地/冷却完立即执行,不丢输入 */
+  if (hit('b')) { digBuf = -1; digBufT = 90; }
+  if (hit('a')) { digBuf = 1; digBufT = 90; }
+  if (digBufT > 0 && --digBufT === 0) digBuf = 0;
+  /* 方向按下沿:立刻唤醒移动节奏,单点不丢步 */
+  if (hit('up') || hit('down') || hit('left') || hit('right')) pl.mt = 0;
+  hit('start'); hit('select');                 // 游戏中无作用,吃掉防残留
+
+  if (!physStep(pl, FALL_T)) {                 // 下落中不能移动/挖砖
+    if (digCool === 0 && digBuf !== 0) {
+      tryDig(digBuf);
+      digBuf = 0; digBufT = 0;
+    }
+    if (pl.mt > 0) pl.mt--;
+    else {
+      if (keys.up && canUp(pl.x, pl.y)) { pl.y--; pl.vert = true; pl.mt = MOVE_T; }
+      else if (keys.down && canDown(pl.x, pl.y)) { pl.y++; pl.vert = true; pl.mt = MOVE_T; }
+      else if (keys.left && canLR(pl.x, pl.y, -1)) {
+        pl.x--; pl.face = -1; pl.vert = false; pl.walkF ^= 1; pl.mt = MOVE_T; Snd.step();
+      }
+      else if (keys.right && canLR(pl.x, pl.y, 1)) {
+        pl.x++; pl.face = 1; pl.vert = false; pl.walkF ^= 1; pl.mt = MOVE_T; Snd.step();
+      }
+    }
+  }
+  /* 捡金块 */
+  const gi = pl.y * TW + pl.x;
+  if (gold.has(gi)) {
+    gold.delete(gi);
+    score += 100;
+    Snd.gold();
+    if (goldLeft() === 0) { revealed = true; Snd.reveal(); }   // 上行琶音 + 隐藏梯子
+  }
+  /* 收齐金块后爬到最顶行过关 */
+  if (revealed && pl.y === 0) { doClear(); return; }
+
+  updateGuards();
+  updateHoles();
+  checkTouch();
+}
+
+function step() {
+  game.frame++;
+  switch (game.state) {
+    case ST.TITLE: stepTitle(); break;
+    case ST.PLAY: stepPlay(); break;
+    case ST.CLEAR:
+      game.clearT++;
+      if (game.clearT > 110) {                 // 听完胜利小旋律再进下一关
+        if (level >= LEVELS.length - 1) doOver(true);
+        else {
+          loadLevel(level + 1);
+          game.state = ST.PLAY;
+        }
+        clearPressed();
+      }
+      break;
+    case ST.OVER:
+      game.overT++;
+      if (game.overT > 40 && hit('start')) {
+        game.state = ST.TITLE;
+        clearPressed();
+      }
+      break;
+  }
+}
+
+/* ---------- 渲染 ---------- */
+function drawField() {
+  for (let y = 0; y < TH; y++)
+    for (let x = 0; x < TW; x++) {
+      const c = lv.grid[y][x];
+      const sx = OX + x * TS, sy = OY + y * TS;
+      const h = holes.get(y * TW + x);
+      if (c === '#') {
+        if (!h) drawBrick(sx, sy);
+        else if (h.state === 'crumble') drawCrumble(sx, sy, 1 + ((CRUMBLE_T - h.t) / 6 | 0));
+        else if (h.state === 'open') {           // 洞口:露出背景 + 深色洞壁
+          R(sx, sy, 1, 8, 1); R(sx + 7, sy, 1, 8, 1); R(sx, sy + 7, 8, 1, 1);
+        } else drawFadeIn(sx, sy, 1 + ((FADE_T - h.t) / 6 | 0));
+      }
+      else if (c === '@') drawConcrete(sx, sy);
+      else if (c === 'H') drawLadder(sx, sy);
+      else if (c === '-') drawBar(sx, sy);
+      else if (c === '~' && revealed) drawLadder(sx, sy);
+    }
+  const spk = ((game.frame >> 4) & 1) === 0;
+  for (const i of gold) drawGold(OX + (i % TW) * TS, OY + ((i / TW) | 0) * TS, spk);
+}
+
+function entitySpr(e, rightA, rightB, climb, hang) {
+  if (isBar(e.x, e.y) && !isLadder(e.x, e.y) && !isSolid(e.x, e.y + 1) && !isLadder(e.x, e.y + 1))
+    return hang;                               // 真正悬空抓杠
+  if (isLadder(e.x, e.y) && e.vert) return climb;
+  const set = e.walkF ? rightB : rightA;
+  return e.face < 0 ? mirror(set) : set;
+}
+
+function drawEntities() {
+  for (const g of guards)
+    drawSpr(entitySpr(g, G_RIGHT_A, G_RIGHT_B, G_CLIMB, G_HANG), OX + g.x * TS, OY + g.y * TS);
+  const blinkOut =
+    (deadT > 0 && ((deadT >> 2) & 1) === 0) ||           // 死亡闪烁
+    (deadT === 0 && pl.inv > 0 && ((game.frame >> 2) & 1) === 0); // 无敌闪烁
+  if (!blinkOut)
+    drawSpr(entitySpr(pl, P_RIGHT_A, P_RIGHT_B, P_CLIMB, P_HANG), OX + pl.x * TS, OY + pl.y * TS);
+}
+
+function drawHUD() {
+  const txt = '*' + String(goldLeft()).padStart(2, '0') +
+              ' P' + lives +
+              ' LV' + (level + 1) +
+              ' ' + String(Math.min(score, 999999)).padStart(6, '0');
+  drawText(txt, 2, 2, 0);
+  R(0, HUD_H - 1, W, 1, 1);
+}
+
+/* 标题:大字 + 淘金小场景 + 闪烁 PRESS START */
+function drawTitle() {
+  drawText('HYPER', 60, 14, 0);
+  drawText('LODE', 48, 28, 0, 2);
+  drawText('RUNNER', 32, 46, 0, 2);
+  drawGold(16, 80, ((game.frame >> 4) & 1) === 0);
+  drawGold(32, 80, ((game.frame >> 4) & 1) === 1);
+  drawGold(48, 80, ((game.frame >> 4) & 1) === 0);
+  drawSpr((game.frame >> 4) & 1 ? P_RIGHT_A : P_RIGHT_B, 72, 80, 1);
+  drawSpr((game.frame >> 4) & 1 ? G_RIGHT_B : G_RIGHT_A, 96, 80, 1);
+  drawLadder(128, 72); drawLadder(128, 80); drawLadder(128, 88);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 106, 0); // 闪烁,灵魂所在
+  drawText('COLLECT ALL GOLD', 16, 126, 1);
+}
+
+function drawClear() {
+  drawField();
+  drawEntities();
+  drawHUD();
+  const cx = (W - 56) / 2, cy = H - 24;        // 固定在屏幕底部
+  R(cx, cy, 56, 18, 3);
+  R(cx, cy, 56, 1, 0); R(cx, cy + 17, 56, 1, 0);
+  R(cx, cy, 1, 18, 0); R(cx + 55, cy, 1, 18, 0);
+  if ((game.frame >> 3) % 2 === 0) drawText('CLEAR!', cx + 4, cy + 5, 0);
+}
+
+function drawOver() {
+  drawText(game.overAll ? 'ALL CLEAR' : 'GAME OVER', 8, 36, 0, 2);
+  drawText('SCORE ' + String(Math.min(score, 999999)).padStart(6, '0'), 32, 72, 0);
+  if (game.overAll) drawText('YOU GOT IT ALL', 24, 88, 1);
+  if (game.overT > 30 && (game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 106, 0);
+}
+
+function render() {
+  R(0, 0, W, H, 3);                            // 背景 = 最浅色
+  switch (game.state) {
+    case ST.TITLE: drawTitle(); break;
+    case ST.PLAY: drawField(); drawEntities(); drawHUD(); break;
+    case ST.CLEAR: drawClear(); break;
+    case ST.OVER: drawOver(); break;
+  }
+}
+
+/* ---------- 主循环:requestAnimationFrame + 固定 60fps 逻辑帧 ---------- */
+let lastTs = 0, acc = 0;
+function frameLoop(ts) {
+  requestAnimationFrame(frameLoop);
+  if (!lastTs) lastTs = ts;
+  let dt = ts - lastTs;
+  lastTs = ts;
+  if (dt > 250) dt = 250;                      // 切后台回来不追帧
+  acc += dt;
+  while (acc >= 1000 / 60) { step(); acc -= 1000 / 60; }
+  render();
+}
+
+/* ---------- 画布整数倍放大(3~5 倍,像素锐利) ---------- */
+function fit() {
+  const ui = document.getElementById('ui');
+  const chrome = (ui ? ui.offsetHeight : 120) + 64;
+  const availW = window.innerWidth - 20, availH = window.innerHeight - chrome;
+  let s = Math.floor(Math.min(availW / 160, availH / 144));
+  s = Math.max(3, Math.min(5, s));
+  cv.style.width = 160 * s + 'px';
+  cv.style.height = 144 * s + 'px';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', fit);
+loadLevel(0);                                  // 预载第 1 关
+game.state = ST.TITLE;
+fit();
+requestAnimationFrame(frameLoop);
+
+/* ---------- 离屏测试钩子(不影响游戏本身) ---------- */
+window.__test = {
+  ST, game, keys, pressed, step, render, LEVELS, parseLevel,
+  C: { MOVE_T, GUARD_T, FALL_T, DIG_T, CRUMBLE_T, OPEN_T, FADE_T, TRAP_T, DEAD_T, INV_T },
+  TW, TH, OX, OY,
+  key(k, down) { if (down && !keys[k]) pressed[k] = 1; keys[k] = down ? 1 : 0; },
+  loadLevel(i) { loadLevel(i); game.state = ST.PLAY; },
+  startGame,
+  tryDig, canUp, canDown, canLR, isSolid, isLadder, isBar, supported, tileAt, holeAt, goldLeft,
+  pl,
+  get holes() { return holes; },
+  get guards() { return guards; },
+  get gold() { return gold; },
+  get revealed() { return revealed; },
+  get score() { return score; },
+  get lives() { return lives; },
+  set lives(v) { lives = v; },
+  get level() { return level; },
+  get deadT() { return deadT; },
+  toTitle() { game.state = ST.TITLE; },
+};
+</script>
+</body>
+</html>

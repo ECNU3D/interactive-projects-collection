@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>模型预览</title>
+<style>body{margin:0;background:#060a14;overflow:hidden}</style>
+<script type="importmap">{ "imports": { "three": "../vendor/three.module.js" } }</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import * as M from '../js/models.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x060a14);
+scene.add(new THREE.AmbientLight(0x99aacc, 1.2));
+const sun = new THREE.DirectionalLight(0xfff2dd, 2.0); sun.position.set(-60, 80, 120); scene.add(sun);
+const fill = new THREE.DirectionalLight(0x88aaff, 0.9); fill.position.set(30, 30, 150); scene.add(fill);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 2000);
+const presets = {
+  '#front': [[0, 10, 38], [0, 0, 0]],
+  '#ship': [[-33, 5, 16], [-33, 0, -1]],
+  '#wolfen': [[30, 4, 14], [30, 0, 0]],
+  '#andross': [[122, 8, -28], [122, -3, -70]],
+  '#sub': [[60, 10, -28], [60, 0, -70]],
+};
+const [cp, cl] = presets[location.hash] || [[15, 60, 165], [15, -4, -40]];
+camera.position.set(...cp);
+camera.lookAt(...cl);
+
+function label(text, x, y, z) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.font = 'bold 40px sans-serif'; ctx.fillStyle = '#7fd4ff';
+  ctx.textAlign = 'center'; ctx.fillText(text, 256, 46);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+  s.position.set(x, y, z); s.scale.set(18, 2.2, 1);
+  scene.add(s);
+}
+
+// 前排：小型机（玩家视角：从 +z 看向 -z）
+const front = [
+  ['Arwing 玩家机', M.buildPlayerShip, -33, 0],
+  ['Drone 无人机', M.buildDrone, -20, 0],
+  ['Fighter 战斗机', M.buildFighter, -7, 0],
+  ['Turret 炮塔', M.buildTurret, 5, 0],
+  ['Tank 坦克', M.buildTank, 17, 0],
+  ['Wolfen 狼机', M.buildWolfen, 30, 0],
+];
+for (const [name, fn, x, z] of front) {
+  const m = fn(); m.position.set(x, 0, z); scene.add(m);
+  label(name, x, 6, z);
+}
+// 后排：Boss
+const bosses = [
+  ['攻击母舰', M.buildBossCruiser, -92],
+  ['陨石粉碎者', M.buildBossBehemoth, -42],
+  ['飞碟母舰', M.buildBossSaucer, 8],
+  ['深海潜艇', M.buildBossSub, 60],
+  ['安德罗斯', M.buildBossAndross, 122],
+];
+for (const [name, fn, x] of bosses) {
+  const m = fn(); m.position.set(x, 0, -70); scene.add(m);
+  label(name, x, 22, -70);
+}
+
+// 地面参考网格
+const grid = new THREE.GridHelper(400, 40, 0x123, 0x112);
+grid.position.y = -8; scene.add(grid);
+
+// 只渲染有限帧，便于无头截图
+let n = 0;
+function loop() { renderer.render(scene, camera); if (++n < 15) requestAnimationFrame(loop); }
+loop();
+</script>
+</body>
+</html>

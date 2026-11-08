@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>GB 10 IN 1 · 合集</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  /* ============ 页面 chrome(Game Boy 机身风) ============ */
+  html,body{
+    margin:0; padding:0; background:#c4bebb;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none; user-select:none;
+    touch-action:none; overscroll-behavior:none;
+  }
+  #wrap{
+    min-height:100vh; box-sizing:border-box;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:14px 10px; gap:10px;
+  }
+  /* 舞台:卡带插在机身顶部(给大卡带留足上方空间) */
+  #stage{ position:relative; margin-top:clamp(150px, 26vw, 250px); }
+  /* 卡带:按真机比例(宽约为机身 2/3),浅灰壳 + 凹槽 + 防滑纹 + 绿标签 */
+  #cart{
+    position:absolute; left:19%; top:0; width:62%;
+    aspect-ratio: 1 / 1.02;
+    transform: translateY(-92%);
+    transition: transform .6s cubic-bezier(.55,.05,.65,1.1);
+    z-index:1; cursor:pointer;
+    background: linear-gradient(180deg,#bcb7bb 0%,#a49fa7 100%);
+    border-radius: 10px 10px 3px 3px;
+    box-shadow: inset 0 3px 0 #d6d1d8, inset 0 -4px 0 #8a8590, 0 5px 14px rgba(40,30,45,.4);
+  }
+  /* 卡带顶部插口凹槽 */
+  #cart::before{
+    content:""; position:absolute; left:7%; right:7%; top:4%; height:6%;
+    background:#8a8590; border-radius:0 0 10px 10px;
+    box-shadow: inset 0 2px 3px rgba(0,0,0,.35);
+  }
+  /* 上部防滑横纹 */
+  #cart::after{
+    content:""; position:absolute; left:0; right:0; top:14%; height:9%;
+    background: repeating-linear-gradient(180deg, #8a8590 0 3px, transparent 3px 7px);
+    opacity:.55;
+  }
+  #cart .lbl{
+    position:absolute; left:8%; right:8%; top:28%; bottom:7%;
+    background:#9bbc0f; border:3px solid #0f380f; border-radius:3px;
+    color:#0f380f; font-weight:bold; letter-spacing:2px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; font-size:clamp(11px, 2.6vw, 20px); line-height:1.3;
+  }
+  #cart .lbl small{ font-size:.55em; letter-spacing:1px; opacity:.75; }
+  /* 插入后:下沉,约七成没入机身(机身 z-index 更高,把卡带盖住) */
+  #cart.in{ transform: translateY(-30%); cursor:default; }
+  /* 机身屏幕外框:灰紫机身 + 深色镜面框 + 圆角 */
+  #bezel{
+    position:relative; z-index:2;
+    background:#5c5660; padding:16px 18px 12px; border-radius:16px;
+    box-shadow: inset 0 2px 0 #7d7681, inset 0 -4px 0 #463f4b, 0 8px 22px rgba(40,30,45,.35);
+  }
+  /* 顶部插槽缝 */
+  #bezel::before{
+    content:""; position:absolute; top:0; left:50%; margin-left:-44px;
+    width:88px; height:5px; background:#463f4b; border-radius:0 0 6px 6px;
+  }
+  #frame{
+    background:#221e26; padding:10px; border-radius:10px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.7);
+  }
+  canvas#gb{
+    display:block; width:480px; height:432px; /* JS 会根据窗口改成整数倍 */
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    background:#221e26; border-radius:2px;   /* 关机时屏幕是黑的 */
+  }
+  #caption{
+    margin-top:8px; text-align:center; color:#a79ea9; font-size:10px; letter-spacing:3px;
+  }
+  /* 常驻按键说明 */
+  #hint{ color:#4a444f; font-size:12px; letter-spacing:1px; text-align:center; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <div id="cart"><div class="lbl">10 IN 1<br>GB COLLECTION<small>INSERT HERE</small></div></div>
+    <div id="bezel">
+      <div id="frame"><canvas id="gb" width="160" height="144"></canvas></div>
+      <div id="caption">GB COLLECTION &middot; 10 IN 1</div>
+    </div>
+  </div>
+  <div id="hint">&#8592;&#8594;&#8593;&#8595; 选择 &nbsp; ENTER 进入 &nbsp; 也可以直接点击/触摸 &nbsp; 浏览器返回键回到合集</div>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+ * GB 10 IN 1 · 合集启动器(单文件,零依赖)
+ * 流程:插卡动画 -> 开机画面(10 IN 1 下落) -> 封面选单 -> 跳转。
+ * 每个游戏都是独立 html,这里只做启动页;加新游戏只需在 GAMES 里加一行。
+ * 选单:5x2 封面网格,图标在上、名字在下,光标/点击/触摸选择。
+ * ===================================================================== */
+
+/* ---------- 游戏列表(cap 为封面下的小字名,每行最长 8 字符) ---------- */
+const GAMES = [
+  { name: 'ALLEYWAY',       file: 'alleyway.html',          cap: ['ALLEYWAY'],        icon: 'alley'   },
+  { name: 'BATTLE CITY',    file: 'battle_city.html',       cap: ['BATTLE', 'CITY'],  icon: 'tank'    },
+  { name: 'BOXXLE',         file: 'boxxle.html',            cap: ['BOXXLE'],          icon: 'box'     },
+  { name: 'DR MARIO',       file: 'dr_mario.html',          cap: ['DR', 'MARIO'],     icon: 'pill'    },
+  { name: 'LODE RUNNER',    file: 'hyper_lode_runner.html', cap: ['LODE', 'RUNNER'],  icon: 'lode'    },
+  { name: 'MOTOCROSS',      file: 'motocross_maniacs.html', cap: ['MOTO', 'CROSS'],   icon: 'moto'    },
+  { name: 'SERPENT',        file: 'serpent.html',           cap: ['SERPENT'],         icon: 'snake'   },
+  { name: 'SPACE INVADERS', file: 'space_invaders.html',    cap: ['SPACE', 'INVADERS'], icon: 'alien'  },
+  { name: 'MARIO LAND',     file: 'super_mario_land.html',  cap: ['MARIO', 'LAND'],   icon: 'mario'   },
+  { name: 'TETRIS',         file: 'tetris.html',            cap: ['TETRIS'],          icon: 'tetris'  },
+];
+
+/* ---------- 基本常量 ---------- */
+const W = 160, H = 144;
+const PAL = ['#0f380f', '#306230', '#8bac0f', '#9bbc0f']; // DMG 4 色绿
+const COLS = 5, ROWS = 2;                          // 封面网格 5x2
+const COL_W = 32, GRID_TOP = 20, ROW_PITCH = 54;   // 网格几何
+const CARD_H = 46;
+
+const cv = document.getElementById('gb');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+function R(x, y, w, h, c) {
+  if (w <= 0 || h <= 0) return;
+  ctx.fillStyle = PAL[c];
+  ctx.fillRect(x | 0, y | 0, w, h);
+}
+
+/* ---------- 音效(Web Audio 合成,首次手势后才初始化) ---------- */
+const Snd = (() => {
+  let ac = null, master = null, noiseBuf = null;
+  function init() {
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain();
+    master.gain.value = 0.14;
+    master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  function sq(freq, delay, dur, vol, slideTo) {
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(delay, dur, vol) {
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const s = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+    s.buffer = noiseBuf;
+    s.loop = true;
+    f.type = 'lowpass';
+    f.frequency.value = 900;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t); s.stop(t + dur + 0.02);
+  }
+  const N = n => 440 * Math.pow(2, (n - 69) / 12);
+  return {
+    init,
+    clack()  { noise(0, 0.05, 0.5); sq(120, 0, 0.08, 0.4, 60); },        // 卡带入槽"咔哒"
+    ding()   { sq(N(84), 0, 0.12, 0.4); sq(N(91), 0.12, 0.2, 0.4); },    // 开机双音
+    cursor() { sq(660, 0, 0.03, 0.3); },                                  // 移动光标
+    go()     { sq(N(72), 0, 0.07, 0.45); sq(N(79), 0.07, 0.12, 0.45); }, // 确认进入
+  };
+})();
+
+/* ---------- 8x8 手绘像素字体(标题用) ---------- */
+const FONT = (() => {
+  const F = {};
+  const def = (ch, rows) => { F[ch] = rows; };
+  def(' ', ["........","........","........","........","........","........","........","........"]);
+  def('0', [".###....","#...#...","#..##...","#.#.#...","##..#...","#...#...",".###....","........"]);
+  def('1', ["..#.....",".##.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('2', [".###....","#...#...","....#...","..##....",".#......","#.......","#####...","........"]);
+  def('3', ["####....","....#...","....#...",".###....","....#...","....#...","####....","........"]);
+  def('4', ["...##...",".#.#....","#..#....","#####...","...#....","...#....","...#....","........"]);
+  def('5', ["#####...","#.......","####....","....#...","....#...","#...#...",".###....","........"]);
+  def('6', [".###....","#.......","#.......","####....","#...#...","#...#...",".###....","........"]);
+  def('7', ["#####....","....#...","...#....","...#....","..#.....","..#.....","..#.....","........"]);
+  def('8', [".###....","#...#...","#...#...",".###....","#...#...","#...#...",".###....","........"]);
+  def('9', [".###....","#...#...","#...#...",".####...","....#...","....#...",".###....","........"]);
+  def('A', [".###....","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('B', ["####....","#...#...","#...#...","####....","#...#...","#...#...","####....","........"]);
+  def('C', [".####...","#.......","#.......","#.......","#.......","#.......",".####...","........"]);
+  def('D', ["####....","#...#...","#...#...","#...#...","#...#...","#...#...","####....","........"]);
+  def('E', ["#####...","#.......","#.......","####....","#.......","#.......","#####...","........"]);
+  def('G', [".####...","#.......","#.......","#.###...","#...#...","#...#...",".####...","........"]);
+  def('I', [".###....","..#.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('N', ["#...#...","##..#...","#.#.#...","#..##...","#...#...","#...#...","#...#...","........"]);
+  def('R', ["####....","#...#...","#...#...","####....","#.#.....","#..#....","#...#...","........"]);
+  def('S', [".####...","#.......","#.......",".###....","....#...","....#...","####....","........"]);
+  def('T', ["#####...","..#.....","..#.....","..#.....","..#.....","..#.....","..#.....","........"]);
+  return F;
+})();
+
+function drawText(str, x, y, color, scale) {
+  scale = scale || 1;
+  str = String(str).toUpperCase();
+  for (let i = 0; i < str.length; i++) {
+    const g = FONT[str[i]] || FONT[' '];
+    for (let r = 0; r < 8; r++) {
+      const row = g[r];
+      for (let c = 0; c < 8; c++) {
+        if (row[c] === '#') R(x + i * 8 * scale + c * scale, y + r * scale, scale, scale, color);
+      }
+    }
+  }
+}
+
+/* ---------- 3x5 迷你像素字体(封面小字名用,每字 4px 宽) ---------- */
+const MINI = (() => {
+  const F = {};
+  const def = (ch, rows) => { F[ch] = rows; };
+  def(' ', ["...","...","...","...","..."]);
+  def('A', [".#.","#.#","###","#.#","#.#"]);
+  def('B', ["##.","#.#","##.","#.#","##."]);
+  def('C', [".##","#..","#..","#..",".##"]);
+  def('D', ["##.","#.#","#.#","#.#","##."]);
+  def('E', ["###","#..","##.","#..","###"]);
+  def('F', ["###","#..","##.","#..","#.."]);
+  def('G', [".##","#..","#.#","#.#",".##"]);
+  def('H', ["#.#","#.#","###","#.#","#.#"]);
+  def('I', ["###",".#.",".#.",".#.","###"]);
+  def('J', ["..#","..#","..#","#.#",".#."]);
+  def('K', ["#.#","#.#","##.","#.#","#.#"]);
+  def('L', ["#..","#..","#..","#..","###"]);
+  def('M', ["#.#","###","###","#.#","#.#"]);
+  def('N', ["##.","#.#","#.#","#.#","#.#"]);
+  def('O', [".#.","#.#","#.#","#.#",".#."]);
+  def('P', ["##.","#.#","##.","#..","#.."]);
+  def('Q', [".#.","#.#","#.#",".#.","..#"]);
+  def('R', ["##.","#.#","##.","#.#","#.#"]);
+  def('S', [".##","#..",".#.","..#","##."]);
+  def('T', ["###",".#.",".#.",".#.",".#."]);
+  def('U', ["#.#","#.#","#.#","#.#","###"]);
+  def('V', ["#.#","#.#","#.#","#.#",".#."]);
+  def('W', ["#.#","#.#","###","###","#.#"]);
+  def('X', ["#.#","#.#",".#.","#.#","#.#"]);
+  def('Y', ["#.#","#.#",".#.",".#.",".#."]);
+  def('Z', ["###","..#",".#.","#..","###"]);
+  def('0', ["###","#.#","#.#","#.#","###"]);
+  def('1', [".#.","##.",".#.",".#.","###"]);
+  def('2', ["###","..#","###","#..","###"]);
+  def('3', ["###","..#",".##","..#","###"]);
+  def('4', ["#.#","#.#","###","..#","..#"]);
+  def('5', ["###","#..","###","..#","###"]);
+  def('6', ["###","#..","###","#.#","###"]);
+  def('7', ["###","..#","..#",".#.",".#."]);
+  def('8', ["###","#.#","###","#.#","###"]);
+  def('9', ["###","#.#","###","..#","###"]);
+  return F;
+})();
+
+/* 画迷你字:逐像素 fillRect,每字 3px 宽 + 1px 间距 */
+function drawMini(str, x, y, color) {
+  str = String(str).toUpperCase();
+  for (let i = 0; i < str.length; i++) {
+    const g = MINI[str[i]] || MINI[' '];
+    for (let r = 0; r < 5; r++)
+      for (let c = 0; c < 3; c++)
+        if (g[r][c] === '#') R(x + i * 4 + c, y + r, 1, 1, color);
+  }
+}
+function miniW(str) { return str.length * 4 - 1; }
+
+/* ---------- 封面像素图标(14x14,'#'=最深 '+'=深 '='=浅 '.'=透明) ---------- */
+const SPR_COL = { '#': 0, '+': 1, '=': 2 };
+const ICONS = {
+  alley: [ // 打砖块:砖墙 + 球 + 挡板
+    "..............",
+    ".###..###..##.",
+    ".###..###..##.",
+    "..............",
+    "..##..##..###.",
+    "..##..##..###.",
+    "..............",
+    "......##......",
+    "......##......",
+    "..............",
+    "....######....",
+    "....######....",
+    "..............",
+    "..............",
+  ],
+  tank: [ // 坦克大战
+    "......##......",
+    "......##......",
+    "....######....",
+    "..##########..",
+    "..#========#..",
+    "..#==####==#..",
+    "..#========#..",
+    "..##########..",
+    "...##....##...",
+    "...##....##...",
+    "...########...",
+    "..............",
+    "..............",
+    "..............",
+  ],
+  box: [ // 推箱子:箱子 + 目标点
+    "..............",
+    "...#######....",
+    "...#=====#....",
+    "...#=#=#=#....",
+    "...#=====#....",
+    "...#######....",
+    "..............",
+    "......###.....",
+    ".....#===#....",
+    ".....#===#....",
+    "......###.....",
+    "..............",
+    "..............",
+    "..............",
+  ],
+  pill: [ // 马里奥医生:胶囊两枚
+    "..............",
+    "..#####.......",
+    ".#=====#......",
+    ".#==#==#......",
+    ".#=====#......",
+    "..#####.......",
+    "..............",
+    ".......#####..",
+    "......#====#..",
+    "......#=#==#..",
+    "......#====#..",
+    ".......#####..",
+    "..............",
+    "..............",
+  ],
+  lode: [ // 淘金者:梯子 + 金块堆
+    "..#....#......",
+    "..#....#......",
+    "..######......",
+    "..#....#......",
+    "..######......",
+    "..#....#......",
+    "..######......",
+    "..#....#..##..",
+    "..#....#.....#",
+    "..######..###.",
+    "..........###.",
+    "....###....##.",
+    "....###.......",
+    "..............",
+  ],
+  moto: [ // 越野摩托
+    "..............",
+    ".........##...",
+    "........###...",
+    "......##.##...",
+    "....#####.....",
+    "...##...##....",
+    "..#..#..#.....",
+    ".#..#...#..#..",
+    ".#..#...#..#..",
+    "..##.....##...",
+    "..............",
+    "..............",
+    "..............",
+    "..............",
+  ],
+  snake: [ // 贪吃蛇
+    "..............",
+    "..#########...",
+    ".##.......#...",
+    ".#....#####...",
+    ".#....#.......",
+    ".######.......",
+    ".#............",
+    ".##########...",
+    ".........##...",
+    "..###...##....",
+    "..#######.....",
+    "..............",
+    "..............",
+    "..............",
+  ],
+  alien: [ // 太空侵略者
+    "..............",
+    "....#....#....",
+    ".....#..#.....",
+    "....######....",
+    "...##.##.##...",
+    "..##########..",
+    "..#.######.#..",
+    "..#.#....#.#..",
+    ".....#..#.....",
+    "......##......",
+    "..............",
+    "..............",
+    "..............",
+    "..............",
+  ],
+  mario: [ // 超级马里奥:奔跑小人
+    "....#####.....",
+    "...#######....",
+    "...##.##.#....",
+    "....####......",
+    "...######.....",
+    "..#.####.#....",
+    "..#..##..#....",
+    "...######.....",
+    "...##..##.....",
+    "..##....##....",
+    "..............",
+    "..............",
+    "..............",
+    "..............",
+  ],
+  tetris: [ // 俄罗斯方块
+    "..............",
+    "..##..........",
+    "..##..........",
+    "..............",
+    "....###.......",
+    ".....#........",
+    "..............",
+    "..#......#....",
+    "..###....#....",
+    "....#...##....",
+    "..............",
+    "...#...#####...",
+    "...###..#......",
+    "..............",
+  ],
+};
+function drawIcon(rows, sx, sy) {              // 14x14 图标放大 2 倍 = 28px
+  for (let r = 0; r < 14; r++)
+    for (let c = 0; c < 14; c++) {
+      const col = SPR_COL[rows[r][c]];
+      if (col !== undefined) R(sx + c * 2, sy + r * 2, 2, 2, col);
+    }
+}
+
+/* ---------- 状态机:idle 待插卡 -> insert 插卡中 -> boot 开机 -> menu 封面选单 -> flash 进入闪屏 ---------- */
+let phase = 'idle';
+let t = 0;                 // 当前阶段计时(ms)
+let blinkT = 0;            // 闪烁计时
+let logoY = -20;           // 开机 logo 下落位置
+let dinged = false;        // 开机音已响
+let sel = 0;               // 选单光标(0-9)
+let launched = -1;         // 已进入的游戏(-1 无)
+
+function insertCart() {
+  if (phase !== 'idle') return;
+  Snd.init();
+  phase = 'insert';
+  t = 0;
+  document.getElementById('cart').classList.add('in');
+}
+function launch(i) {
+  if (phase !== 'menu' || launched >= 0) return;
+  if (i < 0 || i >= GAMES.length) return;
+  launched = i;
+  phase = 'flash';
+  t = 0;
+  Snd.go();
+}
+function moveCursor(dx, dy) {
+  const col = (sel % COLS + dx + COLS) % COLS;
+  const row = (((sel / COLS) | 0) + dy + ROWS) % ROWS;
+  const n = row * COLS + col;
+  if (n !== sel && n < GAMES.length) { sel = n; Snd.cursor(); }
+}
+/* 坐标 -> 封面格号,不在网格内返回 -1 */
+function cardAt(x, y) {
+  const col = (x / COL_W) | 0;
+  if (col < 0 || col >= COLS) return -1;
+  const ry = y - GRID_TOP;
+  if (ry < 0) return -1;
+  const row = (ry / ROW_PITCH) | 0;
+  if (row >= ROWS || ry % ROW_PITCH >= CARD_H) return -1;
+  const i = row * COLS + col;
+  return i < GAMES.length ? i : -1;
+}
+
+/* 键盘 */
+window.addEventListener('keydown', e => {
+  if (phase === 'idle') { e.preventDefault(); insertCart(); return; }
+  if (phase === 'menu') {
+    if (e.code === 'ArrowLeft') { e.preventDefault(); moveCursor(-1, 0); }
+    else if (e.code === 'ArrowRight') { e.preventDefault(); moveCursor(1, 0); }
+    else if (e.code === 'ArrowUp') { e.preventDefault(); moveCursor(0, -1); }
+    else if (e.code === 'ArrowDown') { e.preventDefault(); moveCursor(0, 1); }
+    else if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); launch(sel); }
+  }
+});
+/* 点击/触摸:待机点任意处插卡;选单点哪张封面进哪张 */
+window.addEventListener('pointerdown', e => {
+  if (phase === 'idle') { insertCart(); return; }
+  if (phase === 'menu') {
+    const rect = cv.getBoundingClientRect();
+    const i = cardAt((e.clientX - rect.left) * (W / rect.width),
+                     (e.clientY - rect.top) * (H / rect.height));
+    if (i >= 0) { sel = i; launch(i); }
+  }
+});
+window.addEventListener('pointermove', e => {
+  if (phase !== 'menu') return;
+  const rect = cv.getBoundingClientRect();
+  const i = cardAt((e.clientX - rect.left) * (W / rect.width),
+                   (e.clientY - rect.top) * (H / rect.height));
+  if (i >= 0 && i !== sel) { sel = i; Snd.cursor(); }
+});
+
+/* ---------- 渲染 ---------- */
+function drawCard(i, on, flashOn) {
+  const g = GAMES[i];
+  const cx = (i % COLS) * COL_W, cy = GRID_TOP + ((i / COLS) | 0) * ROW_PITCH;
+  if (on && !flashOn) {                        // 选中:浅色底 + 上下深色条(名字顶格也不打架)
+    R(cx + 1, cy + 1, COL_W - 2, CARD_H, 2);
+    R(cx + 1, cy, COL_W - 2, 1, 0); R(cx + 1, cy + CARD_H + 1, COL_W - 2, 1, 0);
+  }
+  drawIcon(ICONS[g.icon], cx + 2, cy + 2);     // 封面图标
+  const lines = g.cap;                         // 图标下面的小字名字
+  const ty = lines.length === 1 ? cy + 35 : cy + 32;
+  for (let k = 0; k < lines.length; k++) {
+    drawMini(lines[k], cx + ((COL_W - miniW(lines[k])) / 2 | 0), ty + k * 6, 0);
+  }
+}
+
+function render() {
+  if (phase === 'idle' || phase === 'insert') {
+    ctx.clearRect(0, 0, W, H);                 // 关机黑屏(露出 CSS 深色底)
+    if (phase === 'idle' && ((blinkT >> 9) & 1) === 0) {
+      drawText('INSERT', 56, 56, 2);           // 闪烁提示插卡
+      drawText('CART', 60, 72, 2);
+    }
+    return;
+  }
+  R(0, 0, W, H, 3);                            // 开机后:最浅色底
+  if (phase === 'boot') {
+    drawText('10 IN 1', 24, logoY | 0, 0, 2);  // logo 从屏幕上方落下
+    if (dinged) drawText('GB COLLECTION', 28, 88, 1);
+    return;
+  }
+  /* 封面选单/进入闪屏 */
+  const flashOn = phase === 'flash' && ((t >> 6) & 1) === 0;
+  R(0, 0, W, 16, 0);                           // 顶部标题条
+  drawText('GB 10 IN 1', 28, 4, 3);
+  for (let i = 0; i < GAMES.length; i++) drawCard(i, i === sel, flashOn);
+  if (((blinkT >> 9) & 1) === 0) drawText('ENTER=PLAY', 40, 134, 1);
+}
+
+/* ---------- 主循环 ---------- */
+let lastTs = 0;
+function frameLoop(ts) {
+  requestAnimationFrame(frameLoop);
+  if (!lastTs) lastTs = ts;
+  let dt = ts - lastTs;
+  lastTs = ts;
+  if (dt > 250) dt = 250;
+  t += dt;
+  blinkT += dt;
+  if (phase === 'insert' && t > 620) {         // 卡带到底
+    phase = 'boot';
+    t = 0;
+    Snd.clack();
+  } else if (phase === 'boot') {
+    logoY += (64 - logoY) * 0.18;              // 缓动下落
+    if (!dinged && 64 - logoY < 1) { logoY = 64; dinged = true; Snd.ding(); }
+    if (t > 1500) { phase = 'menu'; t = 0; }
+  } else if (phase === 'flash' && t > 320) {   // 闪屏结束,跳进游戏
+    location.href = GAMES[launched].file;
+  }
+  render();
+}
+
+/* ---------- 画布整数倍放大(2~5 倍,给大卡带留空间) ---------- */
+function fit() {
+  const hint = document.getElementById('hint');
+  const marginTop = Math.min(window.innerWidth * 0.26, 250);
+  const chrome = marginTop + (hint ? hint.offsetHeight : 20) + 116;
+  const availW = window.innerWidth - 20, availH = window.innerHeight - chrome;
+  let s = Math.floor(Math.min(availW / 160, availH / 144));
+  s = Math.max(2, Math.min(5, s));
+  cv.style.width = 160 * s + 'px';
+  cv.style.height = 144 * s + 'px';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', fit);
+fit();
+requestAnimationFrame(frameLoop);
+
+/* ---------- 离屏测试钩子 ---------- */
+window.__test = {
+  GAMES, ICONS,
+  get phase() { return phase; },
+  get sel() { return sel; },
+  get logoY() { return logoY; },
+  insert: insertCart,
+  launch,
+  moveCursor,
+  cardAt,
+  render,
+  tick(ts) { frameLoop(ts); },               // 手动驱动一帧(vm 测试用)
+};
+</script>
+</body>
+</html>

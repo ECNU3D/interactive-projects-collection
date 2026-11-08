@@ -1,0 +1,381 @@
+# 说书人「书中此处」——书外解说层。
+# 游戏时间点在偷桃之前，故一律用「日后你……」的说书口吻转述第 3–7 回，
+# 不伪装成局内旁白。凡 quote: true 者逐字出自原著，见 quotes-verified.json。
+id: shuoshu
+name: 说书人
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Humorous_Elder"
+  speed: 1.05
+  pitch: -2
+  emotion: calm
+
+greet:
+  # 一次性引子：仅在玩家有史以来第一次触发剧情点时，插在正文之前播一次
+  - id: lore_intro_01
+    speaker: npc
+    text: "天宫的每一处，书里都写过。你脚下这块地方，也写过。"
+
+topics:
+  - id: nantianmen
+    label: 南天门
+    place: nantianmen
+    at: [0, 2, 596]
+    source: 第 4 回、第 5 回
+    lines:
+      - id: lore_nantianmen_01
+        speaker: npc
+        text: "书中此处——你头一回上天，就在这门口被拦下了。增长天王领着庞、刘、苟、毕、邓、辛、张、陶一班天丁，枪刀剑戟拦住去路，不放你进。"
+      - id: lore_nantianmen_02
+        speaker: npc
+        text: "你骂金星：这个金星老儿乃奸诈之徒！"
+        quote: true
+      - id: lore_nantianmen_03
+        speaker: npc
+        text: "金星说：大王息怒。你自来未曾到此天堂，却又无名，众天丁又与你素不相识，他怎肯放你擅入？等如今见了天尊，授了仙箓，注了官名，向后随你出入，谁复挡也？"
+        quote: true
+      - id: lore_nantianmen_04
+        speaker: npc
+        text: "再日后，你偷了金丹，酒醒自知不妙，不敢走旧路——从西天门，使个隐身法，逃了。"
+
+  - id: tianhe
+    label: 天河渡口
+    place: tianhe
+    at: [0, 2, 918]
+    source: 第 3 回、第 63 回
+    lines:
+      - id: lore_tianhe_01
+        speaker: npc
+        text: "书中此处——你耳朵里那根棒子，就是从这条河的底下来的。"
+      - id: lore_tianhe_02
+        speaker: npc
+        text: "当年东海龙宫，大杆刀你嫌轻，九股叉三千六百斤你嫌轻，画杆方天戟七千二百斤你还嫌轻。"
+      - id: lore_tianhe_03
+        speaker: npc
+        text: "龙婆献：天河定底的神珍铁。"
+        quote: true
+      - id: lore_tianhe_04
+        speaker: npc
+        text: "近前一看：两头是两个金箍，中间乃一段乌铁。"
+        quote: true
+      - id: lore_tianhe_05
+        speaker: npc
+        text: "上刻一行字：如意金箍棒，重一万三千五百斤。"
+        quote: true
+      - id: lore_tianhe_06
+        speaker: npc
+        text: "河上这些水寨，眼下还是天蓬元帅的地盘。"
+      - id: lore_tianhe_07
+        speaker: npc
+        text: "他掌管天河八万水兵。"
+        quote: true
+
+  - id: gongdianhai
+    label: 宫殿海
+    place: gongdianhai
+    at: [-150, 142, 210]
+    source: 第 4 回、第 7 回
+    lines:
+      - id: lore_gongdianhai_01
+        speaker: npc
+        text: "书中此处——你头一回走进天宫，看见的就是这一片。"
+      - id: lore_gongdianhai_02
+        speaker: npc
+        text: "一宫宫脊吞金稳兽，一殿殿柱列玉麒麟。"
+        quote: true
+      - id: lore_gongdianhai_03
+        speaker: npc
+        text: "三十三座天宫，七十二重宝殿。那时候你只顾着看，还不知道自己会在这里做官，也不知道会在这里动手。"
+      - id: lore_gongdianhai_04
+        speaker: npc
+        text: "日后你从八卦炉里跳出来，就在这一片宫殿里打。"
+      - id: lore_gongdianhai_05
+        speaker: npc
+        text: "打得：九曜星闭门闭户，四天王无影无形。"
+        quote: true
+
+  - id: tongmingdian
+    label: 通明殿
+    place: tongmingdian
+    at: [0, 142, 62]
+    source: 第 3 回、第 7 回
+    lines:
+      - id: lore_tongmingdian_01
+        speaker: npc
+        text: "书中此处——你还没上天的时候，这里就先收到了两封告你的表。"
+      - id: lore_tongmingdian_02
+        speaker: npc
+        text: "一封是东海龙王敖广的，天师丘弘济引奏；一封是幽冥地藏王的，天师葛仙翁引奏。你抢了兵器、销了死籍，两处都告到这里来了。"
+      - id: lore_tongmingdian_03
+        speaker: npc
+        text: "玉帝本要发兵拿你，太白金星却献了招安的策。"
+      - id: lore_tongmingdian_04
+        speaker: npc
+        text: "依卿所奏。"
+        quote: true
+      - id: lore_tongmingdian_05
+        speaker: npc
+        text: "再日后，你一路打进来。"
+      - id: lore_tongmingdian_06
+        speaker: npc
+        text: "书里写：只打到通明殿里，灵霄殿外。"
+        quote: true
+
+  - id: lingxiaodian
+    label: 灵霄宝殿
+    place: lingxiaodian
+    at: [0, 142, -160]
+    source: 第 4 回、第 7 回
+    lines:
+      - id: lore_lingxiaodian_01
+        speaker: npc
+        text: "书中此处——你第一次进这座殿，不朝礼，只挺身在旁，唱了个大喏。"
+      - id: lore_lingxiaodian_02
+        speaker: npc
+        text: "老孙便是。"
+        quote: true
+      - id: lore_lingxiaodian_03
+        speaker: npc
+        text: "满殿仙卿都惊得没了声。"
+      - id: lore_lingxiaodian_04
+        speaker: npc
+        text: "玉帝却说：那孙悟空乃下界妖仙，初得人身，不知朝礼，且姑恕罪。"
+        quote: true
+      - id: lore_lingxiaodian_05
+        speaker: npc
+        text: "日后你打到这门口，被一个人挡住——佑圣真君的佐使王灵官。"
+      - id: lore_lingxiaodian_06
+        speaker: npc
+        text: "他按鞭大喝：泼猴何往？有吾在此，切莫猖狂。"
+        quote: true
+      - id: lore_lingxiaodian_07
+        speaker: npc
+        text: "你要玉帝搬出去，把天宫让给你。"
+      - id: lore_lingxiaodian_08
+        speaker: npc
+        text: "你说：皇帝轮流做，明年到我家。"
+        quote: true
+      - id: lore_lingxiaodian_09
+        speaker: npc
+        text: "有一件事书里没让你如愿——从头到尾，你没能打进这座殿。"
+
+  - id: yumajian
+    label: 御马监
+    place: yumajian
+    at: [340, 142, 92]
+    source: 第 4 回
+    lines:
+      - id: lore_yumajian_01
+        speaker: npc
+        text: "书中此处——你上天的第一个官，就在这里。弼马温。"
+      - id: lore_yumajian_02
+        speaker: npc
+        text: "你干得很好，昼夜不睡。"
+      - id: lore_yumajian_03
+        speaker: npc
+        text: "滋养马匹，那些天马见了他，泯耳攒蹄，倒养得肉肥膘满。"
+        quote: true
+      - id: lore_yumajian_04
+        speaker: npc
+        text: "半月有余，同僚请酒。席间你才想起问一句：这弼马温，是个几品？"
+      - id: lore_yumajian_05
+        speaker: npc
+        text: "没有品从。"
+        quote: true
+      - id: lore_yumajian_06
+        speaker: npc
+        text: "你又问：没品，想是大之极也？"
+      - id: lore_yumajian_07
+        speaker: npc
+        text: "不大，不大，只唤做『未入流』。"
+        quote: true
+      - id: lore_yumajian_08
+        speaker: npc
+        text: "你问：怎么叫做未入流？"
+      - id: lore_yumajian_09
+        speaker: npc
+        text: "末等。这样官儿最低最小，只可与他看马。"
+        quote: true
+      - id: lore_yumajian_10
+        speaker: npc
+        text: "你心头火起，咬牙大怒，推倒公案，耳中取出宝贝，一路打出御马监去了。"
+
+  - id: zhanyaotai
+    label: 斩妖台
+    place: zhanyaotai
+    at: [390, 145, -270]
+    source: 第 6 回、第 7 回
+    lines:
+      - id: lore_zhanyaotai_01
+        speaker: npc
+        text: "书中此处——日后你被二郎真君缠住。老君在天门上把金钢琢往下一掼，可可的着你头上一下；细犬赶上来，照腿肚子上一口。"
+      - id: lore_zhanyaotai_02
+        speaker: npc
+        text: "被七圣一拥按住，即将绳索捆绑，使勾刀穿了琵琶骨，再不能变化。"
+        quote: true
+      - id: lore_zhanyaotai_03
+        speaker: npc
+        text: "接着就是判决。"
+      - id: lore_zhanyaotai_04
+        speaker: npc
+        text: "玉帝传旨：押至斩妖台，将这厮碎剁其尸。"
+        quote: true
+      - id: lore_zhanyaotai_05
+        speaker: npc
+        text: "就是这台子：刀砍斧剁，枪刺剑刳，莫想伤及其身。"
+        quote: true
+      - id: lore_zhanyaotai_06
+        speaker: npc
+        text: "南斗星君教火部众神放火煨烧，烧不着。雷部众神雷屑钉打，越发不能伤损一毫。他们拿你没办法。"
+      - id: lore_zhanyaotai_07
+        speaker: npc
+        text: "台上如今无人，无刀无斧。只有一根柱子，和满台的风。"
+
+  - id: qitian-fu
+    label: 齐天大圣府
+    place: qitian-fu
+    at: [310, 282, 122]
+    source: 第 4 回、第 5 回
+    lines:
+      - id: lore_qitianfu_01
+        speaker: npc
+        text: "书中此处——这座府是为你新盖的。玉帝差工干官张、鲁二班，在蟠桃园右首起了齐天大圣府。"
+      - id: lore_qitianfu_02
+        speaker: npc
+        text: "府里设两个司：安静司、宁神司。各有仙吏、监丞、监副侍奉。五斗星君送你到任，赐御酒二瓶、金花十朵。"
+      - id: lore_qitianfu_03
+        speaker: npc
+        text: "这是太白金星的主意：名是齐天大圣，只不与他事管，不与他俸禄，且养在天壤之间，收他的邪心，使不生狂妄。"
+        quote: true
+      - id: lore_qitianfu_04
+        speaker: npc
+        text: "你不知道，也不在意。"
+      - id: lore_qitianfu_05
+        speaker: npc
+        text: "那阵子你见三清称个『老』字，逢四帝道个『陛下』。"
+        quote: true
+      - id: lore_qitianfu_06
+        speaker: npc
+        text: "跟满天的星宿都称兄道弟。"
+
+  - id: pantaoyuan
+    label: 蟠桃园
+    place: pantaoyuan
+    at: [0, 282, -42]
+    source: 第 5 回
+    lines:
+      - id: lore_pantaoyuan_01
+        speaker: npc
+        text: "书中此处——你现在管的这个园子，是许旌阳给玉帝出的主意。"
+      - id: lore_pantaoyuan_02
+        speaker: npc
+        text: "他说：无事闲游，结交天上众星宿，不论高低，俱称朋友，恐后闲中生事。"
+        quote: true
+      - id: lore_pantaoyuan_03
+        speaker: npc
+        text: "玉帝就说：你且权管那蟠桃园，早晚好生在意。"
+        quote: true
+      - id: lore_pantaoyuan_04
+        speaker: npc
+        text: "日后你说：汝等且出门外伺候，让我在这亭上少憩片时。"
+        quote: true
+      - id: lore_pantaoyuan_05
+        speaker: npc
+        text: "人一走，你就脱了冠服，爬上大树，拣那熟透的大桃摘来吃。吃饱了变做二寸长的个人儿，在那大树梢头浓叶之下睡着。"
+      - id: lore_pantaoyuan_06
+        speaker: npc
+        text: "七衣仙女来摘桃，把你惊醒。你问：可请我么？她们说不曾听得说。你就使了个定身法——住！住！住！"
+
+  - id: yaochi
+    label: 瑶池
+    place: yaochi
+    at: [-290, 282, 12]
+    source: 第 5 回、第 6 回
+    lines:
+      - id: lore_yaochi_01
+        speaker: npc
+        text: "书中此处——蟠桃胜会在这里开。宾客名单很长，从上八洞排到下八洞。名单上没有你。"
+      - id: lore_yaochi_02
+        speaker: npc
+        text: "日后你在半路上截住赤脚大仙，诓他说：玉帝因老孙觔斗云疾，着老孙五路邀请列位，先至通明殿下演礼，后方去赴宴。他就掉头走了。"
+      - id: lore_yaochi_03
+        speaker: npc
+        text: "你变作赤脚大仙的模样进来，宝阁里铺设得齐齐整整。"
+      - id: lore_yaochi_04
+        speaker: npc
+        text: "却还未有仙来。"
+        quote: true
+      - id: lore_yaochi_05
+        speaker: npc
+        text: "毫毛变作瞌睡虫，放倒了一班造酒的仙官。你就着缸，挨着瓮，放开量痛饮一番，酕醄醉了。"
+      - id: lore_yaochi_06
+        speaker: npc
+        text: "第六回，观音菩萨来赴会。"
+      - id: lore_yaochi_07
+        speaker: npc
+        text: "荒荒凉凉，席面残乱。"
+        quote: true
+
+  - id: guanghangong
+    label: 广寒宫
+    place: guanghangong
+    at: [-750, 432, -285]
+    source: 第 8 回、第 19 回
+    lines:
+      - id: lore_guanghangong_01
+        speaker: npc
+        text: "书中此处——这座宫，日后会跟你的路搭上关系，虽说眼下还没有你的事。"
+      - id: lore_guanghangong_02
+        speaker: npc
+        text: "这里住着太阴星君和嫦娥。天蓬元帅——就是天河渡口那位——日后会闯到这儿来。"
+      - id: lore_guanghangong_03
+        speaker: npc
+        text: "书里写在后头的，是他自己的话：我本是天河里天蓬元帅，只因带酒戏弄嫦娥，玉帝把我打了二千锤，贬下尘凡。"
+        quote: true
+      - id: lore_guanghangong_04
+        speaker: npc
+        text: "很多年以后，他会跟你一路往西走。但这些事眼下都还没发生——他现在还在天河上，好好的。"
+
+  - id: doushuaigong
+    label: 兜率宫
+    place: doushuaigong
+    at: [460, 562, 322]
+    source: 第 5 回、第 7 回
+    lines:
+      - id: lore_doushuaigong_01
+        speaker: npc
+        text: "书中此处——日后你在瑶池喝醉，脚下一时不稳，走错了路。不是齐天府，却是兜率天宫。"
+      - id: lore_doushuaigong_02
+        speaker: npc
+        text: "老君与燃灯古佛在三层高阁朱陵丹台上讲道，丹房里一个人没有。炉左右安放着五个葫芦，里头是炼好的九转金丹。"
+      - id: lore_doushuaigong_03
+        speaker: npc
+        text: "你把那葫芦都倾出来，都吃了。"
+      - id: lore_doushuaigong_04
+        speaker: npc
+        text: "如吃炒豆相似。"
+        quote: true
+      - id: lore_doushuaigong_05
+        speaker: npc
+        text: "再日后，斩妖台上砍你不死，老君把你收进这座八卦炉。你钻在巽宫位下。"
+      - id: lore_doushuaigong_06
+        speaker: npc
+        text: "巽乃风也，有风则无火。"
+        quote: true
+      - id: lore_doushuaigong_07
+        speaker: npc
+        text: "只是那风搅得烟来，熏了你一双眼。"
+      - id: lore_doushuaigong_08
+        speaker: npc
+        text: "七七四十九日，炉开。"
+        quote: true
+      - id: lore_doushuaigong_09
+        speaker: npc
+        text: "你将身一纵，跳出丹炉，唿喇一声，蹬倒八卦炉。"
+        quote: true
+      # 原文是「被他一捽」。此处不做代词替换——改字须改白名单，
+      # 而白名单是覆盖率门槛的参照物，改了它门槛就失明（见 _09 的同款写法）。
+      - id: lore_doushuaigong_10
+        speaker: npc
+        text: "老君赶上抓一把，被他一捽，捽了个倒栽葱。"
+        quote: true

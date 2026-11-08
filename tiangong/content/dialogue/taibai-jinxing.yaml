@@ -1,0 +1,107 @@
+id: taibai_jinxing
+name: 太白金星
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Humorous_Elder"
+  speed: 1.05
+  pitch: 1
+  emotion: happy
+
+greet:
+  - id: greet_01
+    text: "大圣，别来无恙？"
+  - id: greet_02
+    text: "(chuckle)老汉正要去寻你，你倒先来了。"
+  - id: greet_03
+    text: "大圣今日气色好，想是蟠桃园里得意。"
+
+topics:
+  - id: zhaoan
+    label: "当年招安的事"
+    source: "第3回、第4回"
+    lines:
+      - id: zhaoan_01
+        text: "三界中凡有九窍者，皆可修仙。"
+        quote: true
+      - id: zhaoan_02
+        text: "一则不动众劳师，二则收仙有道也。"
+        quote: true
+      - id: zhaoan_03
+        text: "这两句话，是天尊的慈恩，也是老汉的体面。"
+      - id: w_tb_zhaoan_04
+        speaker: pc
+        text: "老星，你这话说得漂亮。只是招上来给的官，忒小了些。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+    next:
+      - { label: "那我这官算什么？", goto: guanzhi }
+      - { label: "罢了。", goto: __end }
+  - id: guanzhi
+    label: "有官无禄"
+    source: "第4回"
+    lines:
+      - id: guanzhi_01
+        text: "名是齐天大圣，只不与他事管，不与他俸禄，且养在天壤之间，收他的邪心，使不生狂妄。"
+        quote: true
+      - id: w_tb_guanzhi_02
+        speaker: pc
+        text: "好！好！好一个养在天壤之间。老孙今日才听懂。"
+        voice_setting: { emotion: angry, speed: 1.25 }
+      - id: guanzhi_03
+        text: "大王息怒。"
+        quote: true
+      - id: guanzhi_04
+        text: "大圣细算：名是齐天，府在蟠桃园右首，安静、宁神二司伺候着——这体面，三清四帝以下，谁有？"
+      - id: w_tb_guanzhi_05
+        speaker: pc
+        text: "体面是体面，就是不管饱。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+    next:
+      - { label: "当初南天门拦我的事呢？", goto: jinjie }
+      - { label: "哼。", goto: __end }
+  - id: jinjie
+    label: "南天门解围"
+    source: "第4回"
+    lines:
+      - id: jinjie_01
+        text: "等如今见了天尊，授了仙箓，注了官名，向后随你出入，谁复挡也？"
+        quote: true
+      - id: w_tb_jinjie_02
+        speaker: pc
+        text: "果然没人挡了。老孙如今走进走出，那些天丁只有赔笑的。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: jinjie_03
+        text: "这便是授箓的好处。大圣，体面都是一点一点挣的，急不得。"
+    next:
+      - { label: "你倒是会说话。", goto: renqing }
+      - { label: "去罢。", goto: __end }
+  - id: renqing
+    label: "讨人情"
+    source: "第83回"
+    lines:
+      - id: renqing_01
+        text: "你这猴忒恁寡情。"
+        quote: true
+      - id: w_tb_renqing_02
+        speaker: pc
+        text: "老孙如何寡情？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: renqing_03
+        text: "两道圣旨，都是老汉背下界去的。这个跑腿的情分，大圣认也不认？"
+      - id: w_tb_renqing_04
+        speaker: pc
+        text: "认，认。老孙记下了。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+
+fallback:
+  - id: fb_01
+    text: "大圣说笑了。"
+  - id: fb_02
+    text: "这个么……老汉只管传旨，别的事，不在老汉的文书里。"
+  - id: fb_03
+    text: "你问的事，天曹自有案卷。老汉不敢多口。"
+
+bye:
+  - id: bye_01
+    text: "大圣慢走。"
+  - id: bye_02
+    text: "若有旨意下来，老汉再来寻你。"

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>宝可梦 × 我的世界</title>
+<style>
+  :root{ --mc-gold:#FCDC5F; --mc-gray:#AAAAAA; }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; }
+  html,body{ width:100%; height:100%; overflow:hidden; background:#000;
+    font-family:'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif; }
+  #scene{ position:absolute; inset:0; display:block; }
+  #ui{ position:absolute; inset:0; pointer-events:none; }
+  .hidden{ display:none !important; }
+
+  .mc-panel{ color:#fff; padding:12px 14px; background:rgba(16,0,22,.92);
+    border:2px solid #444; box-shadow: inset 0 0 0 2px #222, 0 4px 0 rgba(0,0,0,.4); }
+  .mc-btn{ display:inline-block; cursor:pointer; color:#fff; font-family:inherit;
+    font-size:14px; font-weight:700; text-shadow:2px 2px 0 #383838; letter-spacing:1px;
+    padding:9px 18px; border:2px solid #000; pointer-events:auto;
+    background:linear-gradient(#9c9c9c,#6e6e6e);
+    box-shadow: inset 2px 2px 0 #bdbdbd, inset -2px -2px 0 #494949; }
+  .mc-btn:hover{ background:linear-gradient(#8fa0e6,#5f6fbb); color:#fffbc9;
+    box-shadow: inset 2px 2px 0 #b3c0f5, inset -2px -2px 0 #3c477e; }
+  .mc-btn:active{ transform:translateY(2px); }
+  .mc-btn.gold{ background:linear-gradient(#e8c84a,#b8942a); }
+  .mc-btn.green{ background:linear-gradient(#6abe6a,#3e8e41); }
+  .mc-btn.red{ background:linear-gradient(#d05a5a,#9c3030); }
+  .mc-btn.small{ font-size:12px; padding:5px 10px; }
+
+  /* ===== HUD ===== */
+  #money{ position:absolute; right:170px; top:14px; font-size:16px; font-weight:700;
+    color:var(--mc-gold); text-shadow:2px 2px 0 #3e3308; background:rgba(0,0,0,.45);
+    padding:6px 12px; border:2px solid #000; }
+  #minimap{ position:absolute; right:14px; top:14px; border:3px solid #000;
+    box-shadow:0 0 0 2px #4a4a4a; image-rendering:pixelated; }
+  #partybar{ position:absolute; left:12px; top:80px; display:flex; flex-direction:column; gap:6px; }
+  .pm-slot{ width:52px; padding:4px 3px; background:rgba(0,0,0,.5); border:2px solid #000;
+    color:#fff; font-size:10px; text-align:center; position:relative; cursor:pointer; pointer-events:auto; }
+  .pm-slot.active{ outline:3px solid var(--mc-gold); }
+  .pm-slot .hp{ height:4px; background:#333; margin-top:3px; }
+  .pm-slot .hp>div{ height:100%; background:#6abe6a; }
+  .pm-slot .st{ position:absolute; left:1px; top:1px; font-size:10px; }
+  .pm-slot.fainted{ opacity:.45; }
+
+  #activebar{ position:absolute; left:50%; bottom:14px; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:6px; }
+  #activemon{ display:flex; align-items:center; gap:10px; background:rgba(0,0,0,.5);
+    border:2px solid #000; padding:6px 12px; color:#fff; min-width:340px; }
+  #activemon .nm{ font-size:14px; font-weight:700; text-shadow:1px 1px 0 #333; }
+  #activemon .lv{ font-size:11px; color:var(--mc-gold); }
+  #activemon .hpbar{ flex:1; height:10px; background:#333; border:1px solid #000; position:relative; }
+  #activemon .hpbar>div{ height:100%; background:#6abe6a; transition:width .2s; }
+  #activemon .hptext{ font-size:10px; color:#ddd; }
+  #activemon .expbar{ height:3px; background:#222; border:1px solid #000; }
+  #activemon .expbar>div{ height:100%; background:#5f9fdf; }
+  #activemon .sticon{ font-size:14px; }
+  #hotbars{ display:flex; gap:14px; }
+  .hb-row{ display:flex; gap:3px; }
+  .hb{ width:56px; height:56px; background:#8b8b8b; border:3px solid; border-color:#373737 #fff #fff #373737;
+    position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-size:10px; color:#fff; text-shadow:1px 1px 0 #333; }
+  .hb .key{ position:absolute; left:2px; top:1px; font-size:10px; font-weight:700; color:#fffb; }
+  .hb .icon{ font-size:18px; }
+  .hb .cd{ position:absolute; inset:0; background:rgba(0,0,0,.65); display:flex;
+    align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+  .hb.empty{ opacity:.4; }
+  .hb .cnt{ position:absolute; right:2px; bottom:1px; font-size:10px; font-weight:700; }
+
+  #announce{ position:absolute; left:50%; top:18%; transform:translateX(-50%);
+    font-size:20px; font-weight:700; color:#fff; text-shadow:2px 2px 0 #333;
+    background:rgba(0,0,0,.5); padding:8px 20px; border:2px solid #000; opacity:0; transition:opacity .3s; }
+  #hint{ position:absolute; left:50%; bottom:96px; transform:translateX(-50%);
+    font-size:13px; color:#ffe9a8; text-shadow:1px 1px 0 #333; opacity:0; transition:opacity .3s; }
+  #interact-tip{ position:absolute; left:50%; bottom:140px; transform:translateX(-50%);
+    font-size:14px; color:#fff; text-shadow:1px 1px 0 #333; background:rgba(0,0,0,.55);
+    padding:5px 14px; border:2px solid #000; }
+  #vignette{ position:absolute; inset:0; pointer-events:none; opacity:0;
+    background:radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,.45) 100%); }
+
+  .floater{ position:absolute; font-weight:700; font-size:15px; text-shadow:1px 1px 0 #222;
+    pointer-events:none; white-space:nowrap; transform:translate(-50%,-50%); }
+  .mobbar{ position:absolute; width:64px; transform:translate(-50%,-100%); pointer-events:none; }
+  .mobbar .nm{ font-size:9px; color:#fff; text-shadow:1px 1px 0 #222; text-align:center; white-space:nowrap; }
+  .mobbar .hp{ height:5px; background:#333; border:1px solid #000; }
+  .mobbar .hp>div{ height:100%; background:#6abe6a; }
+  .mobbar .st{ position:absolute; right:-14px; top:-2px; font-size:10px; }
+
+  /* ===== 对话框 ===== */
+  #dialog{ position:absolute; left:50%; bottom:90px; transform:translateX(-50%);
+    width:620px; max-width:92vw; background:rgba(16,0,22,.94); border:3px solid #000;
+    box-shadow:inset 0 0 0 2px #5b21b6; color:#fff; padding:14px 18px; pointer-events:auto; }
+  #dialog .speaker{ color:var(--mc-gold); font-weight:700; font-size:14px; margin-bottom:6px; text-shadow:1px 1px 0 #3e3308; }
+  #dialog .text{ font-size:16px; line-height:1.8; min-height:30px; text-shadow:1px 1px 0 #222; white-space:pre-wrap; }
+  #dialog .next{ text-align:right; font-size:11px; color:#aaa; margin-top:6px; }
+  #dialog .choices{ display:flex; gap:10px; margin-top:10px; }
+
+  /* ===== 大面板（Tab/商店/菜单） ===== */
+  .big-panel{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:720px; max-width:94vw; max-height:86vh; overflow:auto; background:rgba(20,20,24,.97);
+    border:3px solid #000; box-shadow:inset 0 0 0 2px #4a4a4a, 0 8px 0 rgba(0,0,0,.5);
+    color:#fff; padding:16px; pointer-events:auto; }
+  .big-panel h2{ color:var(--mc-gold); font-size:17px; text-shadow:2px 2px 0 #3e3308; margin-bottom:10px; }
+  .big-panel .tabs{ display:flex; gap:6px; margin-bottom:10px; }
+  .big-panel .tab{ padding:6px 16px; background:#333; border:2px solid #000; cursor:pointer; font-weight:700; }
+  .big-panel .tab.sel{ background:#5f6fbb; color:#fffbc9; }
+  .close-x{ position:absolute; right:10px; top:8px; cursor:pointer; color:#aaa; font-size:18px; }
+
+  .mon-card{ display:flex; align-items:center; gap:10px; background:#2a2a30; border:2px solid #000;
+    padding:8px 10px; margin-bottom:6px; }
+  .mon-card.active{ outline:2px solid var(--mc-gold); }
+  .mon-card .dot{ width:26px; height:26px; border:2px solid rgba(0,0,0,.55);
+    box-shadow: inset -4px -4px 0 rgba(0,0,0,.22), inset 4px 4px 0 rgba(255,255,255,.28); }
+  .mon-card .info{ flex:1; }
+  .mon-card .nm{ font-size:14px; font-weight:700; }
+  .mon-card .sub{ font-size:11px; color:#aaa; }
+  .mon-card .hp{ height:7px; background:#222; border:1px solid #000; width:150px; }
+  .mon-card .hp>div{ height:100%; background:#6abe6a; }
+  .mon-card .iv{ color:#FCDC5F; font-size:11px; letter-spacing:1px; }
+  .mon-card button{ margin-left:4px; }
+
+  .bag-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .bag-item{ background:#2a2a30; border:2px solid #000; padding:8px; cursor:pointer; text-align:center; }
+  .bag-item:hover{ background:#3a3a44; }
+  .bag-item .icon{ font-size:22px; }
+  .bag-item .nm{ font-size:12px; margin-top:2px; }
+  .bag-item .cnt{ font-size:11px; color:var(--mc-gold); }
+
+  .shop-row{ display:flex; align-items:center; gap:10px; background:#2a2a30; border:2px solid #000;
+    padding:7px 10px; margin-bottom:5px; }
+  .shop-row .icon{ font-size:20px; }
+  .shop-row .nm{ flex:1; font-size:13px; }
+  .shop-row .nm .desc{ display:block; font-size:10px; color:#999; }
+  .shop-row .pr{ color:var(--mc-gold); font-weight:700; font-size:13px; }
+  .shop-row .cnt{ color:#aaa; font-size:11px; }
+
+  /* ===== 进化演出 ===== */
+  #evolution{ position:absolute; inset:0; background:#000; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; pointer-events:auto; z-index:50; }
+  #evolution .stage{ font-size:22px; color:#fff; text-shadow:2px 2px 0 #333; margin-bottom:18px; }
+  #evolution .evo-canvas{ width:300px; height:300px; image-rendering:pixelated; }
+  #evolution .tip{ color:#aaa; margin-top:18px; font-size:14px; }
+
+  /* ===== 标题界面 ===== */
+  #title{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; background:linear-gradient(#1a2a4a,#0a0a1a); pointer-events:auto; z-index:60; }
+  #title h1{ font-size:44px; color:var(--mc-gold); text-shadow:4px 4px 0 #3e3308; letter-spacing:4px; margin-bottom:8px; }
+  #title .sub{ color:#9fc5e8; font-size:16px; margin-bottom:40px; text-shadow:1px 1px 0 #222; }
+  #title .mc-btn{ font-size:17px; margin:6px; padding:13px 34px; }
+  #title .foot{ position:absolute; bottom:20px; color:#556; font-size:11px; }
+
+  #loading{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; background:#0a0a1a; color:#fff; z-index:70; pointer-events:auto; }
+  #loading .bar{ width:300px; height:14px; background:#222; border:2px solid #000; margin-top:12px; }
+  #loading .bar>div{ height:100%; background:#6abe6a; width:0%; transition:width .2s; }
+
+  .vol-row{ display:flex; align-items:center; gap:12px; margin:10px 0; }
+  .vol-row label{ width:80px; font-size:14px; }
+  .vol-row input{ flex:1; pointer-events:auto; }
+  .vol-row .v{ width:40px; text-align:right; color:var(--mc-gold); }
+  #test-result{ position:absolute; left:8px; bottom:8px; color:#0f0; font-size:12px; z-index:99; white-space:pre; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="ui">
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="money">🪙 <span id="money-val">0</span></div>
+    <canvas id="minimap" width="140" height="140"></canvas>
+    <div id="partybar"></div>
+    <div id="activebar">
+      <div id="activemon"></div>
+      <div id="hotbars">
+        <div class="hb-row" id="skills"></div>
+        <div class="hb-row" id="items"></div>
+      </div>
+    </div>
+    <div id="announce"></div>
+    <div id="hint"></div>
+    <div id="interact-tip" class="hidden"></div>
+    <div id="floaters"></div>
+    <div id="mob-bars"></div>
+    <div id="vignette"></div>
+  </div>
+
+  <!-- NPC 对话 -->
+  <div id="dialog" class="hidden">
+    <div class="speaker"></div>
+    <div class="text"></div>
+    <div class="choices"></div>
+    <div class="next">按 F 继续 ▸</div>
+  </div>
+
+  <!-- 通用大面板容器（Tab/商店/菜单/确认/放生/换技能） -->
+  <div id="panel" class="big-panel hidden"></div>
+
+  <!-- 进化演出 -->
+  <div id="evolution" class="hidden">
+    <div class="stage"></div>
+    <canvas class="evo-canvas" width="300" height="300"></canvas>
+    <div class="tip">按 Esc 取消进化</div>
+  </div>
+
+  <!-- 标题 -->
+  <div id="title">
+    <h1>宝可梦 × 我的世界</h1>
+    <div class="sub">像素风开放世界 · 捕捉 · 对战 · 进化</div>
+    <button class="mc-btn gold" id="btn-new">新的冒险</button>
+    <button class="mc-btn" id="btn-continue">继续冒险</button>
+    <button class="mc-btn" id="btn-settings">设置</button>
+    <div class="foot">仅供本地学习测试 · WASD 移动 · 鼠标镜头 · 1~4 技能 · 5~9 道具 · Tab 队伍背包 · F 交互</div>
+  </div>
+
+  <div id="loading" class="hidden">
+    <div style="font-size:18px">正在生成世界…</div>
+    <div class="bar"><div id="load-bar"></div></div>
+    <div id="load-text" style="margin-top:8px;color:#888;font-size:12px"></div>
+  </div>
+
+  <div id="test-result"></div>
+</div>
+<script src="assets/lib/three.min.js"></script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+id: qiyi_zao
+name: 皂衣仙女
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Warm_Girl"
+  speed: 0.95
+  pitch: -2
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣。"
+
+topics:
+  - id: guiju
+    label: "园中的规矩"
+    source: "第5回"
+    lines:
+      - id: w_zao_guiju_01
+        speaker: pc
+        text: "你倒是七人里最稳当的一个。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: guiju_02
+        text: "奴年长些，照看着妹妹们。办的是娘娘的懿旨，稳当些，差事才不出错。"
+
+fallback:
+  - id: fb_01
+    text: "奴等办差，不敢闲聊。"
+bye:
+  - id: bye_01
+    text: "奴告退。大圣自便。"

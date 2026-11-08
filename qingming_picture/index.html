@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>清明上河圖 · 入畫遊</title>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": { "three": "./lib/three.module.js" } }
+</script>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+
+<!-- 绢本纸纹与晕影 -->
+<div id="grain"></div>
+<div id="vignette"></div>
+
+<!-- 标题入画页 -->
+<div id="title-screen">
+  <div class="scroll-band"></div>
+  <div class="band-caption">《清明上河圖》原卷 · 北宋 · 張擇端 · 故宮博物院藏</div>
+  <div class="title-frame">
+    <div class="title-col">
+      <h1 class="title-vertical">清明上河圖</h1>
+      <div class="seal">入畫</div>
+    </div>
+    <div class="title-side">
+      <p class="title-sub-vertical">北宋 · 張擇端 筆</p>
+      <p class="title-sub-vertical dim">汴京盛景 · 可遊可居</p>
+    </div>
+  </div>
+  <div class="title-bottom">
+    <button id="enter-btn" disabled>入 畫 一 遊</button>
+    <p class="hint-line">滑鼠環顧 · W A S D 行走 · Shift 疾行 · M 憑虛御風 · 行至妙處自有講解</p>
+    <p id="load-status" class="hint-line dim">畫卷徐徐展開⋯⋯</p>
+  </div>
+</div>
+
+<!-- 讲解字幕 -->
+<div id="narration-box" class="hidden">
+  <div id="narration-title"></div>
+  <div id="narration-text"></div>
+  <div id="narration-next"></div>
+</div>
+
+<!-- POI 进入提示（题签） -->
+<div id="poi-plaque" class="hidden"></div>
+
+<!-- 触屏虚拟摇杆（左下，触屏设备自动显示） -->
+<div id="joystick" class="hidden"><div id="joy-knob"></div></div>
+
+<!-- 手卷进度条：原画长卷，行至何处标记即指向原画对应段落（手卷右起左行） -->
+<div id="scroll-bar">
+  <div class="scroll-roller left"></div>
+  <div id="scroll-track">
+    <div id="scroll-marker"></div>
+  </div>
+  <div class="scroll-roller right"></div>
+</div>
+
+<!-- 右上角状态 -->
+<div id="hud-corner">
+  <button id="mute-btn" title="靜音">樂</button>
+  <button id="view-btn" title="視角">遊</button>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

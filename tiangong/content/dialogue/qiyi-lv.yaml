@@ -1,0 +1,31 @@
+id: qiyi_lv
+name: 绿衣仙女
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Crisp_Girl"
+  speed: 0.95
+  pitch: -2
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣。"
+
+topics:
+  - id: shulan
+    label: "数篮子"
+    source: "第5回"
+    lines:
+      - id: w_lv_shulan_01
+        speaker: pc
+        text: "数甚么呢？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: shulan_02
+        text: "数桃。一篮几个都有数，回去要交数。少一个，奴等誊不清。"
+
+fallback:
+  - id: fb_01
+    text: "奴数着桃呢，大圣莫逗奴。"
+bye:
+  - id: bye_01
+    text: "奴告退。"

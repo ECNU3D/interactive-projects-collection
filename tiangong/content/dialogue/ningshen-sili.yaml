@@ -1,0 +1,51 @@
+id: ningshen_sili
+name: 宁神司仙吏
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Soft_Girl"
+  speed: 0.95
+  pitch: 0
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣万安。"
+  - id: greet_02
+    text: "大圣，宁神司今日的点卯，不曾缺。"
+
+topics:
+  - id: zhishou
+    label: "宁神司管甚么"
+    source: "第4回"
+    lines:
+      - id: w_ns_zhishou_01
+        speaker: pc
+        text: "宁神司又管甚么？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: zhishou_02
+        text: "管大圣宁神。大圣心定了，小吏的簿子上才好销号。"
+      - id: w_ns_zhishou_03
+        speaker: pc
+        text: "心是天生的，怎么宁？"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: zhishou_04
+        text: "怎么不能宁。隔壁安静司张罗大圣安坐，小吏张罗大圣宁心。大圣一日不宁，小吏一日不敢歇。"
+  - id: kongfu
+    label: "这府第空得很"
+    source: "第4回"
+    lines:
+      - id: w_ns_kongfu_01
+        speaker: pc
+        text: "府倒齐整，就是空。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: kongfu_02
+        text: "张、鲁二班起的好宅子，簇新。大圣常回来住住，有人气了，就不空了。"
+
+fallback:
+  - id: fb_01
+    text: "小吏嘴笨，大圣莫怪。"
+  - id: fb_02
+    text: "小吏只守这司里的事。"
+bye:
+  - id: bye_01
+    text: "大圣慢走。"

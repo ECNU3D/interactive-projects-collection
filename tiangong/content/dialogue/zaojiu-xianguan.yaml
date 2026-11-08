@@ -1,0 +1,72 @@
+id: zaojiu_xianguan
+name: 造酒仙官
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Kind-hearted_Antie"
+  speed: 1.05
+  pitch: 0
+  emotion: happy
+
+greet:
+  - id: greet_01
+    speaker: npc
+    text: "大圣今日怎么得空，到长廊下来了？"
+  - id: greet_02
+    speaker: npc
+    text: "大圣慢些走，脚下缸多瓮多，仔细碰着。"
+
+topics:
+  - id: yuye
+    label: "这酒是什么来头"
+    source: "第5回"
+    lines:
+      - id: yuye_01
+        speaker: npc
+        text: "这一缸一瓮，都是娘娘蟠桃会上的玉液琼浆，一丝也差错不得。"
+      - id: w_zj_01
+        speaker: pc
+        text: "玉液琼浆？老孙先尝一瓮，替你把把关。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: yuye_02
+        speaker: npc
+        text: "使不得，使不得。酒数有定，会上少一瓮，小仙担待不起。大圣要尝，会上自有你的份——若那帖上有你的话。"
+      - id: w_zj_02
+        speaker: pc
+        text: "我乃齐天大圣，就请我老孙做个席尊，有何不可？"
+        quote: true
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: yuye_03
+        speaker: npc
+        text: "席尊不席尊，是娘娘府里的帖子上定的。小仙只会造酒，不会定席。"
+      - id: w_zj_03
+        speaker: pc
+        text: "(chuckle)今朝有酒今朝醉，莫管门前是与非。"
+        quote: true
+        voice_setting: { emotion: happy, speed: 1.15 }
+  - id: zaojiu
+    label: "酒是怎么造的"
+    source: "第5回"
+    lines:
+      - id: zaojiu_01
+        speaker: npc
+        text: "洗缸、刷瓮、蒸米、下曲，忙了这些天了。酒这东西急不得，火气一急，酒就酸了。"
+      - id: w_zj_04
+        speaker: pc
+        text: "老孙吃酒，从来不用等。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: zaojiu_02
+        speaker: npc
+        text: "大圣的酒不用等，小仙的酒要等。会期就在眼前，这两日连眼皮都不敢合。"
+
+fallback:
+  - id: fb_01
+    speaker: npc
+    text: "小仙只会造酒，别的一概不知。"
+  - id: fb_02
+    speaker: npc
+    text: "嗐，大圣别取笑小仙了。"
+
+bye:
+  - id: bye_01
+    speaker: npc
+    text: "大圣慢走。廊下酒气熏人，仔细脚下。"

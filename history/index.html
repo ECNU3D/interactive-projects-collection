@@ -1,0 +1,79 @@
+<!doctype html>
+<!--
+  运行说明：本项目需通过本地 HTTP 服务器访问，不再支持双击本文件直接以 file:// 协议打开
+  （「走入历史」使用的 SparkJS 仅发布 ES module 构建，file:// 下会被浏览器 CORS 拒绝）。
+  启动方式：终端内运行 `node tools/serve.mjs`，然后浏览器打开 http://localhost:8080
+
+  顶栏「自动放映」：沙盒式从第一幕播到通关（约 2 小时 50 分），自动作答并在每个抉择场景
+  环绕展示全景图与高斯泼溅场景；全程不改动存档，Esc 退出、空格暂停。见
+  docs/superpowers/specs/2026-08-02-autoplay-mode-design.md
+
+  章开篇影片：assets/video/chapters/chNN.mp4（音轨即该章解说）。长卷引言卡上的 ▶ 全屏播放；
+  自动放映的章引言幕优先播影片，素材不可用时退回「文字 + chNN.mp3」。见
+  docs/superpowers/specs/2026-08-03-chapter-opening-film-design.md
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>山河岁月</title>
+<link rel="stylesheet" href="css/main.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js",
+    "three/addons/postprocessing/Pass.js": "./vendor/Pass.js",
+    "@sparkjsdev/spark": "./vendor/spark.module.min.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<header id="top-bar">
+  <h1 id="app-title" aria-label="山河岁月"><span class="app-title-text">山河岁月</span></h1>
+  <div id="score-hud" aria-live="polite"><!-- 得分HUD占位：Task 后续填充分数/称号 --></div>
+  <nav id="top-bar-actions">
+    <button id="btn-mute" type="button" aria-pressed="false">静音</button>
+    <button id="btn-graph" type="button" aria-label="人物星图"><span class="btn-label-full">人物星图</span><span class="btn-label-short">星图</span></button>
+    <button id="btn-map" type="button">舆图</button>
+    <button id="btn-autoplay" type="button" aria-pressed="false"><span class="btn-label-full">自动放映</span><span class="btn-label-short">放映</span></button>
+    <button id="btn-ending" type="button" hidden>终章</button>
+    <button id="btn-about" type="button">关于</button>
+    <button id="btn-restart" type="button" aria-label="重新开始"><span class="btn-label-full">重新开始</span><span class="btn-label-short">重来</span></button>
+  </nav>
+</header>
+
+<main id="views">
+  <div id="scroll-view"></div>
+  <div id="choice-view" hidden></div>
+  <div id="graph-view" hidden></div>
+  <div id="map-view" hidden></div>
+  <div id="ending-view" hidden></div>
+  <div id="about-view" hidden></div>
+</main>
+
+<!-- 脚本加载顺序固定，见 .superpowers/sdd/shared-interfaces.md -->
+<script src="data/chapters.js"></script>
+<script src="data/events.js"></script>
+<script src="data/choices.js"></script>
+<script src="data/persons.js"></script>
+<script src="data/map-geo.js"></script>
+<script src="data/map-places.js"></script>
+<script src="vendor/d3.v7.min.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/score.js"></script>
+<script src="js/autoplay-kit.js"></script>
+<script src="js/narration.js"></script>
+<script src="js/bgm.js"></script>
+<script src="js/chapterfilm.js"></script>
+<script src="js/scroll.js"></script>
+<script src="js/choice.js"></script>
+<script src="js/graph.js"></script>
+<script src="js/ending.js"></script>
+<script src="js/map.js"></script>
+<script src="js/app.js"></script>
+<script src="js/autoplay.js"></script>
+<script type="module" src="js/walkin.js"></script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+id: qiyi_qing
+name: 青衣仙女
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Soft_Girl"
+  speed: 1.05
+  pitch: 1
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣。"
+
+topics:
+  - id: chezhi
+    label: "摘桃的手法"
+    source: "第5回"
+    lines:
+      - id: w_qing_chezhi_01
+        speaker: pc
+        text: "你扯枝的手脚倒快。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: chezhi_02
+        text: "扯枝要趁势，桃才不伤。大圣看着便好，莫动手——折了枝，是奴的不是。"
+
+fallback:
+  - id: fb_01
+    text: "奴不敢多话。"
+bye:
+  - id: bye_01
+    text: "奴告退。"

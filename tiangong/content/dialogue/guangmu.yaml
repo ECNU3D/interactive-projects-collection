@@ -1,0 +1,81 @@
+id: guangmu
+name: 广目天王
+voice_setting:
+  voice_id: "male-qn-jingying"
+  speed: 1.0
+  pitch: -3
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣今日有闲。西天门清净，正好说话。"
+  - id: greet_02
+    text: "齐天大圣。这边云路平，好走。"
+  - id: greet_03
+    text: "来了。坐看云么？"
+
+topics:
+  - id: ximen
+    label: "西天门的清净"
+    source: "第5回（西天门）"
+    lines:
+      - id: w_gm_01
+        speaker: pc
+        text: "四座天门，老孙看这西天门最清净。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: ximen_01
+        text: "一日也过不了几个人。清净有清净的好处——云怎么走，都看得见。"
+      - id: ximen_02
+        text: "南天门热闹，是脸面的热闹。这里，是天边的天边。"
+  - id: pihuozhao
+    label: "辟火罩"
+    source: "第16回（法宝归属）"
+    lines:
+      - id: w_gm_02
+        speaker: pc
+        text: "天王袖中鼓鼓囊囊，藏的甚么宝贝？"
+        voice_setting: { emotion: surprised, speed: 1.2 }
+      - id: pihuozhao_01
+        text: "辟火罩。天下火性，近不得它。"
+      - id: pihuozhao_02
+        text: "此物不轻示人。今日与大圣有缘，看过了，就收起来了。"
+      - id: w_gm_03
+        speaker: pc
+        text: "好宝贝。借老孙耍两日？"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: pihuozhao_03
+        text: "(chuckle)护身的东西，不借。大圣莫怪。"
+  - id: xunyou
+    label: "巡视四门"
+    source: "第51回"
+    lines:
+      - id: xunyou_01
+        text: "小王巡视四门，走的是远路。大圣的筋斗云快，可曾看见哪处有妖气？"
+      - id: w_gm_04
+        speaker: pc
+        text: "妖气没有。酒香倒有一股，打瑶池那边飘过来的。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: xunyou_02
+        text: "那是会上的事，不归小王管。小王只管门外的。"
+  - id: quan
+    label: "他劝你一句"
+    source: "本作"
+    lines:
+      - id: quan_01
+        text: "大圣交友满天下，是好事。"
+      - id: quan_02
+        text: "只是这天上的事，多看看，再说话。慢些，没坏处。"
+      - id: w_gm_05
+        speaker: pc
+        text: "天王这话，倒像个老哥哥。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+
+fallback:
+  - id: fb_01
+    text: "小王久守西门，天上的事，知道得少。"
+  - id: fb_02
+    text: "这话接不住，大圣恕罪。"
+
+bye:
+  - id: bye_01
+    text: "慢走。云路滑，稳着些。"

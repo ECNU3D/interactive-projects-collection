@@ -1,0 +1,33 @@
+{
+  "name": "tiangong",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "天宫模拟器 —— 你是齐天大圣。天宫在你脚下。",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "validate": "tsx tools/validate.ts",
+    "perf": "tsx tools/perf-probe.ts",
+    "lore-check": "tsx tools/lore-check.ts",
+    "gen-voice": "tsx tools/gen-voice.ts",
+    "gen-bgm": "tsx tools/gen-bgm.ts",
+    "pack-audio": "tsx tools/pack-audio.ts",
+    "subset-font": "tsx tools/subset-font.ts"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^24.0.0",
+    "@types/three": "^0.185.0",
+    "js-yaml": "^4.1.0",
+    "playwright": "^1.62.1",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0"
+  }
+}

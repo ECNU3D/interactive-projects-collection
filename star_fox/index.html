@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>星际火狐 · 深空突袭</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+  body { font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif; color: #cfe8ff; }
+  #game-canvas { position: absolute; inset: 0; display: block; cursor: none; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .5s; }
+  #hud.on { opacity: 1; }
+
+  .panel { position: absolute; }
+  #hp-panel { top: 22px; left: 26px; width: 260px; }
+  .bar-label { font-size: 12px; letter-spacing: 2px; color: #7fd4ff; text-shadow: 0 0 6px #0af; margin-bottom: 4px; }
+  .bar { height: 12px; border: 1px solid rgba(120,220,255,.6); background: rgba(0,20,40,.55); border-radius: 3px; overflow: hidden; box-shadow: 0 0 8px rgba(0,170,255,.35) inset; }
+  .bar > div { height: 100%; transition: width .15s linear; }
+  #hp-fill { width: 100%; background: linear-gradient(90deg,#0f6,#8f8); box-shadow: 0 0 10px #0f8; }
+  #shield-fill { width: 100%; background: linear-gradient(90deg,#06c,#6df); box-shadow: 0 0 10px #0af; }
+
+  #score-panel { top: 22px; right: 26px; text-align: right; }
+  #score { font-size: 26px; font-weight: 700; color: #ffe27a; text-shadow: 0 0 12px rgba(255,200,40,.8); font-variant-numeric: tabular-nums; }
+  #level-name { font-size: 12px; letter-spacing: 3px; color: #9fd8ff; margin-top: 2px; }
+
+  #weapon-panel { bottom: 26px; left: 26px; }
+  #weapon-level { font-size: 14px; letter-spacing: 2px; color: #8fffd0; text-shadow: 0 0 8px rgba(0,255,170,.7); }
+  #bombs { font-size: 14px; letter-spacing: 2px; color: #ffb27a; margin-top: 4px; text-shadow: 0 0 8px rgba(255,120,0,.7); }
+  #missiles { font-size: 14px; letter-spacing: 2px; color: #d09aff; margin-top: 4px; text-shadow: 0 0 8px rgba(180,80,255,.7); }
+
+  #boss-panel { position: absolute; top: 26px; left: 50%; transform: translateX(-50%); width: min(560px, 60vw); text-align: center; display: none; }
+  #boss-name { font-size: 13px; letter-spacing: 4px; color: #ffb0b0; text-shadow: 0 0 10px rgba(255,40,40,.9), 0 1px 3px #000;
+    margin-bottom: 5px; display: inline-block; background: rgba(20,0,0,.55); padding: 3px 14px; border-radius: 3px; }
+  #boss-bar { height: 10px; border: 1px solid rgba(255,120,120,.7); background: rgba(40,0,0,.55); border-radius: 3px; overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+  #boss-fill { height: 100%; width: 100%; background: linear-gradient(90deg,#f33,#fa6); box-shadow: 0 0 12px #f44; transition: width .2s; }
+
+  /* crosshair */
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%,-50%); }
+  #crosshair svg { width: 100%; height: 100%; filter: drop-shadow(0 0 4px rgba(80,255,180,.9)); }
+  #hitmarker { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; transform: translate(-50%,-50%) rotate(45deg); opacity: 0; }
+  #hitmarker::before, #hitmarker::after { content:""; position: absolute; background: #ff5f5f; box-shadow: 0 0 6px #f00; }
+  #hitmarker::before { left: 14px; top: 0; width: 2px; height: 30px; }
+  #hitmarker::after { top: 14px; left: 0; height: 2px; width: 30px; }
+
+  /* banner */
+  #banner { position: absolute; left: 0; right: 0; top: 34%; text-align: center; opacity: 0; transition: opacity .4s; }
+  #banner-title { font-size: 44px; font-weight: 800; letter-spacing: 10px; color: #eaf6ff; text-shadow: 0 0 24px rgba(90,200,255,.9); }
+  #banner-sub { font-size: 16px; letter-spacing: 6px; color: #9fd8ff; margin-top: 10px; }
+
+  #damage-vignette { position: absolute; inset: 0; pointer-events: none; opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,.45) 100%); }
+
+  /* 无线电通讯 */
+  #radio-box { position: absolute; left: 26px; bottom: 96px; width: min(520px, 56vw);
+    background: rgba(2,14,28,.78); border: 1px solid rgba(120,220,255,.45); border-left: 4px solid #4db2ff;
+    border-radius: 4px; padding: 10px 14px; opacity: 0; transform: translateX(-18px);
+    transition: opacity .25s, transform .25s; pointer-events: none;
+    display: flex; align-items: center; gap: 12px; }
+  #radio-box.on { opacity: 1; transform: translateX(0); }
+  #radio-portrait { width: 62px; height: 62px; border-radius: 50%; flex-shrink: 0;
+    box-shadow: 0 0 10px rgba(77,178,255,.5); object-fit: cover; object-position: top;
+    background: #0e2a4a; border: 2px solid #4db2ff; }
+  #radio-name { font-size: 13px; font-weight: 700; letter-spacing: 2px; color: #7fd4ff; margin-bottom: 4px; }
+  #radio-name::before { content: "◉ "; color: #5fffb0; }
+  #radio-text { font-size: 14px; line-height: 1.6; color: #eaf6ff; letter-spacing: 1px; }
+
+  /* 锁定提示 */
+  #lock-hint { position: absolute; right: 26px; bottom: 26px; text-align: right; font-size: 13px;
+    letter-spacing: 2px; color: #ffd040; text-shadow: 0 0 8px rgba(255,200,40,.6); opacity: .85; }
+
+  /* ---------- Menus ---------- */
+  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, rgba(2,10,26,.88), rgba(0,0,0,.96)); z-index: 10; transition: opacity .6s; }
+  .screen.hidden { opacity: 0; pointer-events: none; }
+  .game-title { font-size: 58px; font-weight: 900; letter-spacing: 14px;
+    background: linear-gradient(180deg,#dff3ff,#4db2ff 55%,#0b3f8f); -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 0 40px rgba(60,160,255,.35); }
+  .game-sub { font-size: 15px; letter-spacing: 8px; color: #7fb7e8; margin-top: 12px; }
+  .menu-hint { margin-top: 46px; font-size: 16px; letter-spacing: 3px; color: #cfe8ff; animation: blink 1.6s infinite; }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+  .controls { margin-top: 30px; font-size: 13px; line-height: 2; color: #8fa8c8; letter-spacing: 2px; text-align: center; }
+  .controls b { color: #cfe8ff; font-weight: 600; }
+  #end-title { font-size: 46px; font-weight: 900; letter-spacing: 10px; }
+  #end-stats { margin-top: 18px; font-size: 16px; letter-spacing: 3px; color: #9fd8ff; line-height: 2; }
+  #cycle-badge { margin-top: 22px; font-size: 15px; letter-spacing: 6px; color: #ffd27a;
+    text-shadow: 0 0 12px rgba(255,200,80,.6); }
+  #reset-progress { position: absolute; bottom: 26px; right: 30px; font-size: 13px; letter-spacing: 2px;
+    color: #7a8aa0; cursor: pointer; padding: 8px 16px; border: 1px solid rgba(120,140,160,.3);
+    border-radius: 4px; transition: all .2s; user-select: none; background: rgba(4,16,30,.5); }
+  #reset-progress:hover { color: #ff8a8a; border-color: rgba(255,120,120,.55); }
+  #reset-progress.armed { color: #ff9a9a; border-color: rgba(255,100,100,.8); background: rgba(90,12,12,.55); }
+</style>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+
+<div id="hud">
+  <div class="panel" id="hp-panel">
+    <div class="bar-label">机体完整性 HULL</div>
+    <div class="bar"><div id="hp-fill"></div></div>
+    <div class="bar-label" style="margin-top:8px;">能量护盾 SHIELD</div>
+    <div class="bar"><div id="shield-fill"></div></div>
+  </div>
+  <div class="panel" id="score-panel">
+    <div id="score">0</div>
+    <div id="level-name"></div>
+  </div>
+  <div class="panel" id="weapon-panel">
+    <div id="weapon-level">武器 LV.1</div>
+    <div id="missiles">导弹 ◉◉◉</div>
+    <div id="bombs">智能炸弹 × 0</div>
+  </div>
+  <div id="boss-panel">
+    <div id="boss-name"></div>
+    <div id="boss-bar"><div id="boss-fill"></div></div>
+  </div>
+  <div id="crosshair">
+    <svg viewBox="0 0 44 44">
+      <circle cx="22" cy="22" r="14" fill="none" stroke="#5fffb0" stroke-width="1.6" opacity="0.9"/>
+      <line x1="22" y1="2"  x2="22" y2="12" stroke="#5fffb0" stroke-width="1.6"/>
+      <line x1="22" y1="32" x2="22" y2="42" stroke="#5fffb0" stroke-width="1.6"/>
+      <line x1="2"  y1="22" x2="12" y2="22" stroke="#5fffb0" stroke-width="1.6"/>
+      <line x1="32" y1="22" x2="42" y2="22" stroke="#5fffb0" stroke-width="1.6"/>
+      <circle cx="22" cy="22" r="1.6" fill="#5fffb0"/>
+    </svg>
+  </div>
+  <div id="hitmarker"></div>
+  <div id="banner"><div id="banner-title"></div><div id="banner-sub"></div></div>
+  <div id="damage-vignette"></div>
+  <div id="radio-box">
+    <img id="radio-portrait" alt="">
+    <div><div id="radio-name"></div><div id="radio-text"></div></div>
+  </div>
+  <div id="lock-hint">右键 / F 锁定 · <span id="lock-count"></span></div>
+</div>
+
+<div class="screen" id="menu-screen">
+  <div class="game-title">星际火狐</div>
+  <div class="game-sub">深 空 突 袭 · STAR STRIKE</div>
+  <div id="cycle-badge"></div>
+  <div class="menu-hint">点 击 进 入</div>
+  <div class="controls">
+    <b>WASD / 方向键</b> 机动飞行 · <b>鼠标</b> 瞄准 · <b>左键 / 空格</b> 机枪 · <b>右键 / F</b> 导弹锁定<br>
+    <b>Shift</b> 加速 · <b>C</b> 减速 · <b>V</b> 切换视角 · <b>B</b> 智能炸弹 · <b>P</b> 暂停 · 击毁敌机掉落道具
+  </div>
+  <div id="reset-progress">重 置 进 度</div>
+</div>
+
+<div class="screen hidden" id="end-screen">
+  <div id="end-title"></div>
+  <div id="end-stats"></div>
+  <div class="menu-hint" id="end-hint">点 击 继 续</div>
+</div>
+
+<div class="screen hidden" id="intro-screen">
+  <div id="intro-card"></div>
+  <div class="menu-hint" style="position:absolute;bottom:36px;right:48px;font-size:13px;">点 击 跳 过 ▸</div>
+</div>
+
+<div class="screen hidden" id="select-screen">
+  <div style="font-size:30px;font-weight:800;letter-spacing:8px;color:#dff3ff;margin-bottom:8px;">选 择 战 区</div>
+  <div id="select-cycle" style="font-size:12px;letter-spacing:4px;color:#7fb7e8;margin-bottom:36px;">LYLAT SYSTEM — 星域航线图</div>
+  <div id="level-nodes"></div>
+  <div class="menu-hint" id="select-back" style="margin-top:40px;font-size:13px;">返 回 主 菜 单</div>
+</div>
+
+<style>
+  /* 开场剧情 */
+  #intro-screen { background: transparent; justify-content: flex-end; }
+  #intro-card { margin-bottom: 22vh; max-width: 720px; text-align: center; font-size: 22px;
+    line-height: 2; letter-spacing: 3px; color: #eaf6ff; text-shadow: 0 2px 18px rgba(0,60,120,.9);
+    opacity: 0; transition: opacity .8s; padding: 0 40px; }
+  #intro-card.on { opacity: 1; }
+
+  /* 选关 */
+  #level-nodes { display: flex; gap: 18px; align-items: stretch; padding: 0 30px; flex-wrap: wrap; justify-content: center; }
+  .lv-node { width: 150px; padding: 16px 12px; border: 1px solid rgba(120,220,255,.4); border-radius: 8px;
+    background: rgba(4,20,40,.75); cursor: pointer; text-align: center; transition: all .2s; position: relative; }
+  .lv-node:hover:not(.locked) { border-color: #5fffb0; background: rgba(10,40,60,.9); transform: translateY(-4px);
+    box-shadow: 0 6px 24px rgba(80,255,180,.25); }
+  .lv-node .lv-num { font-size: 11px; letter-spacing: 2px; color: #7fb7e8; }
+  .lv-node .lv-icon { font-size: 34px; margin: 10px 0; }
+  .lv-node .lv-name { font-size: 15px; font-weight: 700; letter-spacing: 2px; color: #dff3ff; }
+  .lv-node .lv-env { font-size: 11px; color: #8fa8c8; margin-top: 6px; letter-spacing: 1px; }
+  .lv-node.locked { opacity: .35; cursor: not-allowed; filter: grayscale(1); }
+  .lv-node.locked .lv-icon::before { content: "🔒"; }
+  .lv-node.locked .lv-icon { font-size: 0; }
+  .lv-node.locked .lv-icon::before { font-size: 30px; }
+  .lv-node.cleared::after { content: "✓"; position: absolute; top: 6px; right: 10px; color: #5fffb0; font-weight: 900; }
+</style>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+<script type="module" src="./js/main.js?v=20260728"></script>
+</body>
+</html>

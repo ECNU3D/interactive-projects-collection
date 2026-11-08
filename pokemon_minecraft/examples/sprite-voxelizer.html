@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>宝可梦体素建模示例 · 路线B 自动体素化</title>
+<style>
+  :root{ --mc-gold:#FCDC5F; --mc-gray:#AAAAAA; }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; }
+  html,body{ width:100%; height:100%; overflow:hidden; background:#000;
+    font-family:'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif; }
+  #scene{ position:absolute; inset:0; display:block; }
+
+  .mc-panel{
+    position:absolute; color:#fff; padding:12px 14px;
+    background:rgba(16,0,22,.92);
+    border:2px solid #5b21b6;
+    box-shadow: inset 0 0 0 2px #2a0a55, 0 4px 0 rgba(0,0,0,.4);
+  }
+  .mc-panel h1{ font-size:15px; letter-spacing:1px; color:var(--mc-gold);
+    text-shadow:2px 2px 0 #3e3308; margin-bottom:6px; }
+  .mc-panel p{ font-size:12px; line-height:1.7; color:#e8e8e8; text-shadow:1px 1px 0 #222; }
+  .mc-panel .dim{ color:var(--mc-gray); }
+  .mc-panel h2{ font-size:12px; color:var(--mc-gold); text-shadow:1px 1px 0 #3e3308;
+    margin:10px 0 6px; letter-spacing:1px; }
+
+  #ctrl{ left:16px; top:16px; width:262px; max-height:calc(100% - 32px); overflow-y:auto; }
+  #hint{ right:16px; bottom:16px; padding:8px 12px; }
+  #hint p{ font-size:11px; }
+
+  .mc-btn{
+    display:inline-block; cursor:pointer; color:#fff;
+    font-family:inherit; font-size:12px; font-weight:700;
+    text-shadow:1px 1px 0 #383838; letter-spacing:1px;
+    padding:7px 4px; border:2px solid #000; text-align:center;
+    background:linear-gradient(#9c9c9c,#6e6e6e);
+    box-shadow: inset 2px 2px 0 #bdbdbd, inset -2px -2px 0 #494949;
+  }
+  .mc-btn:hover{
+    background:linear-gradient(#8fa0e6,#5f6fbb); color:#fffbc9;
+    box-shadow: inset 2px 2px 0 #b3c0f5, inset -2px -2px 0 #3c477e;
+  }
+  .mc-btn:active{ transform:translateY(1px); }
+  .mc-btn.on{
+    background:linear-gradient(#67b84f,#3f8c2c); color:#fff;
+    box-shadow: inset 2px 2px 0 #93d67e, inset -2px -2px 0 #2c611f;
+  }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .grid4{ display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+
+  #preview{
+    display:block; margin:4px auto 0; width:120px; height:120px;
+    image-rendering:pixelated; background:#26263a;
+    border:2px solid; border-color:#111 #555 #555 #111;
+  }
+  input[type=range]{
+    -webkit-appearance:none; width:100%; height:18px; background:transparent; cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track{
+    height:10px; background:#3a3a3a; border:2px solid #000;
+    box-shadow: inset 2px 2px 0 #222;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:16px; height:22px; margin-top:-8px;
+    background:linear-gradient(#9c9c9c,#6e6e6e); border:2px solid #000;
+    box-shadow: inset 2px 2px 0 #bdbdbd, inset -2px -2px 0 #494949;
+  }
+  #count{ color:var(--mc-gold); }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div class="mc-panel" id="ctrl">
+  <h1>◆ 路线B · 自动体素化</h1>
+  <p class="dim">官方 96×96 像素图 → 降采样 → 距离变换定厚度 → 挤出体素。全自动，可量产全图鉴。</p>
+
+  <h2>■ 原始像素图</h2>
+  <img id="preview" alt="">
+
+  <h2>■ 选择精灵</h2>
+  <div class="grid2" id="pokeBtns"></div>
+
+  <h2>■ 体素分辨率（宽）</h2>
+  <div class="grid4" id="resBtns"></div>
+
+  <h2>■ 最大厚度：<span id="depthVal">4</span></h2>
+  <input type="range" id="depth" min="1" max="8" step="1" value="4">
+
+  <h2>■ 统计</h2>
+  <p>体素数：<span id="count">-</span><br><span class="dim">1 次 draw call（合并网格·只生成暴露面）</span></p>
+  <div style="margin-top:10px"><button class="mc-btn" id="btnRot" style="width:100%">自动旋转：开</button></div>
+</div>
+
+<div class="mc-panel" id="hint"><p class="dim">左键拖动旋转 · 滚轮缩放 · 右键平移</p></div>
+
+<script src="../assets/lib/three.min.js"></script>
+<script src="../assets/lib/OrbitControls.js"></script>
+<script src="../assets/sprites-data.js"></script>
+<script>
+/* ================= 数据 ================= */
+const POKES=[
+  {id:25,  cn:'皮卡丘'},   {id:1,   cn:'妙蛙种子'},
+  {id:4,   cn:'小火龙'},   {id:7,   cn:'杰尼龟'},
+  {id:6,   cn:'喷火龙'},   {id:94,  cn:'耿鬼'},
+  {id:133, cn:'伊布'},     {id:143, cn:'卡比兽'},
+];
+const RES=[24,32,48,96];
+/* URL 参数(便于截图/调试): ?id=94&res=32&depth=6&static=1&yaw=1.5 */
+const qs=new URLSearchParams(location.search);
+let curPoke=+(qs.get('id')||25), curRes=+(qs.get('res')||48), curDepth=+(qs.get('depth')||4);
+const initYaw=parseFloat(qs.get('yaw')||'0'), initStatic=!!qs.get('static');
+
+/* ================= 像素图 → 体素化算法 ================= */
+const imgCache={};
+function loadSprite(id){
+  return new Promise(res=>{
+    if(imgCache[id]) return res(imgCache[id]);
+    const img=new Image();
+    img.onload=()=>{ imgCache[id]=img; res(img); };
+    img.src=SPRITE_DATA[id];
+  });
+}
+
+function voxelize(img, targetW, maxDepth){
+  const cv=document.createElement('canvas');
+  cv.width=img.width; cv.height=img.height;
+  const g=cv.getContext('2d');
+  g.drawImage(img,0,0);
+  const data=g.getImageData(0,0,cv.width,cv.height).data;
+  const A=(x,y)=>data[(y*cv.width+x)*4+3];
+
+  /* 1. 求不透明像素包围盒 */
+  let x0=cv.width,y0=cv.height,x1=-1,y1=-1;
+  for(let y=0;y<cv.height;y++)for(let x=0;x<cv.width;x++){
+    if(A(x,y)>8){ x0=Math.min(x0,x); y0=Math.min(y0,y); x1=Math.max(x1,x); y1=Math.max(y1,y); }
+  }
+  const bw=x1-x0+1, bh=y1-y0+1;
+
+  /* 2. 最近邻降采样 */
+  const W=Math.min(targetW,bw), H=Math.max(1,Math.round(bh*W/bw));
+  const cell=new Array(W*H).fill(null);
+  for(let gy=0;gy<H;gy++)for(let gx=0;gx<W;gx++){
+    const sx=x0+Math.min(bw-1, Math.floor((gx+0.5)*bw/W));
+    const sy=y0+Math.min(bh-1, Math.floor((gy+0.5)*bh/H));
+    const idx=(sy*cv.width+sx)*4;
+    if(data[idx+3]>128) cell[gy*W+gx]=(data[idx]<<16)|(data[idx+1]<<8)|data[idx+2];
+  }
+
+  /* 3. 距离变换(切比雪夫,两趟扫描):离轮廓越远越厚 */
+  const INF=1e9, dist=new Array(W*H);
+  for(let i=0;i<W*H;i++) dist[i]=cell[i]===null?0:INF;
+  const D=(x,y)=>(x<0||y<0||x>=W||y>=H)?0:dist[y*W+x];
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    if(cell[y*W+x]===null) continue;
+    dist[y*W+x]=Math.min(dist[y*W+x], D(x-1,y)+1, D(x,y-1)+1, D(x-1,y-1)+1, D(x+1,y-1)+1);
+  }
+  for(let y=H-1;y>=0;y--)for(let x=W-1;x>=0;x--){
+    if(cell[y*W+x]===null) continue;
+    dist[y*W+x]=Math.min(dist[y*W+x], D(x+1,y)+1, D(x,y+1)+1, D(x-1,y+1)+1, D(x+1,y+1)+1);
+  }
+
+  /* 4. 按厚度对称挤出成体素 */
+  const voxels=[];
+  for(let gy=0;gy<H;gy++)for(let gx=0;gx<W;gx++){
+    const c=cell[gy*W+gx];
+    if(c===null) continue;
+    const t=Math.min(maxDepth, dist[gy*W+gx]);
+    for(let z=-(t-1); z<=t-1; z++)
+      voxels.push({x:gx-W/2, y:H-1-gy, z, c});
+  }
+  return {voxels, W, H};
+}
+
+/* ================= 场景 ================= */
+const canvas=document.getElementById('scene');
+const renderer=new THREE.WebGLRenderer({canvas, antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFShadowMap;
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x8FD1FF);
+scene.fog=new THREE.Fog(0xC5E8FF, 45, 120);
+
+const camera=new THREE.PerspectiveCamera(50, innerWidth/innerHeight, .1, 300);
+camera.position.set(7, 8, 16);
+
+const controls=new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping=true; controls.dampingFactor=.08;
+controls.maxPolarAngle=Math.PI*0.52; controls.minDistance=4; controls.maxDistance=45;
+controls.target.set(0,4.5,0);
+
+scene.add(new THREE.HemisphereLight(0xd9ecff, 0x8a6b4a, .75));
+const sun=new THREE.DirectionalLight(0xfff3d6, .95);
+sun.position.set(16,28,12); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.normalBias=0.06;
+sun.shadow.camera.left=-25; sun.shadow.camera.right=25;
+sun.shadow.camera.top=25; sun.shadow.camera.bottom=-25;
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0xffffff,.28));
+
+function checkerTexture(c1,c2){
+  const cv=document.createElement('canvas'); cv.width=cv.height=8;
+  const g=cv.getContext('2d');
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++){ g.fillStyle=((x+y)&1)?c1:c2; g.fillRect(x,y,1,1); }
+  const t=new THREE.CanvasTexture(cv);
+  t.magFilter=t.minFilter=THREE.NearestFilter;
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  return t;
+}
+const groundTex=checkerTexture('#79b94c','#6fb045');
+groundTex.repeat.set(20,12);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(100,60),
+  new THREE.MeshLambertMaterial({map:groundTex}));
+ground.rotation.x=-Math.PI/2; ground.receiveShadow=true;
+scene.add(ground);
+
+function noiseTexture(base,vary){
+  const cv=document.createElement('canvas'); cv.width=cv.height=8;
+  const g=cv.getContext('2d');
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++){
+    const f=1+(Math.random()*2-1)*vary;
+    g.fillStyle=`rgb(${Math.min(255,base[0]*f)|0},${Math.min(255,base[1]*f)|0},${Math.min(255,base[2]*f)|0})`;
+    g.fillRect(x,y,1,1);
+  }
+  const t=new THREE.CanvasTexture(cv);
+  t.magFilter=t.minFilter=THREE.NearestFilter;
+  return t;
+}
+const grassMat=new THREE.MeshLambertMaterial({map:noiseTexture([124,189,75],.12)});
+const dirtMat=new THREE.MeshLambertMaterial({map:noiseTexture([138,90,59],.14)});
+const ped=new THREE.Mesh(new THREE.BoxGeometry(9,1.2,9),
+  [dirtMat,dirtMat,grassMat,dirtMat,dirtMat,dirtMat]);
+ped.position.y=.6; ped.castShadow=true; ped.receiveShadow=true;
+scene.add(ped);
+
+for(let i=0;i<6;i++){
+  const w=6+Math.random()*8;
+  const cl=new THREE.Mesh(
+    new THREE.BoxGeometry(w,0.8,3+Math.random()*3),
+    new THREE.MeshLambertMaterial({color:0xffffff,transparent:true,opacity:.85}));
+  cl.position.set(-45+Math.random()*90, 24+Math.random()*6, -25+Math.random()*35);
+  cl.userData.spd=.01+Math.random()*.02;
+  cl.name='cloud'; scene.add(cl);
+}
+
+/* ================= 构建模型 =================
+   合并网格:只生成暴露面(同 Minecraft 地形做法),表面无接缝线 */
+const FACES=[
+  {n:[ 1,0,0], v:[[1,0,1],[1,0,0],[1,1,0],[1,1,1]]},
+  {n:[-1,0,0], v:[[0,0,0],[0,0,1],[0,1,1],[0,1,0]]},
+  {n:[0, 1,0], v:[[0,1,1],[1,1,1],[1,1,0],[0,1,0]]},
+  {n:[0,-1,0], v:[[0,0,0],[1,0,0],[1,0,1],[0,0,1]]},
+  {n:[0,0, 1], v:[[0,0,1],[1,0,1],[1,1,1],[0,1,1]]},
+  {n:[0,0,-1], v:[[1,0,0],[0,0,0],[0,1,0],[1,1,0]]},
+];
+function buildVoxelMesh(list, has){
+  const pos=[], nor=[], col=[], idx=[];
+  const c=new THREE.Color();
+  for(const vx of list){
+    c.setHex(vx.c);
+    for(const f of FACES){
+      if(has(vx.x+f.n[0], vx.y+f.n[1], vx.z+f.n[2])) continue;
+      const base=pos.length/3;
+      for(const cv of f.v){
+        pos.push(vx.x-0.5+cv[0], vx.y+cv[1], vx.z-0.5+cv[2]);
+        nor.push(f.n[0],f.n[1],f.n[2]);
+        col.push(c.r,c.g,c.b);
+      }
+      idx.push(base,base+1,base+2, base,base+2,base+3);
+    }
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  g.setAttribute('normal',   new THREE.Float32BufferAttribute(nor,3));
+  g.setAttribute('color',    new THREE.Float32BufferAttribute(col,3));
+  g.setIndex(idx);
+  const mesh=new THREE.Mesh(g, new THREE.MeshLambertMaterial({vertexColors:true}));
+  mesh.castShadow=true; mesh.receiveShadow=true;
+  return mesh;
+}
+let modelGroup=null;
+async function rebuild(){
+  const img=await loadSprite(curPoke);
+  document.getElementById('preview').src=SPRITE_DATA[curPoke];
+  const {voxels,W,H}=voxelize(img, curRes, curDepth);
+
+  if(modelGroup){ scene.remove(modelGroup); modelGroup.traverse(o=>{ if(o.geometry)o.geometry.dispose(); if(o.material)o.material.dispose(); }); }
+  const keys=new Set(voxels.map(v=>v.x+'|'+v.y+'|'+v.z));
+  const has=(x,y,z)=>keys.has(x+'|'+y+'|'+z);
+  const mesh=buildVoxelMesh(voxels, has);
+
+  modelGroup=new THREE.Group();
+  modelGroup.add(mesh);
+  const s=8/H;                      // 统一显示高度约 8
+  modelGroup.scale.setScalar(s);
+  modelGroup.position.y=1.2;
+  modelGroup.rotation.y=initYaw;
+  scene.add(modelGroup);
+  document.getElementById('count').textContent=voxels.length.toLocaleString();
+}
+
+/* ================= UI ================= */
+const pokeBtns=document.getElementById('pokeBtns');
+POKES.forEach(p=>{
+  const b=document.createElement('button');
+  b.className='mc-btn'+(p.id===curPoke?' on':'');
+  b.textContent=p.cn;
+  b.onclick=()=>{ curPoke=p.id;
+    [...pokeBtns.children].forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); rebuild(); };
+  pokeBtns.appendChild(b);
+});
+const resBtns=document.getElementById('resBtns');
+RES.forEach(r=>{
+  const b=document.createElement('button');
+  b.className='mc-btn'+(r===curRes?' on':'');
+  b.textContent=r;
+  b.onclick=()=>{ curRes=r;
+    [...resBtns.children].forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); rebuild(); };
+  resBtns.appendChild(b);
+});
+const depthInput=document.getElementById('depth');
+depthInput.value=curDepth;
+document.getElementById('depthVal').textContent=curDepth;
+depthInput.oninput=e=>{
+  curDepth=+e.target.value;
+  document.getElementById('depthVal').textContent=curDepth;
+  rebuild();
+};
+let autoRot=!initStatic;
+const btnRot=document.getElementById('btnRot');
+btnRot.textContent='自动旋转：'+(autoRot?'开':'关');
+btnRot.onclick=()=>{
+  autoRot=!autoRot;
+  btnRot.textContent='自动旋转：'+(autoRot?'开':'关');
+};
+
+/* ================= 主循环 ================= */
+const clock=new THREE.Clock();
+function tick(){
+  requestAnimationFrame(tick);
+  const dt=clock.getDelta(), t=clock.elapsedTime;
+  if(modelGroup){
+    if(autoRot) modelGroup.rotation.y+=dt*.5;
+    modelGroup.position.y=1.2+Math.sin(t*1.8)*.1;
+  }
+  scene.traverse(o=>{ if(o.name==='cloud'){ o.position.x+=o.userData.spd; if(o.position.x>55)o.position.x=-55; }});
+  controls.update();
+  renderer.render(scene,camera);
+}
+function resize(){
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+}
+addEventListener('resize',resize); resize(); rebuild(); tick();
+</script>
+</body>
+</html>

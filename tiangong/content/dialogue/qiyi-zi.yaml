@@ -1,0 +1,36 @@
+id: qiyi_zi
+name: 紫衣仙女
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Warm_Girl"
+  speed: 1.05
+  pitch: 2
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣！奴正想着，您今儿会不会来。"
+
+topics:
+  - id: huaguoshan
+    label: "花果山是怎样地方"
+    source: "第5回"
+    lines:
+      - id: w_zi_huaguoshan_01
+        speaker: pc
+        text: "你打听老孙的花果山做甚？"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: huaguoshan_02
+        text: "听说那地方在海上，四季都有果子。可再亲，有天上的仙桃亲么？"
+      - id: w_zi_huaguoshan_03
+        speaker: pc
+        text: "亲不亲，故乡人。"
+        quote: true
+        voice_setting: { emotion: calm, speed: 1.05 }
+
+fallback:
+  - id: fb_01
+    text: "奴话多了，大圣莫怪。"
+bye:
+  - id: bye_01
+    text: "奴告退。"

@@ -1,0 +1,84 @@
+# 寿星（南极老人星）｜上寿｜寿星台
+# 依据：文档 01 §2.2（和蔼、慢、喜庆）、§1.2 C；考据 research §5（第4、7回）
+id: shouxing
+name: 寿星
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Humorous_Elder"
+  speed: 0.85
+  pitch: -5
+  emotion: happy
+
+greet:
+  - id: greet_01
+    text: "大圣来了，好，好。"
+  - id: greet_02
+    text: "大圣慢些飞。老儿这台上的花，禁不起风。"
+  - id: greet_03
+    text: "大圣今日脸色好，可是园里桃熟了？"
+
+topics:
+  - id: minghua
+    label: "台上不谢的花"
+    source: "第4回（寿星台上，有千千年不卸的名花）"
+    lines:
+      - id: w_sx_minghua_01
+        speaker: pc
+        text: "寿星老儿，你这台上的花，怎的千年万年也不谢？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: minghua_01
+        text: "不谢，是老儿不舍得它谢。花开一日是一日，开千年是千年，都在一个慢字上。"
+      - id: minghua_02
+        text: "大圣的筋斗云快，快得好看；老儿的慢，慢得长久。两般本事，谁也莫笑谁。"
+  - id: shou
+    label: "寿数的道理"
+    source: "第3回（强销死籍）；自拟对话"
+    lines:
+      - id: w_sx_shou_01
+        speaker: pc
+        text: "老孙当年一笔勾了生死簿，这寿数，早不归天管了。"
+        voice_setting: { emotion: happy, speed: 1.05 }
+      - id: shou_01
+        text: "销了簿子，销不了日子。寿不是册上写的，是一日一日过出来的。"
+      - id: w_sx_shou_02
+        speaker: pc
+        text: "老孙偏要快快活活地过。"
+        voice_setting: { emotion: happy, speed: 1.05 }
+      - id: shou_02
+        text: "(chuckle) 快也快活，慢也快活。只是老儿的快活，比你的长些。"
+  - id: taohui
+    label: "蟠桃会"
+    source: "第5回、第7回"
+    lines:
+      - id: w_sx_taohui_01
+        speaker: pc
+        text: "老寿星，瑶池的蟠桃会，必有你的座罢？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: taohui_01
+        text: "老儿年年都到。不为吃桃，就爱看个热闹。"
+      - id: taohui_02
+        text: "桃是好东西。只是老儿吃桃，吃一个是一个，从不贪多。大圣管园子，这个理你比老儿懂。"
+  - id: shouzhi
+    label: "一个寿字"
+    source: "自拟对话，依据文档01 §2.2 语体"
+    lines:
+      - id: w_sx_shouzhi_01
+        speaker: pc
+        text: "寿星老儿，你整日守在这台上，就做这一个寿字？"
+        voice_setting: { emotion: happy, speed: 1.05 }
+      - id: shouzhi_01
+        text: "一个寿字，做一万年也做不完。"
+      - id: shouzhi_02
+        text: "天庭千百样职事，老儿这一件最轻省，也最长。"
+
+fallback:
+  - id: fb_01
+    text: "大圣这一问，把老儿问住了。"
+  - id: fb_02
+    text: "老儿只知花草寿数，别的不晓得。"
+  - id: fb_03
+    text: "呵呵，老儿耳朵慢，大圣再说一遍？"
+
+bye:
+  - id: bye_01
+    text: "大圣常来。<#0.3#>慢慢走，慢慢走。"

@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>MOTOCROSS MANIACS · GB</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  /* ============ 页面 chrome(Game Boy 机身风) ============ */
+  html,body{
+    margin:0; padding:0; background:#c4bebb;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none; user-select:none;
+    touch-action:none; overscroll-behavior:none;
+  }
+  #wrap{
+    min-height:100vh; box-sizing:border-box;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:14px 10px; gap:10px;
+  }
+  /* 机身屏幕外框:灰紫机身 + 深色镜面框 + 圆角 */
+  #bezel{
+    background:#5c5660; padding:16px 18px 12px; border-radius:16px;
+    box-shadow: inset 0 2px 0 #7d7681, inset 0 -4px 0 #463f4b, 0 8px 22px rgba(40,30,45,.35);
+  }
+  #frame{
+    background:#221e26; padding:10px; border-radius:10px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.7);
+  }
+  canvas#gb{
+    display:block; width:480px; height:432px; /* JS 会根据窗口改成整数倍 */
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    background:#9bbc0f; border-radius:2px;
+  }
+  #caption{
+    margin-top:8px; text-align:center; color:#a79ea9; font-size:10px; letter-spacing:3px;
+  }
+  /* 常驻按键说明 */
+  #hint{ color:#4a444f; font-size:12px; letter-spacing:1px; text-align:center; }
+  /* ============ 触屏虚拟按键(半透明) ============ */
+  #touch{
+    width:100%; max-width:560px;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:0 6px; box-sizing:border-box;
+  }
+  .pad{ display:grid; grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,46px); gap:4px; }
+  .tbtn{
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(38,32,44,.30); color:#2c2731;
+    border-radius:10px; font-size:18px; font-weight:bold;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .tbtn.on{ background:rgba(38,32,44,.62); color:#12100f; }
+  .tbtn.empty{ background:transparent; pointer-events:none; }
+  .abtn{ width:56px; height:56px; border-radius:50%; font-size:20px; }
+  .sbtn{ width:52px; height:22px; border-radius:12px; font-size:10px; letter-spacing:1px; }
+  #mid{ display:flex; flex-direction:column; gap:10px; align-items:center; }
+  #ab{ display:flex; gap:14px; align-items:center; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="bezel">
+    <div id="frame"><canvas id="gb" width="160" height="144"></canvas></div>
+    <div id="caption">MOTOCROSS MANIACS &middot; GB STYLE</div>
+  </div>
+  <div id="ui">
+    <div id="hint">X(A)油门 Z(B)刹车 &#8593;氮气 空中&#8592;&#8594;翻转 &nbsp; ENTER(START) 开始</div>
+    <div id="touch">
+      <div class="pad">
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="up">&#9650;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="left">&#9664;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="right">&#9654;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="down">&#9660;</div>
+        <div class="tbtn empty"></div>
+      </div>
+      <div id="mid">
+        <div class="tbtn sbtn" data-k="select">SELECT</div>
+        <div class="tbtn sbtn" data-k="start">START</div>
+      </div>
+      <div id="ab">
+        <div class="tbtn abtn" data-k="b">B</div>
+        <div class="tbtn abtn" data-k="a">A</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+ * MOTOCROSS MANIACS · Game Boy 风格越野摩托计时赛(单文件,零依赖)
+ * 操作:X(A)=油门  Z(B)=刹车  ↑=氮气  空中 ←/→=后翻/前翻  Enter=Start
+ * 规则:60 秒倒计时跑完全程。落地姿态与坡面吻合则保速,差太多就摔车
+ *       (车手抛物线飞出,2 秒后原地复活)。空中完成 360° 翻转奖励氮气,
+ *       赛道上有氮气瓶(N)和时间瓶(+5S)。终点按剩余时间评级 S/A/B/C。
+ * 赛道:下面 TRACK_PTS 折线点硬编码,改点就能改赛道;LOOPS 是环形圈。
+ * ===================================================================== */
+
+/* ---------- 基本常量 ---------- */
+const W = 160, H = 144;                          // GB 逻辑分辨率 160x144
+const PAL = ['#0f380f', '#306230', '#8bac0f', '#9bbc0f']; // DMG 4 色绿
+
+const cv = document.getElementById('gb');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+/* 全部画面只允许用 fillRect 画 */
+function R(x, y, w, h, c) {
+  ctx.fillStyle = PAL[c];
+  ctx.fillRect(x | 0, y | 0, w, h);
+}
+
+/* ---------- 8-bit 芯片音效(Web Audio 合成,无音频文件) ---------- */
+const Snd = (() => {
+  let ac = null, master = null, noiseBuf = null;
+  let engOsc = null, engGain = null;             // 引擎:锯齿波持续鸣响
+  let nSrc = null, nGain = null;                 // 氮气:持续噪声
+  function init() {                       // 首次按键后才创建 AudioContext
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain();
+    master.gain.value = 0.14;
+    master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    /* 引擎:常开锯齿波,音高随速度,平时静音(gain=0) */
+    engOsc = ac.createOscillator();
+    engOsc.type = 'sawtooth';
+    engOsc.frequency.value = 45;
+    engGain = ac.createGain();
+    engGain.gain.value = 0;
+    engOsc.connect(engGain); engGain.connect(master);
+    engOsc.start();
+    /* 氮气:常开噪声(低通),平时静音 */
+    nSrc = ac.createBufferSource();
+    nSrc.buffer = noiseBuf; nSrc.loop = true;
+    const nf = ac.createBiquadFilter();
+    nf.type = 'lowpass'; nf.frequency.value = 1400;
+    nGain = ac.createGain(); nGain.gain.value = 0;
+    nSrc.connect(nf); nf.connect(nGain); nGain.connect(master);
+    nSrc.start();
+  }
+  function sq(freq, delay, dur, vol, slideTo) {   // 方波
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(delay, dur, vol, hp) {           // 噪声通道
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const s = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+    s.buffer = noiseBuf;
+    s.loop = true;
+    f.type = hp ? 'highpass' : 'lowpass';
+    f.frequency.value = hp ? 1800 : 700;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t); s.stop(t + dur + 0.02);
+  }
+  const N = n => 440 * Math.pow(2, (n - 69) / 12); // MIDI 音号 -> 频率
+  return {
+    init,
+    /* 每帧驱动引擎声:v=速度 on=是否在比赛中 nitro=氮气爆发中 */
+    engine(v, on, nitro) {
+      if (!ac) return;
+      const t = ac.currentTime;
+      const f = on ? Math.max(28, 42 + v * 34 + (nitro ? 70 : 0)) : 40;
+      engOsc.frequency.setTargetAtTime(f, t, 0.03);
+      engGain.gain.setTargetAtTime(on ? 0.045 : 0, t, 0.05);
+      nGain.gain.setTargetAtTime(on && nitro ? 0.12 : 0, t, 0.05);
+    },
+    start()  { sq(N(72), 0, 0.07, 0.45); sq(N(79), 0.07, 0.12, 0.45); },
+    pickup() { sq(880, 0, 0.06, 0.4, 1560); },                         // 氮气瓶"叮"
+    timeUp() { sq(N(76), 0, 0.07, 0.4); sq(N(83), 0.08, 0.1, 0.4); },  // 时间瓶
+    nitro()  { noise(0, 0.45, 0.5, true); sq(220, 0, 0.4, 0.35, 660); }, // 氮气爆发
+    flip()   { [72, 76, 79, 84, 88].forEach((n, i) => sq(N(n), i * 0.05, 0.08, 0.4)); }, // 翻转奖励
+    crash()  { noise(0, 0.4, 0.6, false); sq(110, 0, 0.32, 0.5, 42); },  // 摔车"哐"
+    bounce() { noise(0, 0.08, 0.35, false); },                         // 车手落地弹跳
+    tick()   { sq(1200, 0, 0.04, 0.3); },                              // 倒计时滴答
+    finish() { [72, 76, 79, 84, 79, 84, 88].forEach((n, i) => sq(N(n), i * 0.09, 0.12, 0.45)); },
+    over()   { [76, 72, 69, 65, 62, 57].forEach((n, i) => sq(N(n), i * 0.14, 0.15, 0.45)); },
+  };
+})();
+
+/* ---------- 8x8 手绘像素字体(画布文字只能用它) ---------- */
+const FONT = (() => {
+  const F = {};
+  const def = (ch, rows) => { F[ch] = rows; };
+  def(' ', ["........","........","........","........","........","........","........","........"]);
+  def('0', [".###....","#...#...","#..##...","#.#.#...","##..#...","#...#...",".###....","........"]);
+  def('1', ["..#.....",".##.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('2', [".###....","#...#...","....#...","..##....",".#......","#.......","#####...","........"]);
+  def('3', ["####....","....#...","....#...",".###....","....#...","....#...","####....","........"]);
+  def('4', ["...##...",".#.#....","#..#....","#####...","...#....","...#....","...#....","........"]);
+  def('5', ["#####...","#.......","####....","....#...","....#...","#...#...",".###....","........"]);
+  def('6', [".###....","#.......","#.......","####....","#...#...","#...#...",".###....","........"]);
+  def('7', ["#####...","....#...","...#....","...#....","..#.....","..#.....","..#.....","........"]);
+  def('8', [".###....","#...#...","#...#...",".###....","#...#...","#...#...",".###....","........"]);
+  def('9', [".###....","#...#...","#...#...",".####...","....#...","....#...",".###....","........"]);
+  def('A', [".###....","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('B', ["####....","#...#...","#...#...","####....","#...#...","#...#...","####....","........"]);
+  def('C', [".####...","#.......","#.......","#.......","#.......","#.......",".####...","........"]);
+  def('D', ["####....","#...#...","#...#...","#...#...","#...#...","#...#...","####....","........"]);
+  def('E', ["#####...","#.......","#.......","####....","#.......","#.......","#####...","........"]);
+  def('F', ["#####...","#.......","#.......","####....","#.......","#.......","#.......","........"]);
+  def('G', [".####...","#.......","#.......","#.###...","#...#...","#...#...",".####...","........"]);
+  def('H', ["#...#...","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('I', [".###....","..#.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('J', ["..###...","...#....","...#....","...#....","...#....","#..#....",".##.....","........"]);
+  def('K', ["#...#...","#..#....","#.#.....","##......","#.#.....","#..#....","#...#...","........"]);
+  def('L', ["#.......","#.......","#.......","#.......","#.......","#.......","#####...","........"]);
+  def('M', ["#...#...","##.##...","#.#.#...","#.#.#...","#...#...","#...#...","#...#...","........"]);
+  def('N', ["#...#...","##..#...","#.#.#...","#..##...","#...#...","#...#...","#...#...","........"]);
+  def('O', [".###....","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('P', ["####....","#...#...","#...#...","####....","#.......","#.......","#.......","........"]);
+  def('Q', [".###....","#...#...","#...#...","#...#...","#.#.#...","#..#....",".##.#...","........"]);
+  def('R', ["####....","#...#...","#...#...","####....","#.#.....","#..#....","#...#...","........"]);
+  def('S', [".####...","#.......","#.......",".###....","....#...","....#...","####....","........"]);
+  def('T', ["#####...","..#.....","..#.....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('U', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('V', ["#...#...","#...#...","#...#...","#...#...","#...#...",".#.#....","..#.....","........"]);
+  def('W', ["#...#...","#...#...","#...#...","#.#.#...","#.#.#...","##.##...","#...#...","........"]);
+  def('X', ["#...#...","#...#...",".#.#....","..#.....",".#.#....","#...#...","#...#...","........"]);
+  def('Y', ["#...#...","#...#...",".#.#....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('Z', ["#####...","....#...","...#....","..#.....",".#......","#.......","#####...","........"]);
+  def('!', ["..#.....","..#.....","..#.....","..#.....","..#.....","........","..#.....","........"]);
+  def('.', ["........","........","........","........","........","..##....","..##....","........"]);
+  def('-', ["........","........","........",".###....","........","........","........","........"]);
+  def(':', ["........","..##....","..##....","........","..##....","..##....","........","........"]);
+  def('+', ["........","..#.....","..#.....","#####...","..#.....","..#.....","........","........"]);
+  def('%', ["##...#..","##..#...","...#....","..#.....",".#......","#...##..","#...##..","........"]);
+  def('*', ["........",".#...#..","..#.#...","...#....","..#.#...",".#...#..","........","........"]);
+  return F;
+})();
+
+/* 画文字:逐像素 fillRect,等宽 8px,可整数放大 */
+function drawText(str, x, y, color, scale) {
+  scale = scale || 1;
+  str = String(str).toUpperCase();
+  for (let i = 0; i < str.length; i++) {
+    const g = FONT[str[i]] || FONT[' '];
+    for (let r = 0; r < 8; r++) {
+      const row = g[r];
+      for (let c = 0; c < 8; c++) {
+        if (row[c] === '#') R(x + i * 8 * scale + c * scale, y + r * scale, scale, scale, color);
+      }
+    }
+  }
+}
+function drawTextC(str, y, color, scale) {       // 居中
+  scale = scale || 1;
+  drawText(str, ((W - String(str).length * 8 * scale) / 2) | 0, y, color, scale);
+}
+
+/* ---------- 输入:键盘 + 触屏(按下沿可靠入队,不丢输入) ---------- */
+const keys = { left: 0, right: 0, up: 0, down: 0, a: 0, b: 0, start: 0, select: 0 };
+const pressed = {};                    // 按下沿,逻辑帧消费,绝不丢输入
+const KEYMAP = {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+  KeyX: 'a', KeyZ: 'b', Enter: 'start', ShiftLeft: 'select', ShiftRight: 'select',
+};
+window.addEventListener('keydown', e => {
+  const k = KEYMAP[e.code];
+  if (!k) return;
+  e.preventDefault();
+  Snd.init();                          // 首次按键才初始化音频
+  if (!keys[k]) pressed[k] = 1;
+  keys[k] = 1;
+});
+window.addEventListener('keyup', e => {
+  const k = KEYMAP[e.code];
+  if (k) keys[k] = 0;
+});
+function hit(k) { if (pressed[k]) { pressed[k] = 0; return true; } return false; }
+function clearPressed() { for (const k in pressed) pressed[k] = 0; }
+
+/* 触屏按钮(pointer 事件,鼠标同样可用) */
+document.querySelectorAll('[data-k]').forEach(el => {
+  const k = el.getAttribute('data-k');
+  const down = e => {
+    e.preventDefault(); Snd.init();
+    if (!keys[k]) pressed[k] = 1;
+    keys[k] = 1;
+    el.classList.add('on');
+    if (el.setPointerCapture && e.pointerId !== undefined) {
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+  };
+  const up = e => { e.preventDefault(); keys[k] = 0; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+});
+
+/* ---------- 赛道数据(折线段硬编码,改这里就能改赛道) ---------- */
+/* 折线点 [x,y],x 严格递增,y 向下为正。地面高度 = 折线插值。 */
+const TRACK_PTS = [
+  [0, 116], [260, 116],                        // 起点直道
+  [320, 110], [380, 116], [440, 111], [500, 116], [560, 112], [620, 116], // 连续小丘
+  [740, 116], [800, 103], [880, 116],          // 小跳台
+  [1020, 116], [1090, 123], [1160, 116],       // 洼地
+  [1240, 116], [1300, 105], [1440, 105], [1500, 116], // 高台
+  [1740, 116],                                 // 环形圈区(平地,cx=1620)
+  [1960, 116], [2040, 98], [2120, 116],        // 中跳台
+  [2280, 116], [2330, 72], [2560, 116],        // BIG AIR 大跳台
+  [2760, 116], [2830, 109], [2900, 116], [2970, 109], [3040, 116], // 快速小丘
+  [3220, 116], [3290, 104], [3360, 116],       // 跳台
+  [3560, 116], [3660, 100], [3820, 100], [3940, 116], // 爬坡高台
+  [4120, 116], [4200, 94], [4340, 116],        // 终点前大跳
+  [4620, 116],                                 // 终点直道
+];
+const LOOPS = [{ cx: 1620, r: 21 }];           // 环形圈:圆心 (cx, 地面-r)
+const FINISH_X = 4480;                         // 终点线
+
+/* 预处理折线段 */
+const SEGS = [];
+for (let i = 0; i < TRACK_PTS.length - 1; i++) {
+  const [x0, y0] = TRACK_PTS[i], [x1, y1] = TRACK_PTS[i + 1];
+  const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy);
+  SEGS.push({ x0, y0, x1, y1, dx, dy, len, ang: Math.atan2(dy, dx), cos: dx / len });
+}
+for (const lp of LOOPS) lp.cy = 0;             // 占位,groundAt 就绪后回填
+
+/* 地面查询:x -> { y, ang, i } (二分) */
+function groundAt(x) {
+  x = Math.max(SEGS[0].x0, Math.min(SEGS[SEGS.length - 1].x1 - 0.001, x));
+  let lo = 0, hi = SEGS.length - 1;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (SEGS[mid].x1 < x) lo = mid + 1; else hi = mid; }
+  const s = SEGS[lo];
+  return { y: s.y0 + s.dy * ((x - s.x0) / s.dx), ang: s.ang, i: lo };
+}
+for (const lp of LOOPS) lp.cy = groundAt(lp.cx).y - lp.r;
+
+/* 道具:[氮气瓶 N / 时间瓶 T],y = 地面上方 12px */
+const BOTTLE_DEF = [
+  { x: 700, t: 'N' }, { x: 1200, t: 'T' }, { x: 1560, t: 'N' }, { x: 2100, t: 'T' },
+  { x: 2260, t: 'N' }, { x: 2900, t: 'T' }, { x: 3180, t: 'N' }, { x: 3700, t: 'T' },
+  { x: 4050, t: 'N' }, { x: 4300, t: 'T' },
+];
+
+/* ---------- 物理参数 ---------- */
+const G = 0.16;          // 重力(空中)
+const G_SLOPE = 0.15;    // 坡面重力分量
+const ACC = 0.055;       // 油门加速度
+const BRK = 0.14;        // 刹车减速度
+const CRUISE = 1.5;      // 不给油也自动巡航的速度
+const V_MAX = 3.4;       // 油门极速
+const V_NITRO = 5.3;     // 氮气极速
+const V_BACK = -1.2;     // 倒退上限
+const NITRO_ACC = 0.16;  // 氮气推进
+const NITRO_T = 100;     // 氮气持续帧数
+const LAUNCH_K = 1.0;    // 起跳判定系数:v*Δ坡角 > G*K 则离地
+const ROT0 = 0.07;       // 空中初始旋转速度(按住持续加速)
+const ROT_ACC = 0.007;   // 按住旋转的角加速度
+const ROT_MAX = 0.16;    // 旋转速度上限
+const LAND_TOL = 0.55;   // 平稳落地允许的姿态差(弧度)
+const FLIP_RAD = 5.8;    // 判定完整翻转的累计转角(~330°)
+const LOOP_G = 0.55;     // 环形圈内重力切向分量系数(街机化)
+const LOOP_FALL = 0.8;   // 环形圈脱落判定系数:v² < r*G*K*|sinφ|
+const START_TIME = 60 * 60;  // 60 秒倒计时(帧)
+const TIME_BONUS = 5 * 60;   // 时间瓶 +5 秒
+const CRASH_T = 120;         // 摔车动画 2 秒
+
+/* ---------- 游戏状态 ---------- */
+const ST = { TITLE: 0, PLAY: 1, CRASH: 2, FINISH: 3, OVER: 4 };
+const game = {
+  state: ST.TITLE, frame: 0,
+  raceT: 0,            // 比赛已用帧数
+  timeLeft: START_TIME,
+  nitro: 1, nitroT: 0,
+  overT: 0, rating: 'C', finishTime: 0,
+  tickSec: -1,         // 倒计时滴答用
+};
+let best = 0;                              // 最佳完赛时间(页面内存变量)
+let camX = 0, camShake = 0;
+let popups = [];                           // 飘字 {wx,y,txt,ttl}
+let bottles = [];                          // 道具实例 {x,y,t,taken}
+let lastSec = -1;
+
+/* 车:mode ground=贴地 air=空中 loop=环形圈 */
+const bike = {
+  mode: 'ground', x: 20, y: 116, v: 0, th: 0, segI: 0,
+  vx: 0, vy: 0, rotAcc: 0, rotV: 0, prevLR: 0,
+  loop: null, phi: 0,
+  respawnBlink: 0,
+};
+const loopDbg = { entered: 0, cleared: 0, fell: 0 };  // 测试用
+
+/* 摔车现场:车手与车各自翻滚飞出 + 火花 */
+const crash = {
+  t: 0, respawnX: 0,
+  rider: { x: 0, y: 0, vx: 0, vy: 0, rot: 0, rv: 0, rest: false },
+  bikeO: { x: 0, y: 0, vx: 0, vy: 0, rot: 0, rv: 0, rest: false },
+  sparks: [], bounced: 0,
+};
+
+function angNorm(a) {
+  while (a > Math.PI) a -= 2 * Math.PI;
+  while (a < -Math.PI) a += 2 * Math.PI;
+  return a;
+}
+
+function startGame() {
+  game.raceT = 0; game.timeLeft = START_TIME;
+  game.nitro = 1; game.nitroT = 0; game.overT = 0; game.tickSec = -1;
+  bike.mode = 'ground'; bike.x = 20; bike.segI = 0;
+  bike.y = groundAt(20).y; bike.v = 0; bike.th = 0;
+  bike.vx = 0; bike.vy = 0; bike.rotAcc = 0; bike.rotV = 0; bike.prevLR = 0;
+  bike.loop = null; bike.respawnBlink = 0;
+  loopDbg.entered = 0; loopDbg.cleared = 0; loopDbg.fell = 0;
+  bottles = BOTTLE_DEF.map(b => ({ x: b.x, y: groundAt(b.x).y - 12, t: b.t, taken: false }));
+  popups = [];
+  camX = 0; camShake = 0;
+  clearPressed();
+  game.state = ST.PLAY;
+}
+
+function popup(wx, y, txt) { popups.push({ wx, y, txt, ttl: 55 }); }
+
+/* ---------- 氮气 ---------- */
+function useNitro() {
+  if (game.nitro <= 0 || game.nitroT > 0) return;
+  game.nitro--;
+  game.nitroT = NITRO_T;
+  camShake = Math.max(camShake, 6);
+  Snd.nitro();
+}
+
+/* ---------- 摔车 ---------- */
+function startCrash() {
+  const spdX = bike.mode === 'air' ? bike.vx : bike.v * Math.cos(bike.th);
+  const spdY = bike.mode === 'air' ? bike.vy : bike.v * Math.sin(bike.th);
+  crash.t = 0;
+  crash.bounced = 0;
+  crash.sparks = [];
+  /* 车手:向前上方飞出,疯狂转圈 */
+  crash.rider.x = bike.x; crash.rider.y = bike.y - 8;
+  crash.rider.vx = spdX * 0.8 + 0.6;
+  crash.rider.vy = Math.min(spdY, 0) - 2.2;
+  crash.rider.rot = bike.th;
+  crash.rider.rv = 0.22 + Math.random() * 0.12;
+  crash.rider.rest = false;
+  /* 车:低空翻滚,反向打转 */
+  crash.bikeO.x = bike.x; crash.bikeO.y = bike.y - 4;
+  crash.bikeO.vx = spdX * 0.45;
+  crash.bikeO.vy = -1.4;
+  crash.bikeO.rot = bike.th;
+  crash.bikeO.rv = -0.3;
+  crash.bikeO.rest = false;
+  /* 复活点:摔车点往后找一段平地;环形圈里摔的放回环前 */
+  let rx = Math.max(20, bike.x - 24);
+  if (bike.loop) rx = bike.loop.cx - bike.loop.r - 18;
+  for (let i = 0; i < 60; i++) {
+    if (Math.abs(groundAt(rx).ang) < 0.12) break;
+    rx = Math.max(20, rx - 8);
+  }
+  crash.respawnX = rx;
+  bike.loop = null;
+  camShake = 10;
+  game.state = ST.CRASH;
+  Snd.crash();
+}
+
+function crashPiece(p, isRider) {
+  if (p.rest) return;
+  p.vy += G * 0.9;
+  p.x += p.vx; p.y += p.vy;
+  p.rot += p.rv;
+  const gy = groundAt(p.x).y;
+  if (p.y >= gy - 1) {
+    p.y = gy - 1;
+    if (Math.abs(p.vy) > 0.8) {
+      p.vy *= -0.42; p.vx *= 0.55; p.rv *= 0.55;
+      if (isRider) { Snd.bounce(); burst(p.x, gy, 5); }
+    } else {
+      p.rest = true;                 // 躺平
+      p.vy = 0; p.vx = 0; p.rv = 0;
+      p.rot = Math.round(p.rot / Math.PI) * Math.PI; // 平躺在地面
+    }
+  }
+}
+function burst(x, y, n) {
+  for (let i = 0; i < n; i++)
+    crash.sparks.push({
+      x, y, vx: (Math.random() - 0.5) * 2.4, vy: -Math.random() * 2.2,
+      ttl: 20 + (Math.random() * 14 | 0), c: Math.random() < 0.5 ? 0 : 1,
+    });
+}
+
+function stepCrash() {
+  crash.t++;
+  crashPiece(crash.rider, true);
+  crashPiece(crash.bikeO, false);
+  for (const s of crash.sparks) {
+    s.vy += G * 0.6; s.x += s.vx; s.y += s.vy; s.ttl--;
+  }
+  crash.sparks = crash.sparks.filter(s => s.ttl > 0);
+  if (crash.t >= CRASH_T) {
+    /* 原地复活:眨眼登场,速度清零 */
+    bike.mode = 'ground';
+    bike.x = crash.respawnX;
+    const g = groundAt(bike.x);
+    bike.y = g.y; bike.segI = g.i; bike.v = 0; bike.th = g.ang;
+    bike.rotAcc = 0; bike.rotV = 0; bike.loop = null;
+    bike.respawnBlink = 50;
+    clearPressed();
+    game.state = ST.PLAY;
+  }
+}
+
+/* ---------- 贴地行驶 ---------- */
+function stepGround() {
+  const g0 = SEGS[bike.segI];
+  const ang0 = g0.ang;
+  /* 油门 / 自动巡航 / 刹车 */
+  if (keys.a) bike.v += ACC;
+  else bike.v += (CRUISE - bike.v) * 0.02;
+  if (keys.b) bike.v -= BRK;
+  /* 坡面重力 */
+  bike.v += G_SLOPE * Math.sin(ang0);
+  /* 氮气 */
+  if (game.nitroT > 0) {
+    bike.v += NITRO_ACC;
+    if (bike.v > V_NITRO) bike.v = V_NITRO;    // 氮气硬顶
+  }
+  /* 限速(软顶) */
+  const vmax = game.nitroT > 0 ? V_NITRO : V_MAX;
+  if (bike.v > vmax) bike.v += (vmax - bike.v) * 0.1;
+  if (bike.v < V_BACK) bike.v = V_BACK;
+  if (bike.x <= 12 && bike.v < 0) bike.v = 0;
+  /* 沿折线推进(可跨段,可倒退) */
+  let rem = bike.v;
+  const oldX = bike.x;
+  let guard = 0;
+  while (Math.abs(rem) > 1e-6 && guard++ < 8) {
+    const s = SEGS[bike.segI];
+    if (rem > 0) {
+      const nx = bike.x + rem * s.cos;
+      if (nx >= s.x1) { rem -= (s.x1 - bike.x) / s.cos; bike.x = s.x1; if (bike.segI < SEGS.length - 1) bike.segI++; }
+      else { bike.x = nx; rem = 0; }
+    } else {
+      const nx = bike.x + rem * s.cos;
+      if (nx <= s.x0) { rem -= (s.x0 - bike.x) / s.cos; bike.x = s.x0; if (bike.segI > 0) bike.segI--; }
+      else { bike.x = nx; rem = 0; }
+    }
+  }
+  const g1 = SEGS[bike.segI];
+  bike.y = g1.y0 + g1.dy * ((bike.x - g1.x0) / g1.dx);
+  /* 起跳:坡角向下突变,且速度大到地面"吸不住" */
+  const dAng = g1.ang - ang0;
+  if (dAng > 0.0001 && bike.v * dAng > G * LAUNCH_K && bike.v > 0.3) {
+    bike.mode = 'air';
+    bike.vx = bike.v * Math.cos(ang0);
+    bike.vy = bike.v * Math.sin(ang0);
+    bike.th = ang0;
+    bike.rotAcc = 0; bike.rotV = 0; bike.prevLR = 0;
+    return;
+  }
+  /* 姿态缓动贴坡 */
+  bike.th += angNorm(g1.ang - bike.th) * 0.35;
+  checkPickups();
+  /* 进入环形圈:平地上驶过圆底 */
+  for (const lp of LOOPS) {
+    if (oldX < lp.cx && bike.x >= lp.cx && Math.abs(g1.ang) < 0.1) {
+      bike.mode = 'loop';
+      bike.loop = lp;
+      bike.phi = Math.PI / 2;
+      loopDbg.entered++;
+      break;
+    }
+  }
+  if (bike.x >= FINISH_X) finishRace();
+}
+
+/* ---------- 空中 ---------- */
+function stepAir() {
+  bike.vy += G;
+  bike.vx *= 0.999;
+  if (game.nitroT > 0 && bike.vx < V_NITRO) bike.vx += NITRO_ACC * 0.7;
+  /* 左右控制翻转:按住越转越快,松开即停(方便对准落地) */
+  const lr = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  if (lr !== 0) {
+    if (bike.prevLR !== lr) bike.rotV = ROT0;
+    else bike.rotV = Math.min(bike.rotV + ROT_ACC, ROT_MAX);
+    bike.th += bike.rotV * lr;
+    bike.rotAcc += bike.rotV * lr;
+  } else bike.rotV = 0;
+  bike.prevLR = lr;
+  bike.x += bike.vx;
+  bike.y += bike.vy;
+  const g = groundAt(bike.x);
+  if (bike.y >= g.y) {                     // 触地:姿态差决定平稳或摔车
+    const d = angNorm(bike.th - g.ang);
+    if (Math.abs(d) <= LAND_TOL) {
+      const v = bike.vx * Math.cos(g.ang) + bike.vy * Math.sin(g.ang);
+      bike.mode = 'ground';
+      bike.segI = g.i; bike.y = g.y;
+      bike.v = Math.max(0.5, v);
+      bike.th = g.ang;
+      if (Math.abs(bike.rotAcc) >= FLIP_RAD) {   // 完整翻转落地:奖一段氮气加速
+        game.nitroT = NITRO_T;
+        popup(bike.x, bike.y - 22, 'FLIP!');
+        Snd.flip();
+      }
+      bike.rotAcc = 0;
+    } else {
+      startCrash();
+    }
+    return;
+  }
+  checkPickups();
+  if (bike.x >= FINISH_X) { finishRace(); return; }
+  if (bike.y > 400) startCrash();          // 兜底(理论上到不了)
+}
+
+/* ---------- 环形圈:贴内壁行驶 ---------- */
+function stepLoop() {
+  const lp = bike.loop;
+  /* 切向重力(街机化打折) */
+  bike.v += -G * LOOP_G * Math.cos(bike.phi);
+  if (game.nitroT > 0) bike.v += NITRO_ACC;
+  if (bike.v > V_NITRO) bike.v = V_NITRO;
+  const sinP = Math.sin(bike.phi);
+  /* 上半圈速度不够 -> 脱离摔车 */
+  if (sinP < -0.05 && bike.v * bike.v < lp.r * G * LOOP_FALL * (-sinP)) {
+    loopDbg.fell++;
+    bike.x = lp.cx + lp.r * Math.cos(bike.phi);
+    bike.y = lp.cy + lp.r * Math.sin(bike.phi);
+    startCrash();
+    return;
+  }
+  bike.phi -= bike.v / lp.r;               // 前进 = phi 减小
+  if (bike.phi <= Math.PI / 2 - 2 * Math.PI) {   // 转满一圈:从底部驶出
+    loopDbg.cleared++;
+    bike.mode = 'ground';
+    bike.loop = null;
+    bike.x = lp.cx + 1;
+    const g = groundAt(bike.x);
+    bike.y = g.y; bike.segI = g.i; bike.th = 0;
+    popup(bike.x, bike.y - 26, 'LOOP!');
+    return;
+  }
+  if (bike.phi >= Math.PI / 2 + 0.5) {     // 倒退滑出入口
+    bike.mode = 'ground';
+    bike.loop = null;
+    bike.x = lp.cx - 1;
+    const g = groundAt(bike.x);
+    bike.y = g.y; bike.segI = g.i; bike.th = 0;
+    if (bike.v > 0) bike.v = 0;
+    return;
+  }
+  bike.x = lp.cx + lp.r * Math.cos(bike.phi);
+  bike.y = lp.cy + lp.r * Math.sin(bike.phi);
+  bike.th = Math.atan2(-Math.cos(bike.phi), Math.sin(bike.phi));
+  checkPickups();
+}
+
+/* ---------- 道具 ---------- */
+function checkPickups() {
+  for (const b of bottles) {
+    if (b.taken) continue;
+    const dx = b.x - bike.x, dy = b.y - (bike.y - 6);
+    if (dx * dx + dy * dy < 100) {
+      b.taken = true;
+      if (b.t === 'N') {
+        game.nitro = Math.min(9, game.nitro + 1);
+        popup(b.x, b.y - 8, 'N+1');
+        Snd.pickup();
+      } else {
+        game.timeLeft += TIME_BONUS;
+        popup(b.x, b.y - 8, '+5S');
+        Snd.timeUp();
+      }
+    }
+  }
+}
+
+/* ---------- 终点 / 超时 ---------- */
+function ratingOf(tl) {
+  if (tl >= 2400) return 'S';   // 剩 40 秒以上
+  if (tl >= 1800) return 'A';
+  if (tl >= 1200) return 'B';
+  return 'C';
+}
+function finishRace() {
+  game.finishTime = game.raceT;
+  game.rating = ratingOf(game.timeLeft);
+  if (!best || game.raceT < best) best = game.raceT;
+  game.state = ST.FINISH;
+  game.overT = 0;
+  clearPressed();
+  Snd.finish();
+}
+function timeUp() {
+  game.state = ST.OVER;
+  game.overT = 0;
+  clearPressed();
+  Snd.over();
+}
+
+/* ---------- 主逻辑 ---------- */
+function step() {
+  game.frame++;
+  if (camShake > 0) camShake--;
+  switch (game.state) {
+    case ST.TITLE:
+      if (hit('start')) { startGame(); Snd.start(); }
+      Snd.engine(0, false, false);
+      break;
+    case ST.PLAY: {
+      game.raceT++;
+      game.timeLeft--;
+      if (game.nitroT > 0) game.nitroT--;
+      if (bike.respawnBlink > 0) bike.respawnBlink--;
+      if (hit('up')) useNitro();
+      hit('select');
+      const sec = Math.ceil(game.timeLeft / 60);
+      if (sec !== lastSec) { lastSec = sec; if (sec <= 5 && sec > 0) Snd.tick(); }
+      if (bike.mode === 'ground') stepGround();
+      else if (bike.mode === 'air') stepAir();
+      else stepLoop();
+      Snd.engine(Math.abs(bike.v) + (bike.mode === 'air' ? Math.abs(bike.vx) * 0.5 : 0),
+                 game.state === ST.PLAY, game.nitroT > 0);
+      if (game.state === ST.PLAY && game.timeLeft <= 0) timeUp();
+      break;
+    }
+    case ST.CRASH: {
+      game.raceT++;
+      game.timeLeft--;
+      stepCrash();
+      Snd.engine(0, false, false);
+      if (game.state === ST.CRASH && game.timeLeft <= 0) timeUp();
+      break;
+    }
+    case ST.FINISH:
+    case ST.OVER:
+      game.overT++;
+      Snd.engine(0, false, false);
+      if (game.overT > 40 && hit('start')) game.state = ST.TITLE;
+      break;
+  }
+  /* 相机跟随 + 震屏 */
+  const target = Math.max(0, Math.min(bike.x - 48, SEGS[SEGS.length - 1].x1 - W));
+  camX += (target - camX) * 0.2;
+  for (const p of popups) { p.y -= 0.35; p.ttl--; }
+  popups = popups.filter(p => p.ttl > 0);
+}
+
+/* ---------- 像素精灵(局部坐标,可旋转绘制) ---------- */
+function pxLine(list, x0, y0, x1, y1, c) {
+  const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+  for (let i = 0; i <= n; i++) {
+    list.push({ x: Math.round(x0 + (x1 - x0) * i / n), y: Math.round(y0 + (y1 - y0) * i / n), c });
+  }
+}
+function pxDisc(list, cx, cy, r, c) {
+  for (let y = -r - 1; y <= r + 1; y++)
+    for (let x = -r - 1; x <= r + 1; x++)
+      if (x * x + y * y <= r * r) list.push({ x: cx + x, y: cy + y, c });
+}
+function pxRing(list, cx, cy, r, c) {
+  for (let y = -r - 2; y <= r + 2; y++)
+    for (let x = -r - 2; x <= r + 2; x++) {
+      const d = Math.sqrt(x * x + y * y);
+      if (d >= r - 0.9 && d <= r + 0.5) list.push({ x: cx + x, y: cy + y, c });
+    }
+}
+/* 车+骑手:原点在两轮接地点中点,面朝 +x */
+const BIKE_SPR = (() => {
+  const L = [];
+  pxRing(L, -4, -3, 2, 0);                   // 后轮
+  pxRing(L, 4, -3, 2, 0);                    // 前轮
+  pxLine(L, -4, -3, 0, -5, 1);               // 车架
+  pxLine(L, 0, -5, 4, -3, 1);
+  pxDisc(L, 0, -4, 1, 0);                    // 发动机
+  pxLine(L, 4, -3, 5, -7, 0);                // 前叉
+  L.push({ x: 5, y: -8, c: 0 });             // 车把
+  pxLine(L, -1, -6, -3, -6, 0);              // 坐垫
+  pxLine(L, -2, -7, 0, -10, 1);              // 骑手身体
+  pxLine(L, 0, -9, 4, -8, 1);                // 手臂
+  pxDisc(L, 0, -11, 2, 0);                   // 头盔
+  L.push({ x: 1, y: -12, c: 3 });            // 头盔高光
+  /* 去重 */
+  const seen = new Set();
+  return L.filter(p => {
+    const k = p.x + ',' + p.y;
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+})();
+/* 摔车时的骑手小人 */
+const RIDER_SPR = (() => {
+  const L = [];
+  pxDisc(L, 0, -4, 2, 0);                    // 头盔
+  L.push({ x: 1, y: -5, c: 3 });
+  pxLine(L, 0, -2, 0, 2, 1);                 // 身体
+  pxLine(L, -2, -1, 2, -1, 1);               // 手臂
+  pxLine(L, 0, 2, -2, 4, 1);                 // 腿
+  pxLine(L, 0, 2, 2, 4, 1);
+  const seen = new Set();
+  return L.filter(p => {
+    const k = p.x + ',' + p.y;
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+})();
+
+/* 旋转绘制精灵:scale 1=原寸 */
+function drawSprRot(spr, sx, sy, ang, scale) {
+  scale = scale || 1;
+  const cs = Math.cos(ang), sn = Math.sin(ang);
+  for (const p of spr) {
+    const rx = (p.x * cs - p.y * sn) * scale;
+    const ry = (p.x * sn + p.y * cs) * scale;
+    R(sx + Math.round(rx), sy + Math.round(ry), scale, scale, p.c);
+  }
+}
+
+/* ---------- 渲染 ---------- */
+function drawBackground() {
+  R(0, 0, W, H, 3);                          // 天空 = 最浅色
+  /* 云:0.15 视差,深色描边 + 天色填充 */
+  for (let i = 0; i < 5; i++) {
+    const sx = (((i * 173 + 40 - camX * 0.15) % 700) + 700) % 700 - 40;
+    const sy = 14 + (i * 37) % 26;
+    if (sx < -20 || sx > W + 4) continue;
+    R(sx + 2, sy, 6, 1, 1);
+    R(sx + 1, sy + 1, 1, 1, 1); R(sx + 2, sy + 1, 6, 1, 3); R(sx + 8, sy + 1, 1, 1, 1);
+    R(sx, sy + 2, 10, 1, 1);
+    R(sx + 5, sy - 2, 4, 1, 1);
+    R(sx + 4, sy - 1, 1, 1, 1); R(sx + 5, sy - 1, 4, 1, 3); R(sx + 9, sy - 1, 1, 1, 1);
+  }
+  /* 远山:0.3 视差,山脊线 + 稀疏抖动条纹 */
+  for (let sx = 0; sx < W; sx++) {
+    const wx = sx + camX * 0.3;
+    const h = 10 + 7 * Math.sin(wx * 0.013 + 2) + 5 * Math.sin(wx * 0.031) + 3 * Math.sin(wx * 0.061 + 1);
+    const top = Math.max(14, Math.round(112 - h));
+    R(sx, top, 1, 1, 1);
+    if (sx % 3 === 0) R(sx, top + 1, 1, 5, 1);
+  }
+}
+
+function drawGround() {
+  for (let sx = 0; sx < W; sx++) {
+    const wx = sx + camX;
+    const gy = Math.round(groundAt(wx).y);
+    R(sx, gy, 1, 1, 0);                      // 表面线
+    R(sx, gy + 1, 1, 1, 1);                  // 表皮层(分界)
+    if (gy + 2 < H) R(sx, gy + 2, 1, H - gy - 2, 2); // 土层
+    /* 土壤质感:确定性的稀疏深点 */
+    const hsh = (wx * 7349 + 17) % 13;
+    if (hsh === 0 && gy + 5 < H) R(sx, gy + 5, 1, 1, 1);
+    if (hsh === 5 && gy + 9 < H) R(sx, gy + 9, 1, 1, 1);
+  }
+}
+
+function drawLoops() {
+  for (const lp of LOOPS) {
+    const sx = lp.cx - camX, sy = lp.cy;
+    if (sx < -lp.r - 8 || sx > W + lp.r + 8) continue;
+    /* 环带:两圈像素 */
+    for (let a = 0; a < Math.PI * 2; a += 0.045) {
+      R(sx + Math.round(Math.cos(a) * (lp.r + 1)), sy + Math.round(Math.sin(a) * (lp.r + 1)), 1, 1, 0);
+      R(sx + Math.round(Math.cos(a) * (lp.r + 2)), sy + Math.round(Math.sin(a) * (lp.r + 2)), 1, 1, 0);
+    }
+    /* 入口箭头(闪烁提示全速通过) */
+    if ((game.frame >> 3) % 2 === 0) {
+      const ax = sx - lp.r - 14, ay = Math.round(groundAt(lp.cx - lp.r - 14).y) - 4;
+      R(ax, ay, 5, 1, 0); R(ax + 4, ay - 1, 1, 3, 0);
+      R(ax + 8, ay, 5, 1, 0); R(ax + 12, ay - 1, 1, 3, 0);
+    }
+  }
+}
+
+function drawBottle(b) {
+  const sx = Math.round(b.x - camX);
+  if (sx < -8 || sx > W + 8) return;
+  const sy = Math.round(b.y + Math.sin(game.frame * 0.08 + b.x) * 1.5);
+  if (b.t === 'N') {
+    /* 氮气瓶:深色瓶身 + 浅盖 + N 字样 */
+    R(sx - 1, sy - 4, 3, 1, 0);
+    R(sx - 2, sy - 3, 5, 8, 0);
+    R(sx - 1, sy - 2, 1, 6, 2);
+    R(sx, sy - 1, 1, 1, 3); R(sx + 1, sy, 1, 2, 3); R(sx, sy + 2, 1, 1, 3);
+  } else {
+    /* 时间瓶:圆钟 + 指针 */
+    R(sx - 3, sy - 2, 7, 5, 0);
+    R(sx - 2, sy - 3, 5, 7, 0);
+    R(sx - 2, sy - 2, 5, 5, 3);
+    R(sx, sy - 2, 1, 3, 0); R(sx, sy, 2, 1, 0);
+  }
+}
+
+function drawFinish() {
+  const sx = Math.round(FINISH_X - camX);
+  if (sx < -12 || sx > W + 12) return;
+  const gy = Math.round(groundAt(FINISH_X).y);
+  R(sx, gy - 30, 1, 30, 0);                  // 旗杆
+  /* 棋盘旗,波浪摆动 */
+  for (let r = 0; r < 4; r++)
+    for (let c = 0; c < 6; c++) {
+      const wave = Math.round(Math.sin(game.frame * 0.15 + c * 0.8) * 1);
+      R(sx + 1 + c * 2, gy - 30 + wave + r * 2, 2, 2, (r + c) % 2 === 0 ? 0 : 3);
+    }
+}
+
+function drawHUD() {
+  R(0, 0, W, 11, 3);
+  R(0, 11, W, 1, 1);
+  /* 剩余时间(不足 10 秒闪烁) */
+  const sec = Math.max(0, Math.ceil(game.timeLeft / 60));
+  const blink = sec < 10 && (game.frame >> 3) % 2 === 0;
+  drawText('T' + String(sec).padStart(2, '0'), 2, 2, blink ? 3 : 0);
+  /* 氮气库存 */
+  R(34, 3, 3, 6, 0); R(35, 2, 1, 1, 0);
+  drawText('X' + game.nitro, 40, 2, game.nitroT > 0 && (game.frame >> 2) % 2 === 0 ? 3 : 0);
+  /* 氮气爆发指示条 */
+  if (game.nitroT > 0) R(66, 4, Math.round(24 * game.nitroT / NITRO_T), 3, 0);
+  else { R(66, 4, 24, 1, 1); }
+  /* 进度条 */
+  R(96, 5, 60, 1, 1);
+  R(154, 2, 2, 7, 0);                        // 终点刻度
+  const px = 96 + Math.min(60, Math.round(60 * bike.x / FINISH_X));
+  R(px - 1, 3, 3, 5, 0);                     // 车的位置
+}
+
+function drawPopups() {
+  for (const p of popups) {
+    const sx = Math.round(p.wx - camX - p.txt.length * 4);
+    drawText(p.txt, sx, Math.round(p.y), p.ttl < 12 && (game.frame >> 2) % 2 === 0 ? 1 : 0);
+  }
+}
+
+function drawBike() {
+  if (bike.respawnBlink > 0 && (game.frame >> 2) % 2 === 0) return; // 复活闪烁
+  const sx = Math.round(bike.x - camX), sy = Math.round(bike.y);
+  drawSprRot(BIKE_SPR, sx, sy, bike.th, 1);
+  /* 氮气尾焰 */
+  if (game.nitroT > 0) {
+    const cs = Math.cos(bike.th), sn = Math.sin(bike.th);
+    const bx = sx - cs * 7, by = sy - sn * 7 - 3;
+    const L = 4 + ((game.frame >> 1) % 3) * 2;
+    for (let i = 0; i < L; i++)
+      R(bx - cs * i + (Math.random() - 0.5) * 2, by - sn * i + (Math.random() - 0.5) * 2, 1, 1, i % 2 === 0 ? 0 : 1);
+  }
+}
+
+function drawCrash() {
+  for (const s of crash.sparks) R(s.x - camX, s.y, 1, 1, s.c);
+  drawSprRot(BIKE_SPR, crash.bikeO.x - camX, crash.bikeO.y, crash.bikeO.rot, 1);
+  if (!crash.rider.rest || (game.frame >> 2) % 2 === 0)
+    drawSprRot(RIDER_SPR, crash.rider.x - camX, crash.rider.y, crash.rider.rot, 1);
+}
+
+function drawPlay() {
+  drawBackground();
+  drawGround();
+  drawLoops();
+  for (const b of bottles) if (!b.taken) drawBottle(b);
+  drawFinish();
+  if (game.state === ST.CRASH) drawCrash(); else drawBike();
+  drawPopups();
+  drawHUD();
+}
+
+/* 标题:大字 + 山坡上的摩托 + 闪烁 PRESS START */
+function drawTitle() {
+  R(0, 0, W, H, 3);
+  /* 背景山坡线 */
+  for (let sx = 0; sx < W; sx++) {
+    const gy = Math.round(104 + 8 * Math.sin((sx + 40) * 0.03));
+    R(sx, gy, 1, 1, 1);
+    if (gy + 1 < H) R(sx, gy + 1, 1, H - gy - 1, 2);
+  }
+  drawTextC('MOTOCROSS', 14, 0, 2);
+  drawTextC('MANIACS', 34, 0, 2);
+  drawTextC('60S TIME TRIAL', 56, 0);
+  /* 山坡上的摩托(2 倍) */
+  drawSprRot(BIKE_SPR, 80, 96 + Math.round(Math.sin(game.frame * 0.05) * 1), -0.12, 2);
+  if (best) drawTextC('BEST ' + (best / 60).toFixed(2), 112, 0);
+  if ((game.frame >> 4) % 2 === 0) drawTextC('PRESS START', 126, 0); // 闪烁,灵魂所在
+}
+
+function drawFinishScr() {
+  R(0, 0, W, H, 0);
+  drawTextC('FINISH!', 22, 3, 2);
+  drawTextC('TIME ' + (game.finishTime / 60).toFixed(2), 48, 3);
+  drawTextC('RATING', 66, 3);
+  drawTextC(game.rating, 78, game.rating === 'S' && (game.frame >> 3) % 2 === 0 ? 2 : 3, 3);
+  if (best) drawTextC('BEST ' + (best / 60).toFixed(2), 110, 3);
+  if (game.overT > 40 && (game.frame >> 4) % 2 === 0) drawTextC('PRESS START', 126, 3);
+}
+
+function drawOver() {
+  R(0, 0, W, H, 0);
+  drawTextC('TIME UP', 30, 3, 2);
+  const pct = Math.min(100, Math.round(100 * bike.x / FINISH_X));
+  drawTextC('DIST ' + pct + '%', 58, 3);
+  if (game.overT > 40 && (game.frame >> 4) % 2 === 0) drawTextC('PRESS START', 112, 3);
+}
+
+function render() {
+  const shx = camShake > 0 ? ((game.frame % 2) * 2 - 1) * (camShake > 5 ? 2 : 1) : 0;
+  ctx.save && ctx.save();
+  ctx.translate && ctx.translate(shx, 0);
+  switch (game.state) {
+    case ST.TITLE: drawTitle(); break;
+    case ST.PLAY:
+    case ST.CRASH: drawPlay(); break;
+    case ST.FINISH: drawFinishScr(); break;
+    case ST.OVER: drawOver(); break;
+  }
+  ctx.restore && ctx.restore();
+}
+
+/* ---------- 主循环:requestAnimationFrame + 固定 60fps 逻辑帧 ---------- */
+let lastTs = 0, acc = 0;
+function frameLoop(ts) {
+  requestAnimationFrame(frameLoop);
+  if (!lastTs) lastTs = ts;
+  let dt = ts - lastTs;
+  lastTs = ts;
+  if (dt > 250) dt = 250;                  // 切后台回来不追帧
+  acc += dt;
+  while (acc >= 1000 / 60) { step(); acc -= 1000 / 60; }
+  render();
+}
+
+/* ---------- 画布整数倍放大(3~5 倍,像素锐利) ---------- */
+function fit() {
+  const ui = document.getElementById('ui');
+  const chrome = (ui ? ui.offsetHeight : 120) + 64;
+  const availW = window.innerWidth - 20, availH = window.innerHeight - chrome;
+  let s = Math.floor(Math.min(availW / 160, availH / 144));
+  s = Math.max(3, Math.min(5, s));
+  cv.style.width = 160 * s + 'px';
+  cv.style.height = 144 * s + 'px';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', fit);
+fit();
+requestAnimationFrame(frameLoop);
+
+/* ---------- 离屏测试钩子(不影响游戏本身) ---------- */
+window.__test = {
+  ST, game, keys, pressed, step, render, startGame, groundAt, SEGS, TRACK_PTS, LOOPS, FINISH_X,
+  bike, crash, loopDbg,
+  key(k, down) { if (down && !keys[k]) pressed[k] = 1; keys[k] = down ? 1 : 0; },
+  get bottles() { return bottles; },
+  get camX() { return camX; },
+  get nitro() { return game.nitro; },
+  setNitro(n) { game.nitro = n; },
+  get timeLeft() { return game.timeLeft; },
+  setTimeLeft(f) { game.timeLeft = f; },
+  get raceT() { return game.raceT; },
+  setGround(x, v) {
+    const g = groundAt(x);
+    bike.mode = 'ground'; bike.x = x; bike.y = g.y; bike.segI = g.i;
+    bike.v = v; bike.th = g.ang; bike.loop = null; bike.rotAcc = 0;
+  },
+  setAir(x, y, vx, vy, th) {
+    bike.mode = 'air'; bike.x = x; bike.y = y;
+    bike.vx = vx; bike.vy = vy; bike.th = th; bike.rotAcc = 0; bike.rotV = 0; bike.prevLR = 0;
+  },
+  consts: { G, V_MAX, V_NITRO, START_TIME, TIME_BONUS, LAND_TOL, FLIP_RAD, CRASH_T, NITRO_T },
+};
+</script>
+</body>
+</html>

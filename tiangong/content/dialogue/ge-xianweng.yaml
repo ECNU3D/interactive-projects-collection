@@ -1,0 +1,99 @@
+# 葛仙翁｜四大天师·接状｜通明殿
+# 依据：文档 01 §2.2（促狭、爱用歇后语）；考据 research §2.2、§5（第3、51、87回）
+id: ge_xianweng
+name: 葛仙翁
+model: speech-2.6-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Radio_Host"
+  speed: 1.05
+  pitch: 0
+  emotion: fluent
+
+greet:
+  - id: greet_01
+    text: "大圣到。今日这太阳，是打西边出来了？"
+  - id: greet_02
+    text: "哟，齐天大圣肯登我们这小殿。"
+
+topics:
+  - id: yinzou
+    label: "请天师引奏上灵霄殿"
+    source: "第3回、第31回；引奏准入流程为本作增补（文档01 §5.3）"
+    lines:
+      - id: w_gxw_yinzou_01
+        speaker: pc
+        text: "葛仙翁，老孙要见玉帝，你替我递个本。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: yinzou_01
+        text: "递本使得。只是大圣平日在殿前大呼小叫，今日这般有礼——"
+      - id: yinzou_02
+        text: "猴子是何前倨后恭？"
+        quote: true
+      - id: w_gxw_yinzou_02
+        speaker: pc
+        text: "老孙讲理的时候，比谁都讲理。"
+        voice_setting: { emotion: happy, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: yinzou_03
+        text: "好，本接了。规矩在此：老翁引奏，大圣阶下听宣，一是一，二是二，错不得。"
+  - id: mianpi
+    label: "大圣的面皮"
+    source: "第87回"
+    lines:
+      - id: w_gxw_mianpi_01
+        speaker: pc
+        text: "老孙这点面子，天庭上下，谁不给？"
+        voice_setting: { emotion: happy, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: mianpi_01
+        text: "苍蝇包网儿，好大面皮。"
+        quote: true
+      - id: mianpi_02
+        text: "面子是别人给的，脸是自己丢的。大圣两样都占全了。"
+      - id: w_gxw_mianpi_02
+        speaker: pc
+        text: "你这老翁，一张嘴比老孙的棒子还损。"
+        voice_setting: { emotion: happy, speed: 1.05 }
+        model: speech-2.8-hd
+  - id: jiezhuang
+    label: "当年那道状子"
+    source: "第3回"
+    lines:
+      - id: w_gxw_jiezhuang_01
+        speaker: pc
+        text: "当年幽冥界告老孙的状子，可是你递上去的？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: jiezhuang_01
+        text: "是老翁接的。冥司的表章，墨迹未干就送上来了。"
+      - id: jiezhuang_02
+        text: "状上告你强销死籍。老翁照章转奏，一字没添，一字没减。"
+  - id: tianshi
+    label: "四位天师"
+    source: "第51回；文档01 §2.2"
+    lines:
+      - id: w_gxw_tianshi_01
+        speaker: pc
+        text: "你们四位天师，整日在这殿上做甚么？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+        model: speech-2.8-hd
+      - id: tianshi_01
+        text: "张兄传报，许兄进言，丘兄引奏，老翁接状。"
+      - id: tianshi_02
+        text: "四张嘴守一个殿，表章堆里过日子，比大圣你忙。"
+      - id: w_gxw_tianshi_02
+        speaker: pc
+        text: "忙些好，忙些好，免得闲中生事。"
+        voice_setting: { emotion: happy, speed: 1.05 }
+        model: speech-2.8-hd
+
+fallback:
+  - id: fb_01
+    text: "大圣这话，老翁接不住。"
+  - id: fb_02
+    text: "此事不归通明殿管。"
+
+bye:
+  - id: bye_01
+    text: "走好。下回带张表来，老翁给你挑个好日子递。"

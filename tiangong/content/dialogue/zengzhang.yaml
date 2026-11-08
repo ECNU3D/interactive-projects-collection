@@ -1,0 +1,85 @@
+id: zengzhang
+name: 增长天王
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Male_Announcer"
+  speed: 0.95
+  pitch: -4
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "齐天大圣。名箓验过了，请。"
+  - id: greet_02
+    text: "大圣又出门。早去早回。"
+  - id: greet_03
+    text: "南天门，增长天王当值。大圣自便。"
+
+topics:
+  - id: lan
+    label: "当日拦阻"
+    source: "第4回"
+    lines:
+      - id: w_zz_01
+        speaker: pc
+        text: "老孙初来那日，你领着一班天丁，拦得好紧。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: lan_01
+        text: "那时大圣无箓，小王依律当拦。今日有箓，依律放行。"
+      - id: lan_02
+        text: "拦是规矩，放也是规矩。小王这里，没有第三种。"
+      - id: w_zz_02
+        speaker: pc
+        text: "好个铁面门神。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+  - id: tianding
+    label: "枪林里的天丁"
+    source: "第4回"
+    lines:
+      - id: w_zz_03
+        speaker: pc
+        text: "庞刘苟毕那一班大力天丁，如今见了老孙都躲。"
+        voice_setting: { emotion: surprised, speed: 1.2 }
+      - id: tianding_01
+        text: "不是躲，是让。大圣从枪林里过，他们让枪。"
+      - id: tianding_02
+        text: "天丁一班一班轮值。大圣若嫌挤，走侧边。"
+  - id: shouzhi
+    label: "守门的意思"
+    source: "本作"
+    lines:
+      - id: w_zz_04
+        speaker: pc
+        text: "终日守着一扇门，不嫌闷？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: shouzhi_01
+        text: "门在，礼在。大圣交朋友，交朋友；小王守门，守门。"
+      - id: shouzhi_02
+        text: "这天宫的气派，一半在殿上，一半在门上。小王管的是那一半。"
+  - id: yemen
+    label: "夜里的天门"
+    source: "本作"
+    lines:
+      - id: w_zz_05
+        speaker: pc
+        text: "夜里此门也开着？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: yemen_01
+        text: "开闭有时。夜里小王亲守。大圣云来云去，记得走门，莫翻墙。"
+      - id: w_zz_06
+        speaker: pc
+        text: "老孙一个筋斗，云头直落灵霄殿前，谁耐烦走门。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: yemen_02
+        text: "那是大圣的本事。门，还是得有人看。"
+
+fallback:
+  - id: fb_01
+    text: "小王守门，别的事不管。"
+  - id: fb_02
+    text: "这话，不该问守门的。"
+
+bye:
+  - id: bye_01
+    text: "请。"
+  - id: bye_02
+    text: "慢走。"

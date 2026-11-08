@@ -1,0 +1,31 @@
+id: qiyi_huang
+name: 黄衣仙女
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Crisp_Girl"
+  speed: 1.1
+  pitch: 2
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣。奴等摘完这几篮就走。"
+
+topics:
+  - id: cuishi
+    label: "催时辰"
+    source: "第5回"
+    lines:
+      - id: w_huang_cuishi_01
+        speaker: pc
+        text: "急甚么，多坐坐。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: cuishi_02
+        text: "坐不得。懿旨定的时辰，误了半刻，娘娘怪罪下来，奴等吃罪不起。大圣行行好，莫留奴等。"
+
+fallback:
+  - id: fb_01
+    text: "奴不敢停手。"
+bye:
+  - id: bye_01
+    text: "奴告退了！"

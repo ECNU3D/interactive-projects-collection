@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>DR MARIO · GB</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  /* ============ 页面 chrome(Game Boy 机身风) ============ */
+  html,body{
+    margin:0; padding:0; background:#c4bebb;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none; user-select:none;
+    touch-action:none; overscroll-behavior:none;
+  }
+  #wrap{
+    min-height:100vh; box-sizing:border-box;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:14px 10px; gap:10px;
+  }
+  /* 机身屏幕外框:灰紫机身 + 深色镜面框 + 圆角 */
+  #bezel{
+    background:#5c5660; padding:16px 18px 12px; border-radius:16px;
+    box-shadow: inset 0 2px 0 #7d7681, inset 0 -4px 0 #463f4b, 0 8px 22px rgba(40,30,45,.35);
+  }
+  #frame{
+    background:#221e26; padding:10px; border-radius:10px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.7);
+  }
+  canvas#gb{
+    display:block; width:480px; height:432px; /* JS 会根据窗口改成整数倍 */
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    background:#9bbc0f; border-radius:2px;
+  }
+  #caption{
+    margin-top:8px; text-align:center; color:#a79ea9; font-size:10px; letter-spacing:3px;
+  }
+  /* 常驻按键说明 */
+  #hint{ color:#4a444f; font-size:12px; letter-spacing:1px; text-align:center; }
+  /* ============ 触屏虚拟按键(半透明) ============ */
+  #touch{
+    width:100%; max-width:560px;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:0 6px; box-sizing:border-box;
+  }
+  .pad{ display:grid; grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,46px); gap:4px; }
+  .tbtn{
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(38,32,44,.30); color:#2c2731;
+    border-radius:10px; font-size:18px; font-weight:bold;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .tbtn.on{ background:rgba(38,32,44,.62); color:#12100f; }
+  .tbtn.empty{ background:transparent; pointer-events:none; }
+  .abtn{ width:56px; height:56px; border-radius:50%; font-size:20px; }
+  .sbtn{ width:52px; height:22px; border-radius:12px; font-size:10px; letter-spacing:1px; }
+  #mid{ display:flex; flex-direction:column; gap:10px; align-items:center; }
+  #ab{ display:flex; gap:14px; align-items:center; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="bezel">
+    <div id="frame"><canvas id="gb" width="160" height="144"></canvas></div>
+    <div id="caption">DR MARIO &middot; GB STYLE</div>
+  </div>
+  <div id="ui">
+    <div id="hint">&#8592;&#8594; 移动 &nbsp; &#8595; 快降 &nbsp; X(A) 顺转 &nbsp; Z(B) 逆转 &nbsp; ENTER(START) 开始 &nbsp; 菜单 &#8593;&#8595; 选项 &#8592;&#8594; 改值</div>
+    <div id="touch">
+      <div class="pad">
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="up">&#9650;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="left">&#9664;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="right">&#9654;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="down">&#9660;</div>
+        <div class="tbtn empty"></div>
+      </div>
+      <div id="mid">
+        <div class="tbtn sbtn" data-k="select">SELECT</div>
+        <div class="tbtn sbtn" data-k="start">START</div>
+      </div>
+      <div id="ab">
+        <div class="tbtn abtn" data-k="b">B</div>
+        <div class="tbtn abtn" data-k="a">A</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+ * DR MARIO · Game Boy 风格马里奥医生(单文件,零依赖)
+ * 操作:方向键=十字键  X(A)=顺时针旋转  Z(B)=逆时针旋转
+ *       下=快降  Enter=Start  Shift=Select
+ * 规则:8x16 药瓶,双色胶囊下落,同色 4 连(横/竖,胶囊半粒与病毒都算)
+ *       即消除;残余半粒受重力下落可连锁;消灭全部病毒过关,
+ *       胶囊堵到瓶口 Game Over。
+ * ===================================================================== */
+
+/* ---------- 基本常量 ---------- */
+const W = 160, H = 144;                          // GB 逻辑分辨率 160x144
+const PAL = ['#0f380f', '#306230', '#8bac0f', '#9bbc0f']; // DMG 4 色绿
+const COLS = 8, ROWS = 16, CELL = 8;             // 药瓶 8 列 x 16 行,格 8px
+const FX = 8, FY = 8;                            // 瓶内左上角像素坐标
+const VROW0 = 8;                                 // 病毒只出现在下半部(rows 8..15)
+
+const cv = document.getElementById('gb');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+/* 全部画面只允许用 fillRect 画 */
+function R(x, y, w, h, c) {
+  if (w <= 0 || h <= 0) return;
+  ctx.fillStyle = PAL[c];
+  ctx.fillRect(x | 0, y | 0, w, h);
+}
+
+/* ---------- 8-bit 芯片音效(Web Audio 合成,无音频文件) ---------- */
+const Snd = (() => {
+  let ac = null, master = null, noiseBuf = null;
+  function init() {                       // 首次按键后才创建 AudioContext
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain();
+    master.gain.value = 0.14;
+    master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  function sq(freq, delay, dur, vol, slideTo) {   // 方波
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(delay, dur, vol, hp) {           // 噪声通道
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const s = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+    s.buffer = noiseBuf;
+    s.loop = true;
+    f.type = hp ? 'highpass' : 'lowpass';
+    f.frequency.value = hp ? 1800 : 900;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t); s.stop(t + dur + 0.02);
+  }
+  const N = n => 440 * Math.pow(2, (n - 69) / 12); // MIDI 音号 -> 频率
+  /* 胜利小旋律:8 小节 x 4 个八分音符(0=休止),外加每小节一个低音 */
+  const WIN_M = [72, 76, 79, 76,  77, 81, 79, 76,  74, 77, 79, 74,  76, 79, 84, 79,
+                 81, 79, 77, 76,  74, 76, 77, 74,  72, 74, 76, 79,  84, 0, 84, 0];
+  const WIN_B = [48, 53, 50, 48, 53, 50, 48, 55];
+  return {
+    init,
+    move()   { sq(220, 0, 0.03, 0.35); },                          // 移动"哒"
+    rotate() { sq(480, 0, 0.04, 0.4, 300); },                      // 旋转"咔"
+    lock()   { sq(130, 0, 0.09, 0.5, 60); noise(0, 0.06, 0.3, false); }, // 落地"咚"
+    cursor() { sq(660, 0, 0.03, 0.3); },                           // 菜单移动
+    change() { sq(440, 0, 0.05, 0.4, 560); },                      // 菜单改值
+    clear(chain) {                                                 // 消除:连锁越高音越高
+      const b = 60 + Math.min(chain, 8) * 4;
+      [0, 4, 7].forEach((s, i) => sq(N(b + s), i * 0.06, 0.09, 0.45));
+      noise(0, 0.08, 0.3, true);                                   // 病毒爆裂
+    },
+    start()  { sq(N(72), 0, 0.07, 0.45); sq(N(79), 0.07, 0.12, 0.45); },
+    win() {                                                        // 过关:8 小节胜利旋律
+      WIN_M.forEach((n, i) => { if (n) sq(N(n), i * 0.13, 0.12, 0.4); });
+      WIN_B.forEach((n, i) => sq(N(n), i * 0.52, 0.5, 0.22));
+    },
+    over()   { [76, 72, 69, 65, 62, 57].forEach((n, i) => sq(N(n), i * 0.14, 0.15, 0.45)); },
+  };
+})();
+
+/* ---------- 8x8 手绘像素字体(画布文字只能用它) ---------- */
+const FONT = (() => {
+  const F = {};
+  const def = (ch, rows) => { F[ch] = rows; };
+  def(' ', ["........","........","........","........","........","........","........","........"]);
+  def('0', [".###....","#...#...","#..##...","#.#.#...","##..#...","#...#...",".###....","........"]);
+  def('1', ["..#.....",".##.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('2', [".###....","#...#...","....#...","..##....",".#......","#.......","#####...","........"]);
+  def('3', ["####....","....#...","....#...",".###....","....#...","....#...","####....","........"]);
+  def('4', ["...##...",".#.#....","#..#....","#####...","...#....","...#....","...#....","........"]);
+  def('5', ["#####...","#.......","####....","....#...","....#...","#...#...",".###....","........"]);
+  def('6', [".###....","#.......","#.......","####....","#...#...","#...#...",".###....","........"]);
+  def('7', ["#####...","....#...","...#....","...#....","..#.....","..#.....","..#.....","........"]);
+  def('8', [".###....","#...#...","#...#...",".###....","#...#...","#...#...",".###....","........"]);
+  def('9', [".###....","#...#...","#...#...",".####...","....#...","....#...",".###....","........"]);
+  def('A', [".###....","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('B', ["####....","#...#...","#...#...","####....","#...#...","#...#...","####....","........"]);
+  def('C', [".####...","#.......","#.......","#.......","#.......","#.......",".####...","........"]);
+  def('D', ["####....","#...#...","#...#...","#...#...","#...#...","#...#...","####....","........"]);
+  def('E', ["#####...","#.......","#.......","####....","#.......","#.......","#####...","........"]);
+  def('F', ["#####...","#.......","#.......","####....","#.......","#.......","#.......","........"]);
+  def('G', [".####...","#.......","#.......","#.###...","#...#...","#...#...",".####...","........"]);
+  def('H', ["#...#...","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('I', [".###....","..#.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('J', ["..###...","...#....","...#....","...#....","...#....","#..#....",".##.....","........"]);
+  def('K', ["#...#...","#..#....","#.#.....","##......","#.#.....","#..#....","#...#...","........"]);
+  def('L', ["#.......","#.......","#.......","#.......","#.......","#.......","#####...","........"]);
+  def('M', ["#...#...","##.##...","#.#.#...","#.#.#...","#...#...","#...#...","#...#...","........"]);
+  def('N', ["#...#...","##..#...","#.#.#...","#..##...","#...#...","#...#...","#...#...","........"]);
+  def('O', [".###....","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('P', ["####....","#...#...","#...#...","####....","#.......","#.......","#.......","........"]);
+  def('Q', [".###....","#...#...","#...#...","#...#...","#.#.#...","#..#....",".##.#...","........"]);
+  def('R', ["####....","#...#...","#...#...","####....","#.#.....","#..#....","#...#...","........"]);
+  def('S', [".####...","#.......","#.......",".###....","....#...","....#...","####....","........"]);
+  def('T', ["#####...","..#.....","..#.....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('U', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('V', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".#.#....","........"]);
+  def('W', ["#...#...","#...#...","#...#...","#.#.#...","#.#.#...","##.##...","#...#...","........"]);
+  def('X', ["#...#...","#...#...",".#.#....","..#.....",".#.#....","#...#...","#...#...","........"]);
+  def('Y', ["#...#...","#...#...",".#.#....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('Z', ["#####...","....#...","...#....","..#.....",".#......","#.......","#####...","........"]);
+  def('!', ["..#.....","..#.....","..#.....","..#.....","..#.....","........","..#.....","........"]);
+  def('.', ["........","........","........","........","........","..##....","..##....","........"]);
+  def('-', ["........","........","........",".###....","........","........","........","........"]);
+  def(':', ["........","..##....","..##....","........","..##....","..##....","........","........"]);
+  return F;
+})();
+
+/* 画文字:逐像素 fillRect,等宽 8px,可整数放大 */
+function drawText(str, x, y, color, scale) {
+  scale = scale || 1;
+  str = String(str).toUpperCase();
+  for (let i = 0; i < str.length; i++) {
+    const g = FONT[str[i]] || FONT[' '];
+    for (let r = 0; r < 8; r++) {
+      const row = g[r];
+      for (let c = 0; c < 8; c++) {
+        if (row[c] === '#') R(x + i * 8 * scale + c * scale, y + r * scale, scale, scale, color);
+      }
+    }
+  }
+}
+
+/* ---------- 病毒像素图:3 类,各 2 帧表情动画(2x2 眼睛/嘴巴) ---------- */
+/* B=身体色(该病毒的深浅), E=表情色(深色病毒用浅色脸,浅色病毒用深色脸) */
+const VSPR = [
+  [ // 0 深色病毒:方脸,眨眼 + 露牙
+    ["..BBBB..",".BBBBBB.","BEEBBEEB","BEEBBEEB","BBBBBBBB","BBBEEBBB","BBBEEBBB",".BBBBBB."],
+    ["..BBBB..",".BBBBBB.","BBBBBBBB","BEEBBEEB","BBBBBBBB","BEBBBBEB","BBBBBBBB",".BBBBBB."],
+  ],
+  [ // 1 中色病毒:触角,眯眼 + 大笑
+    [".B....B.","..BBBB..","BBBBBBBB","BEEBBEEB","BEEBBEEB","BBBBBBBB","BEEEEEEB",".BBBBBB."],
+    [".B....B.","..BBBB..","BBBBBBBB","BBBBBBBB","BEEBBEEB","BBBBBBBB","BBEEEEBB",".BBBBBB."],
+  ],
+  [ // 2 浅色病毒:尖刺头,转眼 + 撇嘴
+    [".B.BB.B.","BBBBBBBB","BEEBBEEB","BEEBBEEB","BBBBBBBB","BBBEEBBB","BBBEEBBB",".BBBBBB."],
+    [".B.BB.B.","BBBBBBBB","BBBBBBBB","BEEBBEEB","BEEBBEEB","BBBBBBBB","BBEEBBBB",".BBBBBB."],
+  ],
+];
+function drawVirus(sx, sy, t, fr, sc) {
+  sc = sc || 1;
+  const rows = VSPR[t][fr & 1];
+  const face = t === 2 ? 0 : 3;                 // 浅病毒配深脸,深/中病毒配浅脸
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++) {
+      const ch = rows[r][c];
+      if (ch === 'B') R(sx + c * sc, sy + r * sc, sc, sc, t);
+      else if (ch === 'E') R(sx + c * sc, sy + r * sc, sc, sc, face);
+    }
+}
+
+/* 胶囊半粒:8x8,深色描边 + 本色填充 + 高光(颜色靠 3 级深浅区分) */
+function drawHalf(sx, sy, c) {
+  R(sx, sy, 8, 8, c);
+  const sh = c === 0 ? 2 : 3;                   // 深色粒用中绿高光,其余用最浅
+  R(sx + 2, sy + 2, 2, 2, sh);
+  R(sx + 4, sy + 1, 2, 1, sh);
+  R(sx, sy, 8, 1, 0); R(sx, sy + 7, 8, 1, 0);
+  R(sx, sy, 1, 8, 0); R(sx + 7, sy, 1, 8, 0);
+}
+
+/* ---------- 输入:键盘 + 触屏(按住连发 / 单次触发都可靠) ---------- */
+const keys = { left: 0, right: 0, up: 0, down: 0, a: 0, b: 0, start: 0, select: 0 };
+const pressed = {};                    // 按下沿,逻辑帧消费,绝不丢输入
+const KEYMAP = {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+  KeyX: 'a', KeyZ: 'b', Enter: 'start', ShiftLeft: 'select', ShiftRight: 'select',
+};
+window.addEventListener('keydown', e => {
+  const k = KEYMAP[e.code];
+  if (!k) return;
+  e.preventDefault();
+  Snd.init();                          // 首次按键才初始化音频
+  if (!keys[k]) pressed[k] = 1;
+  keys[k] = 1;
+});
+window.addEventListener('keyup', e => {
+  const k = KEYMAP[e.code];
+  if (k) keys[k] = 0;
+});
+function hit(k) { if (pressed[k]) { pressed[k] = 0; return true; } return false; }
+function clearPressed() { for (const k in pressed) pressed[k] = 0; }
+
+/* 触屏按钮(pointer 事件,鼠标同样可用) */
+document.querySelectorAll('[data-k]').forEach(el => {
+  const k = el.getAttribute('data-k');
+  const down = e => {
+    e.preventDefault(); Snd.init();
+    if (!keys[k]) pressed[k] = 1;
+    keys[k] = 1;
+    el.classList.add('on');
+    if (el.setPointerCapture && e.pointerId !== undefined) {
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+  };
+  const up = e => { e.preventDefault(); keys[k] = 0; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+});
+
+/* ---------- 游戏状态 ---------- */
+const ST = { TITLE: 0, PLAY: 1, CLEAR: 2, OVER: 3 };
+const SPD_NAME = ['LOW', 'MED', 'HI'];
+const SPDS = [40, 24, 12];                       // LOW/MED/HI 每格下落帧数
+const settings = { level: 0, speed: 1 };         // 标题菜单可选:LEVEL 0~9 / LOW MED HI
+const game = {
+  state: ST.TITLE, frame: 0,
+  score: 0, level: 0, speed: 1, stage: 1,
+  cursor: 0, overT: 0, clearT: 0, maxChain: 0,
+};
+/* grid[y][x] = null | {c:0..2 颜色, v:是否病毒, p:另半粒格号(-1=单粒), f:闪烁中} */
+let grid = [];
+let cur = null;                        // 当前胶囊 {x,y,o,a,b}:o=朝向,a/b=两半颜色
+let nextCap = { a: 0, b: 1 };          // NEXT 预览
+let phase = 'fall';                    // fall=下落 flash=闪烁消除 drop=重力沉降
+let fallT = 0;
+let flashCells = null, flashT = 0;
+let chain = 0, dropT = 0;
+let virusesLeft = 0, typeLeft = [0, 0, 0];
+let dasDir = 0, dasT = 0;
+
+/* 胶囊朝向:A 半粒锚定,B 相对 A 的位置;o=0 右,1 下,2 左,3 上 */
+const CELLS = [
+  [[0, 0], [1, 0]],
+  [[0, 0], [0, 1]],
+  [[1, 0], [0, 0]],
+  [[0, 1], [0, 0]],
+];
+function collide(o, x, y) {
+  for (const [cx, cy] of CELLS[o]) {
+    const gx = x + cx, gy = y + cy;
+    if (gx < 0 || gx >= COLS || gy < 0 || gy >= ROWS) return true;
+    if (grid[gy][gx]) return true;
+  }
+  return false;
+}
+
+/* 在 (x,y) 放 color 后是否会形成横/竖 4 连(布病毒时避免开局即消) */
+function createsRun4(x, y) {
+  const c = grid[y][x].c;
+  let run = 1;
+  for (let i = x - 1; i >= 0 && grid[y][i] && grid[y][i].c === c; i--) run++;
+  for (let i = x + 1; i < COLS && grid[y][i] && grid[y][i].c === c; i++) run++;
+  if (run >= 4) return true;
+  run = 1;
+  for (let i = y - 1; i >= 0 && grid[i][x] && grid[i][x].c === c; i--) run++;
+  for (let i = y + 1; i < ROWS && grid[i][x] && grid[i][x].c === c; i++) run++;
+  return run >= 4;
+}
+
+/* 布病毒:LEVEL L -> 4*(L+1) 只,随机撒在下半部,不出现开局 4 连 */
+function placeViruses(lv) {
+  grid = Array.from({ length: ROWS }, () => new Array(COLS).fill(null));
+  const n = 4 * (lv + 1);
+  let placed = 0, guard = 0;
+  typeLeft = [0, 0, 0];
+  while (placed < n && guard++ < 3000) {
+    const x = (Math.random() * COLS) | 0;
+    const y = VROW0 + ((Math.random() * (ROWS - VROW0)) | 0);
+    if (grid[y][x]) continue;
+    const c = (Math.random() * 3) | 0;
+    grid[y][x] = { c, v: true, p: -1, f: false };
+    if (createsRun4(x, y)) { grid[y][x] = null; continue; }
+    typeLeft[c]++;
+    placed++;
+  }
+  virusesLeft = placed;
+}
+
+function randomCapsule() {
+  return { a: (Math.random() * 3) | 0, b: (Math.random() * 3) | 0 };
+}
+
+function setupBoard() {
+  placeViruses(game.level);
+  phase = 'fall'; chain = 0; fallT = 0;
+  flashCells = null; cur = null;
+  dasDir = 0; dasT = 0;
+  nextCap = randomCapsule();
+  spawnNext();
+}
+
+function startGame() {
+  game.score = 0; game.stage = 1;
+  game.level = settings.level; game.speed = settings.speed;
+  game.maxChain = 0;
+  setupBoard();
+  clearPressed();
+  game.state = ST.PLAY;
+}
+
+function nextStage() {
+  game.stage++;
+  game.level = Math.min(9, game.level + 1);
+  setupBoard();
+  clearPressed();
+  game.state = ST.PLAY;
+}
+
+function spawnNext() {
+  cur = { x: 3, y: 0, o: 0, a: nextCap.a, b: nextCap.b };
+  nextCap = randomCapsule();
+  fallT = 0; phase = 'fall'; chain = 0;
+  dasDir = 0; dasT = 0;
+  clearPressed();
+  if (collide(cur.o, cur.x, cur.y)) { cur = null; startOver(); } // 瓶口被堵 -> Game Over
+}
+
+/* 锁定胶囊:写入两半(互相记住对方格号),然后检查消除 */
+function lockCapsule() {
+  if (!cur) return;
+  const cs = CELLS[cur.o];
+  const x1 = cur.x + cs[0][0], y1 = cur.y + cs[0][1];
+  const x2 = cur.x + cs[1][0], y2 = cur.y + cs[1][1];
+  grid[y1][x1] = { c: cur.a, v: false, p: y2 * COLS + x2, f: false };
+  grid[y2][x2] = { c: cur.b, v: false, p: y1 * COLS + x1, f: false };
+  Snd.lock();
+  cur = null;
+  const cls = findClears();
+  if (cls.length) { chain = 1; beginFlash(cls); }
+  else spawnNext();
+}
+
+/* 扫描全场横/竖同色 >=4 连(病毒与胶囊半粒同色都算),返回格号数组 */
+function findClears() {
+  const mark = new Set();
+  for (let y = 0; y < ROWS; y++) {
+    let run = 1;
+    for (let x = 1; x <= COLS; x++) {
+      const a = grid[y][x - 1], b = x < COLS ? grid[y][x] : null;
+      if (a && b && a.c === b.c) run++;
+      else { if (a && run >= 4) for (let k = x - run; k < x; k++) mark.add(y * COLS + k); run = 1; }
+    }
+  }
+  for (let x = 0; x < COLS; x++) {
+    let run = 1;
+    for (let y = 1; y <= ROWS; y++) {
+      const a = grid[y - 1][x], b = y < ROWS ? grid[y][x] : null;
+      if (a && b && a.c === b.c) run++;
+      else { if (a && run >= 4) for (let k = y - run; k < y; k++) mark.add(k * COLS + x); run = 1; }
+    }
+  }
+  return [...mark];
+}
+
+function beginFlash(cls) {
+  flashCells = cls;
+  flashT = 0;
+  phase = 'flash';
+  for (const i of cls) {
+    const cell = grid[(i / COLS) | 0][i % COLS];
+    if (cell) cell.f = true;
+  }
+  if (chain > game.maxChain) game.maxChain = chain;
+  Snd.clear(chain);                  // 连锁等级越高,消音越尖
+}
+
+/* 闪烁结束:真正移除,病毒计数,断开的另半粒变单粒,计分 */
+function removeFlashed() {
+  let vk = 0;
+  for (const i of flashCells) {
+    const y = (i / COLS) | 0, x = i % COLS;
+    const cell = grid[y][x];
+    if (!cell) continue;
+    if (cell.v) { virusesLeft--; typeLeft[cell.c]--; vk++; }
+    if (cell.p >= 0) {
+      const py = (cell.p / COLS) | 0, px = cell.p % COLS;
+      const partner = grid[py] && grid[py][px];
+      if (partner && partner.p === i) partner.p = -1;
+    }
+    grid[y][x] = null;
+  }
+  game.score += vk * 100 * chain;    // 病毒分:每只 100 x 连锁倍率
+  flashCells = null;
+}
+
+/* 重力沉降一步:单粒与完整胶囊(两半链接尚存)都往下落;病毒不动 */
+function gravityStep() {
+  let moved = false;
+  for (let y = ROWS - 1; y >= 0; y--) {
+    for (let x = 0; x < COLS; x++) {
+      const cell = grid[y][x];
+      if (!cell || cell.v || cell.f) continue;
+      if (cell.p >= 0) {
+        const py = (cell.p / COLS) | 0, px = cell.p % COLS;
+        const partner = grid[py] && grid[py][px];
+        if (!partner || partner.p !== y * COLS + x || partner.f) {
+          cell.p = -1;               // 另半粒已消/正在消 -> 变单粒
+        } else if (py > y) {
+          continue;                  // 竖胶囊:下半先被扫到,交给它处理
+        } else if (py === y) {
+          if (px < x) continue;      // 横胶囊:只由左半处理一次
+          if (y + 1 < ROWS && !grid[y + 1][x] && !grid[y + 1][px]) {
+            grid[y + 1][x] = cell; grid[y + 1][px] = partner;
+            grid[y][x] = null; grid[y][px] = null;
+            cell.p = (y + 1) * COLS + px; partner.p = (y + 1) * COLS + x;
+            moved = true;
+          }
+          continue;
+        } else {
+          if (y + 1 < ROWS && !grid[y + 1][x]) {   // 竖胶囊,本格是下半
+            grid[y + 1][x] = cell; grid[y][x] = partner; grid[py][px] = null;
+            cell.p = y * COLS + x; partner.p = (y + 1) * COLS + x;
+            moved = true;
+          }
+          continue;
+        }
+      }
+      if (y + 1 < ROWS && !grid[y + 1][x]) {       // 单粒
+        grid[y + 1][x] = cell;
+        grid[y][x] = null;
+        moved = true;
+      }
+    }
+  }
+  return moved;
+}
+
+function afterSettle() {
+  if (virusesLeft === 0) startClear();
+  else spawnNext();
+}
+
+function startClear() {
+  game.state = ST.CLEAR;
+  game.clearT = 0;
+  cur = null; flashCells = null;
+  Snd.win();
+}
+
+function startOver() {
+  game.state = ST.OVER;
+  game.overT = 0;
+  cur = null; flashCells = null;
+  Snd.over();
+}
+
+/* ---------- 主逻辑帧 ---------- */
+function moveHoriz(dir) {
+  if (cur && !collide(cur.o, cur.x + dir, cur.y)) {
+    cur.x += dir;
+    Snd.move();
+  }
+}
+function rotate(dir) {
+  if (!cur) return;
+  const no = (cur.o + dir + 4) % 4;
+  for (const dx of [0, -1, 1]) {               // 简单碰撞 + 贴墙踢墙 1 格
+    if (!collide(no, cur.x + dx, cur.y)) {
+      cur.o = no; cur.x += dx;
+      Snd.rotate();
+      return;
+    }
+  }
+}
+
+function stepTitle() {
+  if (hit('up') || hit('down')) {
+    game.cursor = 1 - game.cursor;
+    Snd.cursor();
+  }
+  let d = 0;
+  if (hit('left')) d = -1;
+  if (hit('right')) d = 1;
+  if (d) {
+    if (game.cursor === 0) settings.level = Math.max(0, Math.min(9, settings.level + d));
+    else settings.speed = (settings.speed + d + 3) % 3;
+    Snd.change();
+  }
+  if (hit('start')) { startGame(); Snd.start(); }
+}
+
+function stepPlay() {
+  hit('start');                                // 游戏中 Start 无作用,直接吃掉防残留
+  if (phase === 'flash') {                     // 消除闪烁期间世界暂停
+    clearPressed();
+    if (++flashT >= 28) { removeFlashed(); phase = 'drop'; dropT = 0; }
+    return;
+  }
+  if (phase === 'drop') {                      // 重力沉降,落定后再查连锁
+    clearPressed();
+    if (++dropT >= 3) {
+      dropT = 0;
+      if (!gravityStep()) {
+        const cls = findClears();
+        if (cls.length) { chain++; beginFlash(cls); }
+        else afterSettle();
+      }
+    }
+    return;
+  }
+  if (!cur) return;
+  /* 左右:DAS 按住连发(按下立即动,12 帧后以 3 帧间隔连发) */
+  const dir = keys.left ? -1 : (keys.right ? 1 : 0);
+  if (dir === 0) { dasDir = 0; dasT = 0; }
+  else if (dir !== dasDir) { dasDir = dir; dasT = 0; moveHoriz(dir); }
+  else if (++dasT >= 12) { moveHoriz(dir); dasT = 9; }
+  /* 旋转:单次触发  X(A) 顺时针 / Z(B) 逆时针 */
+  if (hit('a')) rotate(1);
+  if (hit('b')) rotate(-1);
+  hit('up');                                   // 上键在 Dr. Mario 中无用,吃掉按下沿
+  /* 重力:下键快降 */
+  const iv = keys.down ? 2 : SPDS[game.speed];
+  if (++fallT >= iv) {
+    fallT = 0;
+    if (!collide(cur.o, cur.x, cur.y + 1)) cur.y++;
+    else lockCapsule();
+  }
+}
+
+function step() {
+  game.frame++;
+  switch (game.state) {
+    case ST.TITLE: stepTitle(); break;
+    case ST.PLAY: stepPlay(); break;
+    case ST.CLEAR:
+      game.clearT++;
+      if (game.clearT > 320) nextStage();      // 听完整段胜利旋律再进下一关
+      break;
+    case ST.OVER:
+      game.overT++;
+      if (game.overT > 30 && hit('start')) game.state = ST.TITLE;
+      break;
+  }
+}
+
+/* ---------- 渲染 ---------- */
+/* 药瓶:两侧瓶壁 + 瓶底 + 瓶颈开口(cols 3-4 正上方) */
+function wallTile(x, y, edge) {
+  R(x, y, 8, 8, 1);
+  R(x + 2, y + 2, 2, 2, 2);
+  R(x + 5, y + 5, 1, 1, 2);
+  if (edge === 'l') R(x + 7, y, 1, 8, 0);      // 朝瓶内一侧描最深色线
+  if (edge === 'r') R(x, y, 1, 8, 0);
+  if (edge === 'b') R(x, y, 8, 1, 0);
+}
+function drawBottle() {
+  for (let y = FY; y < FY + ROWS * CELL; y += 8) {
+    wallTile(FX - 4, y, 'l');
+    wallTile(FX + COLS * CELL, y, 'r');
+  }
+  for (let x = FX - 4; x <= FX + COLS * CELL; x += 8) wallTile(x, FY + ROWS * CELL, 'b');
+  /* 瓶肩(瓶口在 cols 3-4 上方留缝) */
+  R(FX - 4, FY - 4, 28, 4, 1); R(FX + 40, FY - 4, 28, 4, 1);
+  R(FX - 4, FY - 1, 28, 1, 0); R(FX + 40, FY - 1, 28, 1, 0);
+  /* 瓶颈 */
+  R(FX + 20, FY - 8, 4, 4, 1); R(FX + 40, FY - 8, 4, 4, 1);
+  R(FX + 20, FY - 8, 24, 2, 1);
+  R(FX + 23, FY - 8, 1, 4, 0); R(FX + 40, FY - 8, 1, 4, 0);
+  R(FX + 20, FY - 8, 24, 1, 0);
+}
+
+function drawField() {
+  drawBottle();
+  const fr = (game.frame >> 4) & 1;
+  for (let y = 0; y < ROWS; y++)
+    for (let x = 0; x < COLS; x++) {
+      const cell = grid[y][x];
+      if (!cell) continue;
+      const sx = FX + x * CELL, sy = FY + y * CELL;
+      if (cell.f && ((flashT >> 2) % 2 === 0)) { R(sx, sy, 8, 8, 3); continue; } // 闪烁亮相
+      if (cell.v) drawVirus(sx, sy, cell.c, fr + x + y);
+      else drawHalf(sx, sy, cell.c);
+    }
+  if (cur)                                     // 下落中的胶囊
+    for (let i = 0; i < 2; i++) {
+      const [cx, cy] = CELLS[cur.o][i];
+      drawHalf(FX + (cur.x + cx) * CELL, FY + (cur.y + cy) * CELL, i === 0 ? cur.a : cur.b);
+    }
+}
+
+/* 放大镜圆窗:三只病毒在里面蹦跳做鬼脸,灭一类少一只(灵魂细节) */
+const MX = 118, MY = 32, MR = 24;
+const MAG_POS = [[100, 20], [120, 20], [110, 36]]; // 3 只病毒的左上坐标(2x 放大)
+const BOUNCE = [0, -1, -2, -3, -2, -1];
+function drawMagnifier() {
+  const fast = game.state === ST.CLEAR ? 1 : 2;    // 过关时蹦得飞快
+  for (let t = 0; t < 3; t++) {
+    if (typeLeft[t] <= 0) continue;                // 这类病毒已被消灭
+    const bi = (((game.frame >> fast) + t * 2) % 6 + 6) % 6;
+    const by = BOUNCE[bi];
+    drawVirus(MAG_POS[t][0], MAG_POS[t][1] + by, t, (game.frame >> 3) + t, 2);
+  }
+  /* 圆环(逐行 fillRect 逼近) */
+  for (let dy = -MR; dy <= MR; dy++) {
+    const w = Math.sqrt(MR * MR - dy * dy) | 0;
+    const ri = MR - 2;
+    const wi = Math.abs(dy) <= ri ? (Math.sqrt(ri * ri - dy * dy) | 0) : 0;
+    if (w - wi > 0) {
+      R(MX - w, MY + dy, w - wi, 1, 0);
+      R(MX + wi + 1, MY + dy, w - wi, 1, 0);
+    }
+  }
+  /* 手柄 */
+  R(135, 50, 5, 5, 0); R(136, 51, 3, 3, 1);
+  R(140, 55, 5, 5, 0); R(141, 56, 3, 3, 1);
+  R(145, 60, 4, 4, 0); R(146, 61, 2, 2, 1);
+}
+
+function drawPanel() {
+  drawMagnifier();
+  const PX = 84;
+  drawText('VIRUS', PX, 68, 0);
+  drawText(String(virusesLeft).padStart(2, '0'), PX, 76, 0);
+  drawText('NEXT', PX, 90, 0);
+  drawHalf(110, 98, nextCap.a);
+  drawHalf(118, 98, nextCap.b);
+  drawText('SCORE', PX, 112, 0);
+  drawText(String(game.score).padStart(6, '0'), PX, 120, 0);
+  drawText('L' + game.level, PX, 132, 0);
+  drawText(SPD_NAME[game.speed], 108, 132, 0);
+}
+
+/* 标题:像素大标题 + 病毒跳舞 + LEVEL/SPEED 选单 + 闪烁 PRESS START */
+function drawCursor(cx, cy) {
+  R(cx, cy, 1, 5, 0); R(cx + 1, cy + 1, 1, 3, 0); R(cx + 2, cy + 2, 1, 1, 0);
+}
+function drawTitle() {
+  drawText('DR MARIO', 16, 12, 0, 2);
+  /* 三只病毒列队做鬼脸 */
+  const fr = (game.frame >> 3) & 1;
+  for (let t = 0; t < 3; t++) {
+    const by = BOUNCE[(((game.frame >> 2) + t * 2) % 6 + 6) % 6];
+    drawVirus(52 + t * 22, 38 + by, t, fr + t, 2);
+  }
+  /* 选单(原版就有):VIRUS LEVEL 0~9 / SPEED LOW MED HI */
+  drawText('VIRUS LEVEL', 32, 66, 0);
+  drawText(String(settings.level), 128, 66, 0);
+  drawText('SPEED', 32, 80, 0);
+  drawText(SPD_NAME[settings.speed], 128, 80, 0);
+  drawCursor(20, game.cursor === 0 ? 67 : 81);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 106, 0); // 闪烁,灵魂所在
+}
+
+function drawStageClear() {
+  drawField(); drawPanel();
+  R(12, 52, 56, 30, 3);
+  R(12, 52, 56, 1, 0); R(12, 81, 56, 1, 0);
+  R(12, 52, 1, 30, 0); R(67, 52, 1, 30, 0);
+  drawText('STAGE', 16, 58, 0);
+  if ((game.frame >> 4) % 2 === 0) drawText('CLEAR!', 16, 70, 0);
+}
+
+function drawOver() {
+  R(0, 0, W, H, 0);
+  drawText('GAME OVER', 44, 40, 3);
+  drawText('SCORE ' + String(game.score).padStart(6, '0'), 32, 64, 3);
+  drawText('STAGE ' + game.stage, 52, 80, 3);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 104, 3);
+}
+
+function render() {
+  R(0, 0, W, H, 3);                            // 背景 = 最浅色
+  switch (game.state) {
+    case ST.TITLE: drawTitle(); break;
+    case ST.PLAY: drawField(); drawPanel(); break;
+    case ST.CLEAR: drawStageClear(); break;
+    case ST.OVER: drawOver(); break;
+  }
+}
+
+/* ---------- 主循环:requestAnimationFrame + 固定 60fps 逻辑帧 ---------- */
+let lastTs = 0, acc = 0;
+function frameLoop(ts) {
+  requestAnimationFrame(frameLoop);
+  if (!lastTs) lastTs = ts;
+  let dt = ts - lastTs;
+  lastTs = ts;
+  if (dt > 250) dt = 250;                      // 切后台回来不追帧
+  acc += dt;
+  while (acc >= 1000 / 60) { step(); acc -= 1000 / 60; }
+  render();
+}
+
+/* ---------- 画布整数倍放大(3~5 倍,像素锐利) ---------- */
+function fit() {
+  const ui = document.getElementById('ui');
+  const chrome = (ui ? ui.offsetHeight : 120) + 64;
+  const availW = window.innerWidth - 20, availH = window.innerHeight - chrome;
+  let s = Math.floor(Math.min(availW / 160, availH / 144));
+  s = Math.max(3, Math.min(5, s));
+  cv.style.width = 160 * s + 'px';
+  cv.style.height = 144 * s + 'px';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', fit);
+fit();
+requestAnimationFrame(frameLoop);
+
+/* ---------- 离屏测试钩子(不影响游戏本身) ---------- */
+window.__test = {
+  ST, game, settings, keys, pressed, step, render, SPDS,
+  startGame, nextStage, spawnNext, lockCapsule, findClears, gravityStep, placeViruses,
+  key(k, down) { if (down && !keys[k]) pressed[k] = 1; keys[k] = down ? 1 : 0; },
+  get grid() { return grid; },
+  clearGrid() { for (let y = 0; y < ROWS; y++) grid[y].fill(null); },
+  setCell(x, y, v) { grid[y][x] = v; },
+  mkHalf(c) { return { c, v: false, p: -1, f: false }; },
+  mkVirus(c) { return { c, v: true, p: -1, f: false }; },
+  recount() {
+    virusesLeft = 0; typeLeft = [0, 0, 0];
+    for (let y = 0; y < ROWS; y++)
+      for (let x = 0; x < COLS; x++) {
+        const cell = grid[y][x];
+        if (cell && cell.v) { virusesLeft++; typeLeft[cell.c]++; }
+      }
+  },
+  checkClears() { const c = findClears(); if (c.length) { chain = 1; beginFlash(c); } },
+  get cur() { return cur; },
+  setCur(o, x, y, a, b) { cur = { o, x, y, a, b }; phase = 'fall'; fallT = 0; },
+  get phase() { return phase; },
+  get virusesLeft() { return virusesLeft; },
+  get typeLeft() { return typeLeft; },
+  get chain() { return chain; },
+  get flashCells() { return flashCells; },
+  get nextCap() { return nextCap; },
+};
+</script>
+</body>
+</html>

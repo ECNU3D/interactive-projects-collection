@@ -1,0 +1,86 @@
+id: juling
+name: 巨灵神
+voice_setting:
+  voice_id: "male-qn-badao"
+  speed: 1.0
+  pitch: -5
+  emotion: surprised
+
+greet:
+  - id: greet_01
+    text: "大、大圣！末将在擦斧头，没有偷懒。"
+  - id: greet_02
+    text: "来者何——哦，是大圣。请，请。"
+  - id: greet_03
+    text: "南天门外，先锋巨灵，在此值守！"
+
+topics:
+  - id: fubing
+    label: "新换的斧柄"
+    source: "第4回"
+    lines:
+      - id: fubing_01
+        text: "(clear-throat)我乃高上神霄托塔李天王部下先锋巨灵天将。"
+        quote: true
+      - id: w_jl_01
+        speaker: pc
+        text: "你那斧柄，接得牢么？"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: fubing_02
+        text: "牢，牢得很！新换的枣木柄，比先前的还结实三分。"
+      - id: fubing_03
+        text: "斧是折过一次。斧折了，人没折。先锋还是先锋。"
+  - id: qingzui
+    label: "败阵请罪"
+    source: "第4回"
+    lines:
+      - id: w_jl_02
+        speaker: pc
+        text: "听闻你那日败阵回来，天王要斩你？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: qingzui_01
+        text: "弼马温果是神通广大，末将战他不得，败阵回来请罪。"
+        quote: true
+      - id: qingzui_02
+        text: "天王军法如山，是三太子讨的情。这恩，末将记一辈子。"
+      - id: w_jl_03
+        speaker: pc
+        text: "脓包，<#0.15#>脓包。"
+        quote: true
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: qingzui_03
+        text: "骂名末将领了。只是那日一棒，换谁来接，都是一样。"
+  - id: mingwang
+    label: "名望传天下"
+    source: "第4回赞诗"
+    lines:
+      - id: w_jl_04
+        speaker: pc
+        text: "外头都传：巨灵名望传天下。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: mingwang_01
+        text: "传是传了。后半句，大圣就别提了。"
+      - id: mingwang_02
+        text: "名望是别人给的，差事是自己当的。末将把这门看好，比甚么都强。"
+  - id: guiju
+    label: "守门的规矩"
+    source: "本作"
+    lines:
+      - id: guiju_01
+        text: "大圣如今是天上的人了，出入山门，可莫再像从前那般闯。"
+      - id: w_jl_05
+        speaker: pc
+        text: "老孙如今出入，谁敢拦？"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: guiju_02
+        text: "拦是不敢拦。只是规矩是规矩。末将在这儿站着，就得问一声。"
+
+fallback:
+  - id: fb_01
+    text: "末将只管守门，别的一概不知。"
+  - id: fb_02
+    text: "大圣问的事，末将答不上来。"
+
+bye:
+  - id: bye_01
+    text: "大圣慢走。……斧柄真的接牢了。"

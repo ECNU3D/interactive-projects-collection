@@ -1,0 +1,92 @@
+:root {
+  color-scheme: dark;
+
+  /* Semantic museum surfaces and readable copy. */
+  --surface-page: #061514;
+  --surface-panel: #0d2926;
+  --surface-raised: #12312e;
+  --surface-overlay: #183d39;
+  --surface-ink: #020b0a;
+  --text-primary: #f7efdc;
+  --text-secondary: #dccca8;
+  --text-muted: #afc0b9;
+  --text-on-accent: #061514;
+  --border-subtle: #36534d;
+  --border-strong: #6f8f86;
+
+  /* Status colors are bright enough to carry short labels on dark surfaces. */
+  --status-success: #86d8a4;
+  --status-info: #82cad2;
+  --status-warning: #f0c77d;
+  --status-danger: #ff9a79;
+
+  /* Canonical cross-media accents mirror src/scene/museumPalette.ts exactly. */
+  --part-brass: #a27c3f;
+  --part-oxide: #c36d50;
+  --part-teal: #4f9992;
+  --part-cobalt: #668ccb;
+  --part-amber: #c18a35;
+  --part-coral: #cf7568;
+  --part-graphite: #7d888f;
+  --part-ivory: #d8ceb5;
+  --part-accent-1: var(--part-brass);
+  --part-accent-2: var(--part-oxide);
+  --part-accent-3: var(--part-teal);
+  --part-accent-4: var(--part-cobalt);
+  --part-accent-5: var(--part-amber);
+  --part-accent-6: var(--part-coral);
+  --part-accent-7: var(--part-graphite);
+  --part-accent-8: var(--part-ivory);
+  --part-accent-brass: var(--part-brass);
+  --part-accent-oxide: var(--part-oxide);
+  --part-accent-teal: var(--part-teal);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-7: 2rem;
+  --space-8: 2.75rem;
+  --space-9: 4rem;
+  --space-10: 6rem;
+
+  --radius-xs: 0.375rem;
+  --radius-sm: 0.625rem;
+  --radius-md: 0.875rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.75rem;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 0.5rem 1.5rem rgb(0 0 0 / 18%);
+  --shadow-panel: 0 1.5rem 4.5rem rgb(0 0 0 / 30%);
+  --shadow-spotlight: 0 2rem 6rem rgb(0 0 0 / 42%);
+  --shadow-focus: 0 0 0 0.25rem rgb(228 199 126 / 28%);
+
+  --duration-fast: 150ms;
+  --duration-base: 260ms;
+  --duration-slow: 620ms;
+  --ease-museum: cubic-bezier(0.2, 0.72, 0.2, 1);
+  --ease-press: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --z-base: 0;
+  --z-stage: 10;
+  --z-overlay: 30;
+  --z-modal: 60;
+
+  --display: "Iowan Old Style", "Songti SC", serif;
+  --body: "Noto Sans SC Variable", "PingFang SC", sans-serif;
+
+  /* Legacy aliases remain stable while old Explorer styles migrate by layer. */
+  --ink-950: var(--surface-page);
+  --ink-900: var(--surface-panel);
+  --ink-800: var(--surface-raised);
+  --ivory-100: var(--text-primary);
+  --ivory-300: var(--text-secondary);
+  --muted: var(--text-muted);
+  --brass: var(--part-brass);
+  --oxide: var(--part-oxide);
+  --teal: var(--part-teal);
+  --line: var(--border-subtle);
+}

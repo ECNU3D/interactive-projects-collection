@@ -1,0 +1,91 @@
+id: xurishu
+name: 虚日鼠
+model: speech-2.6-hd
+voice_setting:
+  voice_id: "chunzhen_xuedi"
+  speed: 1.2
+  pitch: 3
+  emotion: fluent
+
+greet:
+  - id: greet_01
+    text: "大圣大圣，今日可不带拦路的，我身上还揣着三处口信。"
+  - id: greet_02
+    text: "来了来了，齐天大圣到——诸位莫慌，他不是来查卯的。"
+  - id: greet_03
+    text: "大圣安好，安好，我这就走，这就走。"
+
+topics:
+  - id: chuanling
+    label: "传令的差事"
+    source: "第6回"
+    lines:
+      - id: chuanling_01
+        text: "我这差事，看着是递话，其实是天庭的口舌。一处慢一刻，处处慢一刻。"
+      - id: w_xuri_chuanling_02
+        speaker: pc
+        text: "不就是个送信的么。"
+        voice_setting: { emotion: calm }
+      - id: chuanling_03
+        text: "送信的？大圣这话差了。口令错一个字，簿子上记一过，三过便是一罪。"
+      - id: w_xuri_chuanling_04
+        speaker: pc
+        text: "聒噪，聒噪。"
+        quote: true
+        voice_setting: { emotion: happy }
+      - id: chuanling_05
+        text: "好好好，我不说了，西天门还有一趟等着我。"
+  - id: mingxu
+    label: "二十八宿的名序"
+    source: "第65回"
+    lines:
+      - id: mingxu_01
+        text: "我们二十八宿，按着角亢氐房一路排下来，我列在北方，虚日鼠便是我。"
+      - id: w_xuri_mingxu_02
+        speaker: pc
+        text: "小小一个鼠字，也挂得上星名？"
+        voice_setting: { emotion: happy }
+      - id: mingxu_03
+        text: "大圣！星名是天定的。虚日鼠、危月燕、室火猪，一个挨一个，不分大小，不论贵贱。"
+      - id: mingxu_04
+        text: "再说，名里带甚么，不干本事的事。大圣名里还带个『大』字呢。"
+    next:
+      - { label: "你倒会回话。", goto: huihua }
+      - { label: "去忙你的罢。", goto: __end }
+  - id: huihua
+    label: "快嘴"
+    lines:
+      - id: huihua_01
+        text: "不敢不敢，快嘴的毛病，改不了，大圣莫往心里去。"
+      - id: w_xuri_huihua_02
+        speaker: pc
+        text: "老孙就喜欢嘴快的。"
+        voice_setting: { emotion: happy }
+  - id: tiezi
+    label: "瑶池送帖子"
+    source: "第5回"
+    lines:
+      - id: tiezi_01
+        text: "这几日脚不沾地，瑶池的帖子一封一封地送，各宫各殿都要走到。"
+      - id: w_xuri_tiezi_02
+        speaker: pc
+        text: "可有一封是老孙的？"
+        voice_setting: { emotion: calm }
+      - id: tiezi_03
+        text: "这……帖子是造册的仙官拟的，我只管送，不管拟。大圣莫瞪我。"
+      - id: w_xuri_tiezi_04
+        speaker: pc
+        text: "哼，送信的不担干系。"
+        voice_setting: { emotion: angry }
+      - id: tiezi_05
+        text: "正是这话，正是这话。送信的不担干系。"
+
+fallback:
+  - id: fb_01
+    text: "不知道，不知道，这个我真不知道。"
+  - id: fb_02
+    text: "大圣莫缠我，误了时辰是我的不是。"
+
+bye:
+  - id: bye_01
+    text: "走啦走啦，还有三处要跑。"

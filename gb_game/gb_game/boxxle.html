@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>BOXXLE · GB</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  /* ============ 页面 chrome(Game Boy 机身风) ============ */
+  html,body{
+    margin:0; padding:0; background:#c4bebb;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none; user-select:none;
+    touch-action:none; overscroll-behavior:none;
+  }
+  #wrap{
+    min-height:100vh; box-sizing:border-box;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:14px 10px; gap:10px;
+  }
+  /* 机身屏幕外框:灰紫机身 + 深色镜面框 + 圆角 */
+  #bezel{
+    background:#5c5660; padding:16px 18px 12px; border-radius:16px;
+    box-shadow: inset 0 2px 0 #7d7681, inset 0 -4px 0 #463f4b, 0 8px 22px rgba(40,30,45,.35);
+  }
+  #frame{
+    background:#221e26; padding:10px; border-radius:10px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.7);
+  }
+  canvas#gb{
+    display:block; width:480px; height:432px; /* JS 会根据窗口改成整数倍 */
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    background:#9bbc0f; border-radius:2px;
+  }
+  #caption{
+    margin-top:8px; text-align:center; color:#a79ea9; font-size:10px; letter-spacing:3px;
+  }
+  /* 常驻按键说明 */
+  #hint{ color:#4a444f; font-size:12px; letter-spacing:1px; text-align:center; }
+  /* ============ 触屏虚拟按键(半透明) ============ */
+  #touch{
+    width:100%; max-width:560px;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:0 6px; box-sizing:border-box;
+  }
+  .pad{ display:grid; grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,46px); gap:4px; }
+  .tbtn{
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(38,32,44,.30); color:#2c2731;
+    border-radius:10px; font-size:18px; font-weight:bold;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .tbtn.on{ background:rgba(38,32,44,.62); color:#12100f; }
+  .tbtn.empty{ background:transparent; pointer-events:none; }
+  .abtn{ width:56px; height:56px; border-radius:50%; font-size:20px; }
+  .sbtn{ width:52px; height:22px; border-radius:12px; font-size:10px; letter-spacing:1px; }
+  #mid{ display:flex; flex-direction:column; gap:10px; align-items:center; }
+  #ab{ display:flex; gap:14px; align-items:center; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="bezel">
+    <div id="frame"><canvas id="gb" width="160" height="144"></canvas></div>
+    <div id="caption">BOXXLE &middot; GB STYLE</div>
+  </div>
+  <div id="ui">
+    <div id="hint">&#8592;&#8594;&#8593;&#8595; 移动 &nbsp; Z(B) 撤销 &nbsp; SHIFT(SELECT) 重开本关 &nbsp; ENTER(START) 开始 &nbsp; 标题 &#8592;&#8594; 选关</div>
+    <div id="touch">
+      <div class="pad">
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="up">&#9650;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="left">&#9664;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="right">&#9654;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="down">&#9660;</div>
+        <div class="tbtn empty"></div>
+      </div>
+      <div id="mid">
+        <div class="tbtn sbtn" data-k="select">SELECT</div>
+        <div class="tbtn sbtn" data-k="start">START</div>
+      </div>
+      <div id="ab">
+        <div class="tbtn abtn" data-k="b">B</div>
+        <div class="tbtn abtn" data-k="a">A</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+ * BOXXLE · Game Boy 风格推箱子 Sokoban(单文件,零依赖)
+ * 操作:方向键=十字键移动  Z(B)=单步撤销(可连按/按住连撤)
+ *       Shift(Select)=重开本关  Enter=Start  标题画面左右=选关
+ * 规则:把所有箱子推到目标点上过关。只能推不能拉,一次推一个。
+ *       15 关内置关卡,过关箱子闪烁 + 胜利音效,15 关全通放像素礼花。
+ * ===================================================================== */
+
+/* ---------- 基本常量 ---------- */
+const W = 160, H = 144;                          // GB 逻辑分辨率 160x144
+const PAL = ['#0f380f', '#306230', '#8bac0f', '#9bbc0f']; // DMG 4 色绿
+const HUD_H = 12;                                // 顶部状态栏高度
+const ANIM_F = 5;                                // 走一格的滑动帧数(按住约 12 格/秒)
+const DIRS = [[0, 1], [0, -1], [-1, 0], [1, 0]]; // 0下 1上 2左 3右
+const DIR_SPR = ['down', 'up', 'left', 'right'];
+
+const cv = document.getElementById('gb');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+/* 全部画面只允许用 fillRect 画 */
+function R(x, y, w, h, c) {
+  if (w <= 0 || h <= 0) return;
+  ctx.fillStyle = PAL[c];
+  ctx.fillRect(x | 0, y | 0, w, h);
+}
+
+/* ---------- 8-bit 芯片音效(Web Audio 合成,无音频文件) ---------- */
+const Snd = (() => {
+  let ac = null, master = null, noiseBuf = null;
+  function init() {                       // 首次按键后才创建 AudioContext
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain();
+    master.gain.value = 0.14;
+    master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  function sq(freq, delay, dur, vol, slideTo) {   // 方波
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(delay, dur, vol, hp) {           // 噪声通道
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const s = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+    s.buffer = noiseBuf;
+    s.loop = true;
+    f.type = hp ? 'highpass' : 'lowpass';
+    f.frequency.value = hp ? 1800 : 900;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t); s.stop(t + dur + 0.02);
+  }
+  const N = n => 440 * Math.pow(2, (n - 69) / 12); // MIDI 音号 -> 频率
+  const WIN_M = [72, 76, 79, 84, 76, 79, 84, 88];             // 过关小旋律
+  const WIN_B = [48, 55, 53, 60];
+  const FAN_M = [72, 76, 79, 84, 79, 84, 86, 84, 81, 84, 88, 91, 88, 84, 79, 76]; // 全通号角
+  const FAN_B = [48, 53, 55, 60, 48, 53, 55, 60];
+  return {
+    init,
+    move()   { sq(240, 0, 0.03, 0.3); },                       // 走路"哒"
+    push()   { sq(140, 0, 0.06, 0.4, 90); noise(0, 0.04, 0.18, false); }, // 推箱"咚"
+    ding()   { sq(N(88), 0, 0.07, 0.4); sq(N(93), 0.06, 0.1, 0.35); },    // 上目标"叮"
+    unding() { sq(N(76), 0, 0.06, 0.25, N(72)); },             // 离开目标,低音提示
+    undo()   { sq(520, 0, 0.05, 0.3, 260); },                  // 撤销下滑音
+    restart(){ noise(0, 0.14, 0.35, true); sq(300, 0, 0.1, 0.25, 150); },
+    cursor() { sq(660, 0, 0.03, 0.3); },
+    change() { sq(440, 0, 0.05, 0.4, 560); },
+    start()  { sq(N(72), 0, 0.07, 0.45); sq(N(79), 0.07, 0.12, 0.45); },
+    win() {
+      WIN_M.forEach((n, i) => sq(N(n), i * 0.1, 0.1, 0.4));
+      WIN_B.forEach((n, i) => sq(N(n), i * 0.2, 0.2, 0.2));
+    },
+    fanfare() {
+      FAN_M.forEach((n, i) => sq(N(n), i * 0.14, 0.13, 0.4));
+      FAN_B.forEach((n, i) => sq(N(n), i * 0.28, 0.26, 0.2));
+    },
+    launch() { sq(300, 0, 0.25, 0.2, 900); },                  // 礼花升空
+    burst()  { noise(0, 0.22, 0.45, true); },                  // 礼花爆开
+  };
+})();
+
+/* ---------- 8x8 手绘像素字体(画布文字只能用它) ---------- */
+const FONT = (() => {
+  const F = {};
+  const def = (ch, rows) => { F[ch] = rows; };
+  def(' ', ["........","........","........","........","........","........","........","........"]);
+  def('0', [".###....","#...#...","#..##...","#.#.#...","##..#...","#...#...",".###....","........"]);
+  def('1', ["..#.....",".##.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('2', [".###....","#...#...","....#...","..##....",".#......","#.......","#####...","........"]);
+  def('3', ["####....","....#...","....#...",".###....","....#...","....#...","####....","........"]);
+  def('4', ["...##...",".#.#....","#..#....","#####...","...#....","...#....","...#....","........"]);
+  def('5', ["#####...","#.......","####....","....#...","....#...","#...#...",".###....","........"]);
+  def('6', [".###....","#.......","#.......","####....","#...#...","#...#...",".###....","........"]);
+  def('7', ["#####...","....#...","...#....","...#....","..#.....","..#.....","..#.....","........"]);
+  def('8', [".###....","#...#...","#...#...",".###....","#...#...","#...#...",".###....","........"]);
+  def('9', [".###....","#...#...","#...#...",".####...","....#...","....#...",".###....","........"]);
+  def('A', [".###....","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('B', ["####....","#...#...","#...#...","####....","#...#...","#...#...","####....","........"]);
+  def('C', [".####...","#.......","#.......","#.......","#.......","#.......",".####...","........"]);
+  def('D', ["####....","#...#...","#...#...","#...#...","#...#...","#...#...","####....","........"]);
+  def('E', ["#####...","#.......","#.......","####....","#.......","#.......","#####...","........"]);
+  def('F', ["#####...","#.......","#.......","####....","#.......","#.......","#.......","........"]);
+  def('G', [".####...","#.......","#.......","#.###...","#...#...","#...#...",".####...","........"]);
+  def('H', ["#...#...","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('I', [".###....","..#.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('J', ["..###...","...#....","...#....","...#....","...#....","#..#....",".##.....","........"]);
+  def('K', ["#...#...","#..#....","#.#.....","##......","#.#.....","#..#....","#...#...","........"]);
+  def('L', ["#.......","#.......","#.......","#.......","#.......","#.......","#####...","........"]);
+  def('M', ["#...#...","##.##...","#.#.#...","#.#.#...","#...#...","#...#...","#...#...","........"]);
+  def('N', ["#...#...","##..#...","#.#.#...","#..##...","#...#...","#...#...","#...#...","........"]);
+  def('O', [".###....","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('P', ["####....","#...#...","#...#...","####....","#.......","#.......","#.......","........"]);
+  def('Q', [".###....","#...#...","#...#...","#...#...","#.#.#...","#..#....",".##.#...","........"]);
+  def('R', ["####....","#...#...","#...#...","####....","#.#.....","#..#....","#...#...","........"]);
+  def('S', [".####...","#.......","#.......",".###....","....#...","....#...","####....","........"]);
+  def('T', ["#####...","..#.....","..#.....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('U', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('V', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".#.#....","........"]);
+  def('W', ["#...#...","#...#...","#...#...","#.#.#...","#.#.#...","##.##...","#...#...","........"]);
+  def('X', ["#...#...","#...#...",".#.#....","..#.....",".#.#....","#...#...","#...#...","........"]);
+  def('Y', ["#...#...","#...#...",".#.#....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('Z', ["#####...","....#...","...#....","..#.....",".#......","#.......","#####...","........"]);
+  def('!', ["..#.....","..#.....","..#.....","..#.....","..#.....","........","..#.....","........"]);
+  def('.', ["........","........","........","........","........","..##....","..##....","........"]);
+  def('-', ["........","........","........",".###....","........","........","........","........"]);
+  def(':', ["........","..##....","..##....","........","..##....","..##....","........","........"]);
+  def('/', ["....#...","....#...","...#....","..#.....",".#......","#.......","#.......","........"]);
+  return F;
+})();
+
+/* 画文字:逐像素 fillRect,等宽 8px,可整数放大 */
+function drawText(str, x, y, color, scale) {
+  scale = scale || 1;
+  str = String(str).toUpperCase();
+  for (let i = 0; i < str.length; i++) {
+    const g = FONT[str[i]] || FONT[' '];
+    for (let r = 0; r < 8; r++) {
+      const row = g[r];
+      for (let c = 0; c < 8; c++) {
+        if (row[c] === '#') R(x + i * 8 * scale + c * scale, y + r * scale, scale, scale, color);
+      }
+    }
+  }
+}
+
+/* ---------- 角色/箱子/目标点像素图(8x8,'.'=透明) ---------- */
+/* 颜色代号:'#'=最深(0)  '+'=深(1)  '='=浅(2) */
+const SPR = {
+  down: {
+    walkA: [
+      "..####..",
+      ".#++++#.",
+      ".#+##+#.",
+      ".#++++#.",
+      "..#++#..",
+      ".#++++#.",
+      ".#+..+#.",
+      ".##..##.",
+    ],
+    walkB: [
+      "..####..",
+      ".#++++#.",
+      ".#+##+#.",
+      ".#++++#.",
+      "..#++#..",
+      ".#++++#.",
+      "..#++#..",
+      "..#..#..",
+    ],
+    push: [                              // 用力前倾:双手前伸,身体压低
+      "........",
+      "..####..",
+      ".#++++#.",
+      ".#+##+#.",
+      ".#++++#.",
+      "##++++##",
+      ".#+..+#.",
+      ".##..##.",
+    ],
+  },
+  up: {
+    walkA: [
+      "..####..",
+      ".#++++#.",
+      ".#++++#.",
+      ".#++++#.",
+      "..#++#..",
+      ".#++++#.",
+      ".#+..+#.",
+      ".##..##.",
+    ],
+    walkB: [
+      "..####..",
+      ".#++++#.",
+      ".#++++#.",
+      ".#++++#.",
+      "..#++#..",
+      ".#++++#.",
+      "..#++#..",
+      "..#..#..",
+    ],
+    push: [                              // 双手举过头顶顶住箱子
+      "##++++##",
+      ".#++++#.",
+      ".#++++#.",
+      ".#++++#.",
+      "..#++#..",
+      ".#++++#.",
+      ".#+..+#.",
+      ".##..##.",
+    ],
+  },
+  right: {
+    walkA: [
+      "..####..",
+      ".#++++#.",
+      ".#+++##.",
+      ".#++++#.",
+      "..#++#..",
+      ".#++++#.",
+      ".#+..+#.",
+      ".##..##.",
+    ],
+    walkB: [
+      "..####..",
+      ".#++++#.",
+      ".#+++##.",
+      ".#++++#.",
+      "..#++#..",
+      ".#++++#.",
+      "..#++#..",
+      "..#..#..",
+    ],
+    push: [                              // 向右前倾,手伸到箱子边缘
+      "..####..",
+      ".#++++#.",
+      ".#+++##.",
+      ".#++++##",
+      "..#++#+#",
+      ".#+..+#.",
+      ".##..##.",
+      "........",
+    ],
+  },
+};
+/* 左 = 右的镜像 */
+SPR.left = {};
+for (const k of ['walkA', 'walkB', 'push']) {
+  SPR.left[k] = SPR.right[k].map(row => row.split('').reverse().join(''));
+}
+
+const SPR_COL = { '#': 0, '+': 1, '=': 2 };
+function drawSpr(rows, sx, sy, sc) {
+  sc = sc || 1;
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++) {
+      const col = SPR_COL[rows[r][c]];
+      if (col !== undefined) R(sx + c * sc, sy + r * sc, sc, sc, col);
+    }
+}
+
+/* 箱子:深色描边 + 填充;上目标点后变亮色;过关闪烁用最浅色 */
+const BOX_ROWS = [
+  "########",
+  "#++++++#",
+  "#+#++#+#",
+  "#++##++#",
+  "#++##++#",
+  "#+#++#+#",
+  "#++++++#",
+  "########",
+];
+function drawBox(sx, sy, mode) {
+  const fill = mode === 'flash' ? 3 : (mode === 'goal' ? 2 : 1);
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++)
+      R(sx + c, sy + r, 1, 1, BOX_ROWS[r][c] === '#' ? 0 : fill);
+}
+
+/* 目标点:小圆环标记 */
+const GOAL_ROWS = [
+  "........",
+  "........",
+  "...OO...",
+  "..O++O..",
+  "..O++O..",
+  "...OO...",
+  "........",
+  "........",
+];
+function drawGoal(sx, sy) {
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++) {
+      const ch = GOAL_ROWS[r][c];
+      if (ch === 'O') R(sx + c, sy + r, 1, 1, 1);
+      else if (ch === '+') R(sx + c, sy + r, 1, 1, 2);
+    }
+}
+
+/* ---------- 15 关字符画(# 墙 . 目标 $ 箱子 @ 人,可自行加关) ---------- */
+const LEVELS = [
+  [ // 1 教学:向右直推 3 步
+    "#######",
+    "#     #",
+    "#@$  .#",
+    "#     #",
+    "#######",
+  ],
+  [ // 2 一列箱子,换个方向垂直往下推
+    "#########",
+    "#   @   #",
+    "# $ $ $ #",
+    "# . . . #",
+    "#       #",
+    "#########",
+  ],
+  [ // 3 两个箱子,学会绕到箱子背后
+    "########",
+    "#      #",
+    "# @$  .#",
+    "#  $  .#",
+    "########",
+  ],
+  [ // 4 墙挡住直线,先下后右拐弯
+    "#########",
+    "#       #",
+    "# @$#   #",
+    "#   .   #",
+    "#       #",
+    "#########",
+  ],
+  [ // 5 错位的两个箱子,规划搬运路线
+    "#########",
+    "#       #",
+    "# @ $ $.#",
+    "#      .#",
+    "#########",
+  ],
+  [ // 6 柱子房间,先中间后两边
+    "#########",
+    "#       #",
+    "# $ $ $ #",
+    "#  #.#  #",
+    "#  .@.  #",
+    "#########",
+  ],
+  [ // 7 三排横推,耐力小考
+    "##########",
+    "# @$    .#",
+    "#  $    .#",
+    "#  $    .#",
+    "#        #",
+    "##########",
+  ],
+  [ // 8 环形走廊,上下两排目标
+    "##########",
+    "#  .  .  #",
+    "# $ ## $ #",
+    "#  #  #  #",
+    "# $ ## $ #",
+    "#  .@ .  #",
+    "##########",
+  ],
+  [ // 9 四角目标:箱子进角前想清楚
+    "#########",
+    "#.  #  .#",
+    "# $ # $ #",
+    "#   @   #",
+    "# $ # $ #",
+    "#.  #  .#",
+    "#########",
+  ],
+  [ // 10 风车:顺序错了会互相挡路
+    "###########",
+    "#    .    #",
+    "# $  #  $ #",
+    "#.   @   .#",
+    "# $  #  $ #",
+    "#    .    #",
+    "###########",
+  ],
+  [ // 11 死角回廊,四角落子
+    "##########",
+    "#. ##   .#",
+    "# $    $ #",
+    "#  ####  #",
+    "# $    $ #",
+    "#. ## @ .#",
+    "##########",
+  ],
+  [ // 12 四角入库:斜向搬运
+    "#########",
+    "#       #",
+    "# $   $ #",
+    "#  . .  #",
+    "# $ @ $ #",
+    "#  . .  #",
+    "#       #",
+    "#########",
+  ],
+  [ // 13 双层架:先下层后上层
+    "###########",
+    "#   ##  @ #",
+    "# $  ## $ #",
+    "# .    .  #",
+    "# $  ## $ #",
+    "# .  ## . #",
+    "###########",
+  ],
+  [ // 14 六箱:四角 + 中央双目标
+    "##########",
+    "#.  ##  .#",
+    "# $ ## $ #",
+    "#  @..   #",
+    "# $ ## $ #",
+    "#   ##   #",
+    "# $ ## $ #",
+    "#.  ##  .#",
+    "##########",
+  ],
+  [ // 15 终关:八箱大阵,全局顺序
+    "###########",
+    "#.   .   .#",
+    "# $$   $$ #",
+    "#   ###   #",
+    "#  .# #.  #",
+    "#   ###   #",
+    "# $$ @ $$ #",
+    "#.   .   .#",
+    "###########",
+  ],
+];
+
+/* 解析关卡:墙/目标点集合,箱子与玩家位置;洪水填充区分地板与墙外空地 */
+function parseLevel(rows) {
+  const h = rows.length, w = Math.max.apply(null, rows.map(r => r.length));
+  const wall = new Set(), goals = new Set();
+  let boxes = [], px = 0, py = 0;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const ch = rows[y][x] || ' ';
+      const i = y * w + x;
+      if (ch === '#') wall.add(i);
+      if (ch === '.' || ch === '*' || ch === '+') goals.add(i);
+      if (ch === '$' || ch === '*') boxes.push(i);
+      if (ch === '@' || ch === '+') { px = x; py = y; }
+    }
+  const floor = new Set([py * w + px]);
+  const q = [py * w + px];
+  while (q.length) {
+    const i = q.pop(), x = i % w, y = (i / w) | 0;
+    for (let d = 0; d < 4; d++) {
+      const nx = x + DIRS[d][0], ny = y + DIRS[d][1];
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const j = ny * w + nx;
+      if (wall.has(j) || floor.has(j)) continue;
+      floor.add(j); q.push(j);
+    }
+  }
+  return { w, h, wall, goals, boxes: boxes.sort((a, b) => a - b), p: py * w + px, floor };
+}
+
+/* ---------- 输入:键盘 + 触屏(按住连发 / 单次触发都可靠) ---------- */
+const keys = { left: 0, right: 0, up: 0, down: 0, a: 0, b: 0, start: 0, select: 0 };
+const pressed = {};                    // 按下沿,逻辑帧消费,绝不丢输入
+const KEYMAP = {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+  KeyX: 'a', KeyZ: 'b', Enter: 'start', ShiftLeft: 'select', ShiftRight: 'select',
+};
+window.addEventListener('keydown', e => {
+  const k = KEYMAP[e.code];
+  if (!k) return;
+  e.preventDefault();
+  Snd.init();                          // 首次按键才初始化音频
+  if (!keys[k]) pressed[k] = 1;
+  keys[k] = 1;
+});
+window.addEventListener('keyup', e => {
+  const k = KEYMAP[e.code];
+  if (k) keys[k] = 0;
+});
+function hit(k) { if (pressed[k]) { pressed[k] = 0; return true; } return false; }
+function clearPressed() { for (const k in pressed) pressed[k] = 0; }
+
+/* 触屏按钮(pointer 事件,鼠标同样可用) */
+document.querySelectorAll('[data-k]').forEach(el => {
+  const k = el.getAttribute('data-k');
+  const down = e => {
+    e.preventDefault(); Snd.init();
+    if (!keys[k]) pressed[k] = 1;
+    keys[k] = 1;
+    el.classList.add('on');
+    if (el.setPointerCapture && e.pointerId !== undefined) {
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+  };
+  const up = e => { e.preventDefault(); keys[k] = 0; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+});
+
+/* ---------- 存档:已解锁关数 + 每关最佳步数 ---------- */
+const save = { unlocked: 1, best: {} };
+try {
+  const s = JSON.parse(localStorage.getItem('boxxle_save'));
+  if (s && s.unlocked) {
+    save.unlocked = Math.min(15, Math.max(1, s.unlocked | 0));
+    save.best = s.best || {};
+  }
+} catch (_) {}
+function persist() {
+  try { localStorage.setItem('boxxle_save', JSON.stringify(save)); } catch (_) {}
+}
+
+/* ---------- 游戏状态 ---------- */
+const ST = { TITLE: 0, PLAY: 1, CLEAR: 2, ALLCLEAR: 3 };
+const game = { state: ST.TITLE, frame: 0, clearT: 0, allT: 0 };
+let lv = null;                         // 当前关解析结果
+let cur = 0;                           // 当前关号(0-14)
+let sel = Math.min(save.unlocked, 15) - 1; // 标题选关光标(默认最高已到达关)
+let boxes = [];                        // 箱子格号数组
+let p = 0;                             // 玩家格号
+let dir = 0;                           // 朝向 0下 1上 2左 3右
+let steps = 0;                         // 本关步数(走一格算一步)
+let hist = [];                         // 撤销栈(每步前快照)
+let anim = null;                       // 滑动动画 {t,pFrom,pTo,bFrom,bTo,push}
+let buffered = -1;                     // 滑动期间缓冲的方向(不丢输入)
+let bHold = 0;                         // 撤销键按住计时(连撤)
+
+function loadLevel(i) {
+  cur = i;
+  lv = parseLevel(LEVELS[i]);
+  boxes = lv.boxes.slice();
+  p = lv.p;
+  dir = 0; steps = 0;
+  hist = []; anim = null; buffered = -1; bHold = 0;
+}
+
+function boxAt(i) { return boxes.indexOf(i); }
+function isWin() {
+  for (const g of lv.goals) if (boxAt(g) < 0) return false;
+  return true;
+}
+
+/* 尝试向 d 方向走一格;能推则推。instant=true 时不播滑动动画(测试用) */
+function tryMove(d, instant) {
+  dir = d;
+  const dx = DIRS[d][0], dy = DIRS[d][1];
+  const cx = p % lv.w, cy = (p / lv.w) | 0;
+  const nx = cx + dx, ny = cy + dy;
+  if (nx < 0 || ny < 0 || nx >= lv.w || ny >= lv.h) return false;
+  const ni = ny * lv.w + nx;
+  if (lv.wall.has(ni)) return false;
+  const bi = boxAt(ni);
+  if (bi >= 0) {
+    const bx = nx + dx, by = ny + dy;
+    if (bx < 0 || by < 0 || bx >= lv.w || by >= lv.h) return false;
+    const bj = by * lv.w + bx;
+    if (lv.wall.has(bj) || boxAt(bj) >= 0) return false;
+    hist.push({ p, boxes: boxes.slice(), steps, dir });
+    const wasG = lv.goals.has(ni), isG = lv.goals.has(bj);
+    boxes[bi] = bj;
+    if (!instant) anim = { t: 0, pFrom: p, pTo: ni, bFrom: ni, bTo: bj, push: true };
+    p = ni; steps++;
+    Snd.push();
+    if (isG && !wasG) Snd.ding();
+    else if (!isG && wasG) Snd.unding();
+    if (isWin()) doClear();
+    return true;
+  }
+  hist.push({ p, boxes: boxes.slice(), steps, dir });
+  if (!instant) anim = { t: 0, pFrom: p, pTo: ni, bFrom: -1, bTo: -1, push: false };
+  p = ni; steps++;
+  Snd.move();
+  return true;
+}
+
+function doUndo() {
+  if (game.state !== ST.PLAY) return;
+  const s = hist.pop();
+  if (!s) return;
+  p = s.p; boxes = s.boxes; steps = s.steps; dir = s.dir;
+  anim = null; buffered = -1;
+  Snd.undo();
+}
+
+function restartLevel() {
+  loadLevel(cur);
+  Snd.restart();
+}
+
+function doClear() {
+  if (!save.best[cur] || steps < save.best[cur]) save.best[cur] = steps;
+  save.unlocked = Math.max(save.unlocked, Math.min(15, cur + 2));
+  persist();
+  game.state = ST.CLEAR;
+  game.clearT = 0;
+  anim = null; buffered = -1;
+  Snd.win();
+}
+
+/* ---------- 像素礼花(ALL CLEAR 画面) ---------- */
+const fw = { t: 0, parts: [] };
+function fwInit() { fw.t = 0; fw.parts = []; }
+function fwStep() {
+  fw.t++;
+  if (fw.t % 18 === 1) {                       // 周期性升空
+    fw.parts.push({
+      ty: 'r', x: 16 + ((Math.random() * 128) | 0), y: 142,
+      vx: 0, vy: -(1.5 + Math.random() * 0.7), life: 120, c: 1 + ((Math.random() * 3) | 0),
+    });
+    Snd.launch();
+  }
+  for (let i = fw.parts.length - 1; i >= 0; i--) {
+    const pt = fw.parts[i];
+    if (pt.ty === 'r') {
+      pt.x += pt.vx; pt.y += pt.vy; pt.vy += 0.02;
+      if (pt.vy > -0.3 || pt.y < 36) {
+        fw.parts.splice(i, 1);
+        Snd.burst();
+        for (let k = 0; k < 14; k++) {
+          const a = (k / 14) * Math.PI * 2, sp = 0.6 + Math.random() * 0.8;
+          fw.parts.push({
+            ty: 's', x: pt.x, y: pt.y,
+            vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.2,
+            life: 24 + ((Math.random() * 14) | 0), c: pt.c,
+          });
+        }
+      }
+    } else {
+      pt.x += pt.vx; pt.y += pt.vy; pt.vy += 0.035;
+      if (--pt.life <= 0) fw.parts.splice(i, 1);
+    }
+  }
+}
+function fwDraw() {
+  for (const pt of fw.parts) {
+    if (pt.ty === 'r') R(pt.x, pt.y, 1, 2, pt.c);
+    else R(pt.x, pt.y, 1, 1, pt.life > 10 ? pt.c : 1);
+  }
+}
+
+/* ---------- 主逻辑帧 ---------- */
+function edgeDir() {
+  if (hit('down')) return 0;
+  if (hit('up')) return 1;
+  if (hit('left')) return 2;
+  if (hit('right')) return 3;
+  return -1;
+}
+function heldDir() {
+  if (keys.down) return 0;
+  if (keys.up) return 1;
+  if (keys.left) return 2;
+  if (keys.right) return 3;
+  return -1;
+}
+
+function stepTitle() {
+  let d = 0;
+  if (hit('left')) d = -1;
+  if (hit('right')) d = 1;
+  if (d) {
+    const ns = Math.max(0, Math.min(save.unlocked - 1, sel + d));
+    if (ns !== sel) { sel = ns; Snd.change(); }
+  }
+  hit('up'); hit('down'); hit('b'); hit('a'); hit('select'); // 吃掉无关按下沿
+  if (hit('start')) {
+    loadLevel(sel);
+    clearPressed();
+    game.state = ST.PLAY;
+    Snd.start();
+  }
+}
+
+function stepPlay() {
+  hit('start'); hit('a');                      // 游戏中无作用,吃掉防残留
+  /* Z(B) 撤销:按一下撤一步,按住连撤 */
+  if (keys.b) {
+    if (bHold === 0) doUndo();
+    bHold++;
+    if (bHold > 14 && bHold % 7 === 0) doUndo();
+  } else bHold = 0;
+  /* Select 重开本关 */
+  if (hit('select')) { restartLevel(); return; }
+  if (anim) {
+    const e = edgeDir();                       // 滑动期间的方向按下沿存进缓冲
+    if (e >= 0 && buffered < 0) buffered = e;
+    if (++anim.t >= ANIM_F) {
+      anim = null;
+      const d = buffered >= 0 ? buffered : heldDir();
+      buffered = -1;
+      if (d >= 0) tryMove(d);
+    }
+    return;
+  }
+  let d = edgeDir();
+  if (d < 0) d = heldDir();
+  if (d >= 0) tryMove(d);
+}
+
+function step() {
+  game.frame++;
+  switch (game.state) {
+    case ST.TITLE: stepTitle(); break;
+    case ST.PLAY: stepPlay(); break;
+    case ST.CLEAR:
+      game.clearT++;
+      if (game.clearT > 110) {                 // 听完胜利小旋律再进下一关
+        if (cur >= 14) {
+          game.state = ST.ALLCLEAR;
+          game.allT = 0;
+          fwInit();
+          Snd.fanfare();
+        } else {
+          loadLevel(cur + 1);
+          game.state = ST.PLAY;
+        }
+        clearPressed();
+      }
+      break;
+    case ST.ALLCLEAR:
+      game.allT++;
+      fwStep();
+      if (game.allT > 40 && hit('start')) {
+        game.state = ST.TITLE;
+        sel = Math.min(save.unlocked, 15) - 1;
+        clearPressed();
+      }
+      break;
+  }
+}
+
+/* ---------- 渲染 ---------- */
+let ox = 0, oy = 0;                            // 关卡绘制原点(居中)
+function cellXY(i) { return [ox + (i % lv.w) * 8, oy + ((i / lv.w) | 0) * 8]; }
+
+function drawWall(sx, sy) {
+  for (let r = 0; r < 8; r++)
+    for (let c = 0; c < 8; c++) {
+      let col = 1;
+      if (r === 0) col = 2;                    // 顶部受光
+      else if (r === 3 || r === 7) col = 0;    // 横向砖缝
+      else if ((r < 3 && c === 3) || (r > 3 && c === 7)) col = 0; // 错缝竖砖缝
+      R(sx + c, sy + r, 1, 1, col);
+    }
+}
+
+function drawField() {
+  ox = ((W - lv.w * 8) / 2) | 0;
+  oy = HUD_H + (((H - HUD_H) - lv.h * 8) / 2) | 0;
+  /* 地板(仅墙内可达区域) */
+  for (const i of lv.floor) {
+    const sx = ox + (i % lv.w) * 8, sy = oy + ((i / lv.w) | 0) * 8;
+    R(sx + 7, sy + 7, 1, 1, 2);                // 角落小点纹理
+  }
+  /* 墙 */
+  for (const i of lv.wall) drawWall(ox + (i % lv.w) * 8, oy + ((i / lv.w) | 0) * 8);
+  /* 目标点 */
+  for (const g of lv.goals) {
+    const [sx, sy] = cellXY(g);
+    drawGoal(sx, sy);
+  }
+  /* 箱子(滑动中的那只单独插值) */
+  const flash = game.state === ST.CLEAR && ((game.clearT >> 2) & 1) === 0;
+  for (const b of boxes) {
+    let sx = ox + (b % lv.w) * 8, sy = oy + ((b / lv.w) | 0) * 8;
+    if (anim && anim.bFrom >= 0 && b === anim.bTo) {
+      const t = anim.t / ANIM_F;
+      sx = ox + ((anim.bFrom % lv.w) + ((anim.bTo % lv.w) - (anim.bFrom % lv.w)) * t) * 8;
+      sy = oy + (((anim.bFrom / lv.w) | 0) + (((anim.bTo / lv.w) | 0) - ((anim.bFrom / lv.w) | 0)) * t) * 8;
+    }
+    drawBox(sx, sy, flash ? 'flash' : (lv.goals.has(b) ? 'goal' : 'norm'));
+  }
+  /* 小工人(朝向 + 推箱前倾帧) */
+  let wx, wy;
+  if (anim) {
+    const t = anim.t / ANIM_F;
+    wx = ox + ((anim.pFrom % lv.w) + ((anim.pTo % lv.w) - (anim.pFrom % lv.w)) * t) * 8;
+    wy = oy + (((anim.pFrom / lv.w) | 0) + (((anim.pTo / lv.w) | 0) - ((anim.pFrom / lv.w) | 0)) * t) * 8;
+  } else {
+    wx = ox + (p % lv.w) * 8;
+    wy = oy + ((p / lv.w) | 0) * 8;
+  }
+  const set = SPR[DIR_SPR[dir]];
+  drawSpr(anim && anim.push ? set.push : ((steps & 1) ? set.walkB : set.walkA), wx | 0, wy | 0);
+}
+
+function drawHUD() {
+  R(0, 0, W, 1, 3);
+  const best = save.best[cur];
+  const txt = 'LV' + String(cur + 1).padStart(2, '0') +
+              ' M' + String(Math.min(steps, 9999)).padStart(4, '0') +
+              ' B' + (best ? String(Math.min(best, 9999)).padStart(4, '0') : '----');
+  drawText(txt, 4, 2, 0);
+  R(0, HUD_H - 1, W, 1, 1);
+}
+
+/* 标题:GB 卡带风大字 + 推箱小场景 + 选关光标 + 闪烁 PRESS START */
+function drawCursor(cx, cy) {
+  R(cx, cy, 1, 5, 0); R(cx + 1, cy + 1, 1, 3, 0); R(cx + 2, cy + 2, 1, 1, 0);
+}
+function drawTitle() {
+  drawText('BOXXLE', 32, 14, 0, 2);
+  /* 小工人推箱子(2 倍放大,推上目标点随节奏亮一下) */
+  const bob = (game.frame >> 5) & 1;
+  drawSpr(SPR.right.push, 46, 42 + bob, 2);
+  drawGoal(62, 42 + bob);
+  drawBox(62, 42 + bob, bob ? 'goal' : 'norm');
+  drawText('LEVEL ' + String(sel + 1).padStart(2, '0'), 48, 76, 0);
+  drawCursor(36, 78);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 100, 0); // 闪烁,灵魂所在
+  drawText('PUT BOXES ON DOTS', 12, 122, 1);
+}
+
+function drawClear() {
+  drawField();
+  drawHUD();
+  const cx = (W - 56) / 2, cy = H - 24;        // 固定在屏幕底部,不挡闪烁的箱子
+  R(cx, cy, 56, 18, 3);
+  R(cx, cy, 56, 1, 0); R(cx, cy + 17, 56, 1, 0);
+  R(cx, cy, 1, 18, 0); R(cx + 55, cy, 1, 18, 0);
+  if ((game.frame >> 3) % 2 === 0) drawText('CLEAR!', cx + 4, cy + 5, 0);
+}
+
+function drawAllClear() {
+  R(0, 0, W, H, 0);
+  fwDraw();
+  drawText('ALL CLEAR', 8, 24, 3, 2);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 100, 3);
+}
+
+function render() {
+  R(0, 0, W, H, 3);                            // 背景 = 最浅色
+  switch (game.state) {
+    case ST.TITLE: drawTitle(); break;
+    case ST.PLAY: drawField(); drawHUD(); break;
+    case ST.CLEAR: drawClear(); break;
+    case ST.ALLCLEAR: drawAllClear(); break;
+  }
+}
+
+/* ---------- 主循环:requestAnimationFrame + 固定 60fps 逻辑帧 ---------- */
+let lastTs = 0, acc = 0;
+function frameLoop(ts) {
+  requestAnimationFrame(frameLoop);
+  if (!lastTs) lastTs = ts;
+  let dt = ts - lastTs;
+  lastTs = ts;
+  if (dt > 250) dt = 250;                      // 切后台回来不追帧
+  acc += dt;
+  while (acc >= 1000 / 60) { step(); acc -= 1000 / 60; }
+  render();
+}
+
+/* ---------- 画布整数倍放大(3~5 倍,像素锐利) ---------- */
+function fit() {
+  const ui = document.getElementById('ui');
+  const chrome = (ui ? ui.offsetHeight : 120) + 64;
+  const availW = window.innerWidth - 20, availH = window.innerHeight - chrome;
+  let s = Math.floor(Math.min(availW / 160, availH / 144));
+  s = Math.max(3, Math.min(5, s));
+  cv.style.width = 160 * s + 'px';
+  cv.style.height = 144 * s + 'px';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', fit);
+loadLevel(0);                                  // 预载第 1 关供标题小场景/测试
+game.state = ST.TITLE;
+fit();
+requestAnimationFrame(frameLoop);
+
+/* ---------- 离屏测试钩子(不影响游戏本身) ---------- */
+window.__test = {
+  ST, game, keys, pressed, step, render, LEVELS, parseLevel,
+  key(k, down) { if (down && !keys[k]) pressed[k] = 1; keys[k] = down ? 1 : 0; },
+  loadLevel(i) { loadLevel(i); game.state = ST.PLAY; },
+  tryMove(d) { return tryMove(d, true); },
+  undo: doUndo,
+  restart: restartLevel,
+  get p() { return p; },
+  get boxes() { return boxes; },
+  get steps() { return steps; },
+  get cur() { return cur; },
+  get dirIdx() { return dir; },
+  get histLen() { return hist.length; },
+  get anim() { return anim; },
+  get lv() { return lv; },
+  get sel() { return sel; },
+  setSel(n) { sel = n; },
+  get unlocked() { return save.unlocked; },
+  setUnlocked(n) { save.unlocked = n; },
+  get best() { return save.best; },
+  get fw() { return fw; },
+  toTitle() { game.state = ST.TITLE; },
+  boxAt, isWin,
+};
+</script>
+</body>
+</html>

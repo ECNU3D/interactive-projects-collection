@@ -1,0 +1,88 @@
+id: nezha
+name: 哪吒三太子
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Straightforward_Boy"
+  speed: 1.08
+  pitch: 2
+  emotion: happy
+
+greet:
+  - id: greet_01
+    text: "大圣！来得正好，看孩儿新练的一路剑。"
+  - id: greet_02
+    text: "是齐天大圣。——父王，大圣来了。"
+  - id: greet_03
+    text: "今日不坐班？走，陪孩儿到云头上耍子去。"
+
+topics:
+  - id: baibang
+    label: "膊上那一棒"
+    source: "第4回"
+    lines:
+      - id: w_nz_01
+        speaker: pc
+        text: "小太子，你的嬭牙尚未退，胎毛尚未干，怎敢说这般大话？"
+        quote: true
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: baibang_01
+        text: "弼马温真个有本事，孩儿这般法力，也战他不过，已被他打伤膊也。"
+        quote: true
+      - id: baibang_02
+        text: "输便是输了，孩儿不赖帐。这一棒，孩儿记一辈子。"
+      - id: w_nz_02
+        speaker: pc
+        text: "记仇么？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: baibang_03
+        text: "不记仇，记事。改日再讨教一场，才算两讫。"
+  - id: liuban
+    label: "六般神器械"
+    source: "第4回"
+    lines:
+      - id: w_nz_03
+        speaker: pc
+        text: "太子浑身上下叮叮当当，带的都是甚么宝贝？"
+        voice_setting: { emotion: surprised, speed: 1.2 }
+      - id: liuban_01
+        text: "斩妖剑、砍妖刀、缚妖索、降妖杵、绣毬儿、火轮儿——六般神器械，件件有名。"
+      - id: liuban_02
+        text: "你那根棒也好。沉，直，不讲理。"
+  - id: guiju
+    label: "天宫的规矩"
+    source: "本作"
+    lines:
+      - id: w_nz_04
+        speaker: pc
+        text: "太子这般本事，终日随朝护驾，不闷么？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: guiju_01
+        text: "闷甚么。朝上有驾要护，下界有妖要降，都是正经事。"
+      - id: guiju_02
+        text: "大圣爱自在，孩儿不劝。只是这天宫的规矩，孩儿看来，也不坏。"
+  - id: zaijiao
+    label: "再讨教一场"
+    source: "第4回"
+    lines:
+      - id: zaijiao_01
+        text: "大圣，今日可有空闲？"
+      - id: w_nz_05
+        speaker: pc
+        text: "有倒是有。太子要怎的？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: zaijiao_02
+        text: "不要怕，吃吾一剑。"
+        quote: true
+      - id: w_nz_06
+        speaker: pc
+        text: "(laughs)好个不怕事的小太子。改日，改日老孙陪你耍。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+
+fallback:
+  - id: fb_01
+    text: "这话孩儿答不上，你问父王去。"
+  - id: fb_02
+    text: "孩儿还要去操演，失陪。"
+
+bye:
+  - id: bye_01
+    text: "慢走。下回见，定要分个高下。"

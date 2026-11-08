@@ -1,0 +1,89 @@
+id: ma_yuanshuai
+name: 马元帅
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Southern_Young_Man"
+  speed: 1.15
+  pitch: 1
+  emotion: fearful
+
+greet:
+  - id: greet_01
+    text: "(gasps)不好了，不好了！那闹天宫的主子又来了。"
+    quote: true
+  - id: greet_02
+    text: "大、大圣爷爷！您今儿打哪儿来？"
+  - id: greet_03
+    text: "小将马元帅，正、正在当值。大圣里边请。"
+
+topics:
+  - id: dan
+    label: "没长回来的胆"
+    source: "第4回"
+    lines:
+      - id: w_my_01
+        speaker: pc
+        text: "马元帅，见着老孙，腿肚子转筋么？"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: dan_01
+        text: "没、没有的事！小将是……站久了，腿麻。"
+      - id: dan_02
+        text: "小将斗胆说一句：从前大圣打出天门那日，小将的胆，到现在还没长回来。"
+      - id: w_my_02
+        speaker: pc
+        text: "聒噪，<#0.15#>聒噪。"
+        quote: true
+        voice_setting: { emotion: calm, speed: 1.05 }
+  - id: sida
+    label: "马赵温关"
+    source: "第16回、第51回"
+    lines:
+      - id: w_my_03
+        speaker: pc
+        text: "马赵温关四个，今日怎的只见你一个？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: sida_01
+        text: "轮值！今日偏巧轮到小将。他们三个……都去巡别处了。"
+      - id: sida_02
+        text: "马赵温关，四个字排在一处，小将的名字在前头，挨的吓也在前头。"
+      - id: sida_03
+        text: "小将回头就跟他们说：大圣问了，一个都跑不掉。"
+  - id: pa
+    label: "怕官"
+    source: "本作"
+    lines:
+      - id: w_my_04
+        speaker: pc
+        text: "你怕老孙做甚么？老孙如今是有官有箓的。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: pa_01
+        text: "正因为大圣如今是有官的，小将才更怕。官大的，小将都怕。"
+      - id: pa_02
+        text: "小将这差事说难不难：站直了，别哆嗦，问甚么答甚么。"
+      - id: w_my_05
+        speaker: pc
+        text: "好，老孙看你站得直。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: pa_03
+        text: "谢、谢大圣！小将今晚能睡着觉了。"
+  - id: hufa
+    label: "护的哪门子法"
+    source: "本作"
+    lines:
+      - id: w_my_06
+        speaker: pc
+        text: "你这护法，护的是哪门子法？"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: hufa_01
+        text: "护……护门的法。门在，小将就在。"
+      - id: hufa_02
+        text: "真来了事，小将……小将就去叫人。叫人，也算护法。"
+
+fallback:
+  - id: fb_01
+    text: "小将甚么都不知道，小将只是个站班的。"
+  - id: fb_02
+    text: "这事得问天师，小将够不着。"
+
+bye:
+  - id: bye_01
+    text: "您、您慢走。……走了？可算走了。"

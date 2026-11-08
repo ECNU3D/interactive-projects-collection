@@ -1,0 +1,101 @@
+id: tianpeng
+name: 天蓬元帅
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Unrestrained_Young_Man"
+  speed: 1.1
+  pitch: -1
+  emotion: happy
+
+greet:
+  - id: greet_01
+    speaker: npc
+    text: "哟！这不是齐天大圣么！什么风把你吹到我这天河来了？"
+  - id: greet_02
+    speaker: npc
+    text: "大圣！来来来，看看我这水军！"
+
+topics:
+  - id: shuijun
+    label: "天河的水军"
+    source: "第19、63回"
+    lines:
+      - id: shuijun_01
+        speaker: npc
+        text: "我掌管天河八万水兵。"
+        quote: true
+      - id: shuijun_02
+        speaker: npc
+        text: "每日操练，号令一响，八万面旗子一齐动。那排场，大圣你开开眼？"
+      - id: w_tp_01
+        speaker: pc
+        text: "天河里又没仗打，养这许多兵做什么？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: shuijun_03
+        speaker: npc
+        text: "哎，话不是这么说！天河是天上要津，水兵不可一日无备。大圣你管桃园，我管天河，都是正经差事。"
+  - id: haochi
+    label: "会上的酒"
+    source: "第5回"
+    lines:
+      - id: haochi_01
+        speaker: npc
+        text: "听说瑶池这两日正在造酒，玉液琼浆，千瓮万坛……嘿嘿，蟠桃会上，少不得有我一席。"
+      - id: w_tp_02
+        speaker: pc
+        text: "你就知道吃酒。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: haochi_02
+        speaker: npc
+        text: "吃酒怎么了？会上不吃，辜负了娘娘的美意。大圣，你若坐我旁边，咱俩得好好喝几杯。"
+      - id: w_tp_05
+        speaker: pc
+        text: "行，到时候老孙坐你旁边。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: haochi_03
+        speaker: npc
+        text: "一言为定！到时候我给你满上！"
+  - id: fengcheng
+    label: "他拍你的马屁"
+    source: "第4、5回"
+    lines:
+      - id: fengcheng_01
+        speaker: npc
+        text: "大圣如今是天上头一份的逍遥——府也起了，园也管了，满天星宿都是朋友，好不快活！"
+      - id: w_tp_03
+        speaker: pc
+        text: "(chuckle)你这嘴，抹了蜜了。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: fengcheng_02
+        speaker: npc
+        text: "哪里哪里，我这都是实话。……往后大圣若有什么好处，可别忘了天河的老朋友。"
+  - id: tianhe
+    label: "天河的风光"
+    source: "第19回"
+    lines:
+      - id: tianhe_01
+        speaker: npc
+        text: "你看这河水，清得照得见星斗。夜里水兵歇了，满河都是星星的影子。"
+      - id: w_tp_04
+        speaker: pc
+        text: "水倒是好水，就是太静了些。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: tianhe_02
+        speaker: npc
+        text: "静好！打仗才要闹，太平年月，静就是福。"
+
+fallback:
+  - id: fb_01
+    speaker: npc
+    text: "哈哈哈，大圣真会说笑。"
+  - id: fb_02
+    speaker: npc
+    text: "这个么……我一个带兵的，不懂这些。"
+
+bye:
+  - id: bye_01
+    speaker: npc
+    text: "大圣常来！下回弄两条天河里的鲜鱼给你尝尝。"
+  - id: bye_02
+    speaker: npc
+    text: "慢走慢走，替我给列位带个好！"

@@ -1,0 +1,65 @@
+id: shaohuo_tongzi
+name: 烧火童子
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "cute_boy"
+  speed: 1.1
+  pitch: 2
+  emotion: happy
+
+greet:
+  - id: greet_01
+    speaker: npc
+    text: "大圣！你也来看火么？"
+  - id: greet_02
+    speaker: npc
+    text: "别碰别碰，这火烫得很！"
+
+topics:
+  - id: huohou
+    label: "火候的讲究"
+    source: "第5回"
+    lines:
+      - id: huohou_01
+        speaker: npc
+        text: "仙官说了，火要文，不能武。我在这儿看了三天三夜，眼睛都不敢眨。"
+      - id: w_sh_01
+        speaker: pc
+        text: "这么小点火苗，熬到几时去？让老孙给你扇一扇。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: huohou_02
+        speaker: npc
+        text: "使不得！大圣一扇，火一猛，一瓮酒就完了。烧火这活，慢才是本事。"
+  - id: wenjiu
+    label: "温酒的差事"
+    source: "第5回"
+    lines:
+      - id: wenjiu_01
+        speaker: npc
+        text: "等酒成了，头一瓮先给娘娘过目。我跟仙官讨了个温酒的差，温酒能头一个闻见香。"
+      # 自拟口语与原文直引拆开：整行挂「原文」角标会为自拟部分背书（引文覆盖率门槛）
+      - id: w_sh_02b
+        speaker: pc
+        text: "好孩子，回头也给老孙温一壶。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: w_sh_02
+        speaker: pc
+        text: "聒噪，<#0.15#>聒噪。"
+        quote: true
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: wenjiu_02
+        speaker: npc
+        text: "那……那得先问造酒的仙官。她说酒数有定，一瓮也不能少。"
+
+fallback:
+  - id: fb_01
+    speaker: npc
+    text: "我得看火，不能陪你说话。"
+  - id: fb_02
+    speaker: npc
+    text: "这个我不懂，你问仙官去。"
+
+bye:
+  - id: bye_01
+    speaker: npc
+    text: "大圣慢走，火星子烫！"

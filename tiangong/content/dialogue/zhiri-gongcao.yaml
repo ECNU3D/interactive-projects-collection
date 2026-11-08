@@ -1,0 +1,78 @@
+id: zhiri_gongcao
+name: 值日功曹
+model: speech-2.6-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Male_Announcer"
+  speed: 1.0
+  pitch: 0
+  emotion: fluent
+
+greet:
+  - id: greet_01
+    text: "大圣。今日巡视至此，正好记上一笔。"
+  - id: greet_02
+    text: "值日功曹在此。大圣有甚事尽管吩咐——吩咐了，我也要记档。"
+  - id: greet_03
+    text: "大圣今日气色好。这一句不入档。"
+
+topics:
+  - id: jilu
+    label: "记档"
+    source: "四值功曹职司（本作所定）"
+    lines:
+      - id: jilu_01
+        text: "天上大事小情，都要入档。今日何神当值，何处有异状，一笔记一笔。"
+      - id: w_gc_jilu_02
+        speaker: pc
+        text: "老孙的事，你也记？"
+        voice_setting: { emotion: surprised }
+      - id: jilu_03
+        text: "大圣的事，记得格外细。"
+      - id: w_gc_jilu_04
+        speaker: pc
+        text: "都记些甚么？"
+        voice_setting: { emotion: calm }
+      - id: jilu_05
+        text: "某月某日，齐天大圣至斗牛宫闲游，与星宿叙话半晌。——如此而已，大圣莫恼。"
+  - id: sizhi
+    label: "四值轮转"
+    source: "第7回（四值功曹，原著未列名）"
+    lines:
+      - id: w_gc_sizhi_01
+        speaker: pc
+        text: "值日功曹，你们共有几位？"
+        voice_setting: { emotion: calm }
+      - id: sizhi_02
+        text: "值年、值月、值日、值时，四位轮转。今日该我。"
+      - id: sizhi_03
+        text: "轮到谁，谁便一年不敢合眼。"
+      - id: w_gc_sizhi_04
+        speaker: pc
+        text: "倒比老孙当年看马还辛苦。"
+        voice_setting: { emotion: happy }
+      - id: sizhi_05
+        text: "大圣说笑。看马是看马，记档是记档，都是奉旨的差事，没有高下。"
+  - id: baoshi
+    label: "报时报事"
+    source: "本作所定职司"
+    lines:
+      - id: baoshi_01
+        text: "时辰一到，我便要报与各处知晓。钟几声，鼓几声，皆有定刻。"
+      - id: w_gc_baoshi_02
+        speaker: pc
+        text: "天上的时辰，报与谁听？"
+        voice_setting: { emotion: happy }
+      - id: baoshi_03
+        text: "报与当值的听。天上的日子短，下界的日子长，错一刻都错不起。"
+
+fallback:
+  - id: fb_01
+    text: "此事档上无载，我不敢答。"
+  - id: fb_02
+    text: "大圣容我回衙查一查档。"
+
+bye:
+  - id: bye_01
+    text: "大圣慢走。今日这一笔，我记下了。"
+  - id: bye_02
+    text: "失陪，辰时将尽。"

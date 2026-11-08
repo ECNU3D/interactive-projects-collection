@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>赤壁之战 · 三国水战 3D 实时推演</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { overflow: hidden; background: #0c0f14; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  #loading {
+    position: fixed; inset: 0; z-index: 30; display: flex;
+    align-items: center; justify-content: center;
+    background: #0c0f14; color: #cbbd9c; letter-spacing: 6px; font-size: 14px;
+    transition: opacity 0.5s;
+  }
+  #err {
+    position: fixed; left: 8px; top: 8px; z-index: 99; max-width: 60vw;
+    color: #ff7a6a; font-size: 12px; white-space: pre-wrap; pointer-events: none;
+  }
+
+  /* ---------- 开场帘 / 落幕 ---------- */
+  #startOverlay, #endCard {
+    position: fixed; inset: 0; z-index: 25; display: flex;
+    align-items: center; justify-content: center; text-align: center;
+    background: radial-gradient(ellipse at 50% 40%, rgba(20,16,10,0.55), rgba(8,8,10,0.92));
+    transition: opacity 0.9s; opacity: 1;
+  }
+  #startOverlay.hide { opacity: 0; pointer-events: none; }
+  #endCard { opacity: 0; pointer-events: none; }
+  #endCard.show { opacity: 1; pointer-events: auto; }
+  .ov-box { color: #e8dcc4; }
+  .ov-era { font-size: 13px; letter-spacing: 6px; color: #9a8f78; margin-bottom: 18px; }
+  .ov-box h1 { font-size: 52px; font-weight: 600; letter-spacing: 18px; text-indent: 18px; margin-bottom: 20px;
+    text-shadow: 0 0 30px rgba(200,120,50,0.35); }
+  .ov-sub { font-size: 14px; line-height: 2; color: #b3a688; letter-spacing: 2px; margin-bottom: 34px; }
+  #startBtn, #endReplay {
+    padding: 13px 44px; font-size: 16px; letter-spacing: 8px; text-indent: 8px; cursor: pointer;
+    color: #f0e4c4; background: rgba(122,59,40,0.55); border: 1px solid #a85a40; border-radius: 2px;
+    transition: all 0.25s;
+  }
+  #startBtn:hover, #endReplay:hover { background: rgba(160,74,48,0.75); box-shadow: 0 0 24px rgba(200,110,60,0.35); }
+  .ov-tip { margin-top: 22px; font-size: 11px; color: #6a6350; letter-spacing: 2px; }
+
+  /* ---------- 字幕 ---------- */
+  #subtitle {
+    position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
+    max-width: min(760px, 86vw); z-index: 12; text-align: center;
+    font-size: 17px; line-height: 1.8; letter-spacing: 1.5px; color: #f2ead6;
+    background: rgba(10, 9, 7, 0.62); padding: 10px 22px; border-radius: 3px;
+    border: 1px solid rgba(120, 100, 70, 0.35);
+    opacity: 0; transition: opacity 0.4s; pointer-events: none;
+  }
+  #subtitle.show { opacity: 1; }
+
+  /* ---------- 事件标题 ---------- */
+  #toast {
+    position: fixed; left: 50%; top: 13%; transform: translateX(-50%);
+    z-index: 12; font-size: 30px; letter-spacing: 14px; text-indent: 14px; color: #f5e9d2;
+    text-shadow: 0 2px 18px rgba(0,0,0,0.8), 0 0 34px rgba(220,130,50,0.3);
+    opacity: 0; transition: opacity 0.5s; pointer-events: none; white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+
+  /* ---------- 时间轴 ---------- */
+  #timeline {
+    position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%);
+    width: min(860px, 88vw); height: 34px; z-index: 12;
+  }
+  #timeline::before {
+    content: ''; position: absolute; left: 0; right: 0; top: 16px; height: 2px;
+    background: rgba(150, 130, 95, 0.3);
+  }
+  #tlFill {
+    position: absolute; left: 0; top: 16px; height: 2px; width: 0;
+    background: linear-gradient(90deg, #a8894f, #d4552f);
+    box-shadow: 0 0 8px rgba(212, 85, 47, 0.6);
+  }
+  .tlMark { position: absolute; top: 0; transform: translateX(-50%); text-align: center; }
+  .tlMark i {
+    display: block; width: 7px; height: 7px; margin: 13px auto 0; border-radius: 50%;
+    background: #6e6653; transition: all 0.3s;
+  }
+  .tlMark span {
+    display: block; margin-top: 5px; font-size: 10px; letter-spacing: 1px; color: #7d745f;
+    white-space: nowrap; transition: color 0.3s;
+  }
+  .tlMark.hit i { background: #d4552f; box-shadow: 0 0 10px rgba(212, 85, 47, 0.9); transform: scale(1.35); }
+  .tlMark.hit span { color: #e8c9a0; }
+
+  /* ---------- 阵营图例 ---------- */
+  #legend {
+    position: fixed; right: 20px; top: 20px; z-index: 10;
+    background: rgba(14, 13, 10, 0.72); border: 1px solid #3d372c; border-radius: 4px;
+    padding: 12px 16px; backdrop-filter: blur(8px); pointer-events: none;
+  }
+  .lg-title { font-size: 13px; letter-spacing: 3px; color: #d8caa6; margin-bottom: 9px; }
+  .lg-row { font-size: 11px; letter-spacing: 1px; color: #a2967d; line-height: 2; }
+  .lg-row i {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    margin-right: 8px; vertical-align: -1px; border: 1px solid rgba(255,255,255,0.18);
+  }
+
+  /* ---------- 工具栏 ---------- */
+  #toolbar { position: fixed; right: 20px; bottom: 26px; z-index: 12; display: flex; gap: 8px; }
+  .tb {
+    padding: 8px 14px; border: 1px solid #4a4234; border-radius: 3px; cursor: pointer;
+    background: rgba(20, 18, 14, 0.82); color: #cbbd9c; font-size: 12px; letter-spacing: 2px;
+    text-decoration: none; backdrop-filter: blur(6px); transition: all 0.2s;
+  }
+  .tb:hover { border-color: #a8894f; color: #efe2c0; }
+  .tb.on { background: rgba(122, 59, 40, 0.6); border-color: #a85a40; color: #f5e9d2; }
+
+  @media (max-width: 720px) {
+    #legend { display: none; }
+    .ov-box h1 { font-size: 34px; letter-spacing: 10px; }
+    #toast { font-size: 22px; letter-spacing: 8px; }
+    #subtitle { font-size: 14px; bottom: 110px; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="loading">赤 壁 · 排 兵 布 阵 中 …</div>
+<div id="err"></div>
+
+<script>
+window.addEventListener('error', function (e) {
+  var el = document.getElementById('err');
+  if (el) el.textContent += (e.message || 'error') + '\n' + (e.filename || '') + ':' + (e.lineno || '') + '\n';
+}, true);
+</script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/build/three.module.js",
+    "three/addons/": "./vendor/three/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

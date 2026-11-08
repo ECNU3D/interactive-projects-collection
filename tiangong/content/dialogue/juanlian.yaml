@@ -1,0 +1,101 @@
+id: juanlian
+name: 卷帘大将
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Gentle_Youth"
+  speed: 0.92
+  pitch: -3
+  emotion: calm
+
+greet:
+  - id: greet_01
+    speaker: npc
+    text: "大圣。末将有礼。"
+  - id: greet_02
+    speaker: npc
+    text: "大圣今日也来丹墀上走走？"
+
+topics:
+  - id: zhisi
+    label: "你的差事"
+    source: "第8、22回"
+    lines:
+      - id: zhisi_01
+        speaker: npc
+        text: "末将灵霄殿下侍銮舆，朝会时卷帘，驾出时随驾。"
+      - id: zhisi_02
+        speaker: npc
+        text: "南天门里我为尊，灵霄殿前吾称上。腰间悬挂虎头牌，手中执定降妖杖。"
+        quote: true
+      - id: w_jl_01
+        speaker: pc
+        text: "好大的口气。老孙看这丹墀上，就数你站得直。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: zhisi_03
+        speaker: npc
+        text: "当差的人，站直是本分。大圣是闲散仙卿，不懂这个。"
+  - id: gui
+    label: "进殿的规矩"
+    source: "第1、3、4回"
+    lines:
+      - id: gui_01
+        speaker: npc
+        text: "大圣要进殿么？殿门虽开着，礼数不能少——须天师引奏，才进得去。"
+      - id: w_jl_02
+        speaker: pc
+        text: "老孙见玉帝，还要递帖子？"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: gui_02
+        speaker: npc
+        text: "要。天有天条，殿有殿规。大圣神通再大，这一步也省不得。"
+      - id: w_jl_05
+        speaker: pc
+        text: "规矩规矩，老孙最听不得这两个字。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: gui_03
+        speaker: npc
+        text: "听不得，也得守着。这殿里，谁不是守着规矩过来的。"
+  - id: danghui
+    label: "蟠桃会那日"
+    source: "第5、8回"
+    lines:
+      - id: danghui_01
+        speaker: npc
+        text: "蟠桃会那日，末将也在殿上侍驾。卷帘的差事，看着轻省，一息也错不得。"
+      - id: w_jl_03
+        speaker: pc
+        text: "好差事。到时候替老孙看看，席上都有什么好吃的。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: danghui_02
+        speaker: npc
+        text: "席上的排场，自有定例。末将站的地方，只看得见帘子外头那一截。"
+  - id: luanyu
+    label: "随驾的排场"
+    source: "第7、22回"
+    lines:
+      - id: luanyu_01
+        speaker: npc
+        text: "銮舆出巡时，八景鸾舆在前，末将执杖随行。大圣那日若在，远远就能望见。"
+      - id: w_jl_04
+        speaker: pc
+        text: "老孙的云快，不等你那銮舆。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: luanyu_02
+        speaker: npc
+        text: "快有快的威风，慢有慢的体面。銮舆不快，可也没人敢催。"
+
+fallback:
+  - id: fb_01
+    speaker: npc
+    text: "末将当差，不敢多话。"
+  - id: fb_02
+    speaker: npc
+    text: "这个……末将不知。"
+
+bye:
+  - id: bye_01
+    speaker: npc
+    text: "大圣慢走。"
+  - id: bye_02
+    speaker: npc
+    text: "殿上肃静，末将不能远送。"

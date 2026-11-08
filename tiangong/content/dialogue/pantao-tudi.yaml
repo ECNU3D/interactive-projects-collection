@@ -1,0 +1,63 @@
+id: pantao_tudi
+name: 蟠桃园土地
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Humorous_Elder"
+  speed: 1.15
+  pitch: 2
+  emotion: fearful
+
+greet:
+  - id: greet_01
+    text: "呔，何人闯园……<#0.3#>哎哟，是大圣！小神肉眼，慢待了，慢待了。"
+  - id: greet_02
+    text: "大圣今儿亲自查园？小神伺候着。"
+
+topics:
+  - id: duli
+    label: "督理这园子"
+    source: "第5回"
+    lines:
+      - id: w_ptd_duli_01
+        speaker: pc
+        text: "土地，这园里多少桃树，你可记得清？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: duli_02
+        text: "回大圣：三千六百株，前、中、后三段各一千二百，株株在簿，一日点两遍。"
+      - id: w_ptd_duli_03
+        speaker: pc
+        text: "好。那老孙摘两个尝尝鲜，不打紧罢？"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: duli_04
+        text: "使不得，使不得！桃是王母娘娘的，数是小神记的。大圣摘一个，小神的簿子上便短一个，这罪小神担不起。"
+      - id: w_ptd_duli_05
+        speaker: pc
+        text: "聒噪，聒噪。"
+        quote: true
+        voice_setting: { emotion: happy, speed: 1.15 }
+  - id: kaiyuan
+    label: "若有人来摘桃"
+    source: "第5回"
+    lines:
+      - id: w_ptd_kaiyuan_01
+        speaker: pc
+        text: "若是有人进园摘桃，你待如何？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: kaiyuan_02
+        text: "(breath)仙娥且住。今岁不比往年了，玉帝点差齐天大圣在此督理，须是报大圣得知，方敢开园。"
+        quote: true
+      - id: w_ptd_kaiyuan_03
+        speaker: pc
+        text: "好个老儿，倒会持家。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: kaiyuan_04
+        text: "不敢当。有大圣坐镇，小神这园子，铁桶一般。"
+
+fallback:
+  - id: fb_01
+    text: "小神只管得这一园泥土，天上的事，不敢乱讲。"
+  - id: fb_02
+    text: "大圣吩咐便是，小神照办。"
+bye:
+  - id: bye_01
+    text: "大圣慢走，仔细脚下云头。"

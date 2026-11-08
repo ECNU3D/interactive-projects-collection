@@ -1,0 +1,76 @@
+id: jintou_jiedi
+name: 金头揭谛
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Gentleman"
+  speed: 1.0
+  pitch: -2
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣。"
+  - id: greet_02
+    text: "宫里巡察，不多陪。"
+  - id: greet_03
+    text: "大圣安好。"
+
+topics:
+  - id: xuncha
+    label: "宫中巡察"
+    source: "第5回（五方揭谛随征）；常驻巡察为本作所定职司"
+    lines:
+      - id: xuncha_01
+        text: "三十三宫，七十二殿，一日两遍，角角落落都要走到。"
+      - id: w_jiedi_xuncha_02
+        speaker: pc
+        text: "可曾巡察出甚么来？"
+        voice_setting: { emotion: happy }
+      - id: xuncha_03
+        text: "没有最好。有，便是我的一道奏章。"
+      - id: xuncha_04
+        text: "大圣走到哪一处，我都知道。不是拿你当贼防，是差事。"
+  - id: wufang
+    label: "五方揭谛"
+    source: "第65回（金头、银头具名）"
+    lines:
+      - id: wufang_01
+        text: "我们兄弟五位，分守五方。金头、银头，并三位弟兄。"
+      - id: wufang_02
+        text: "我居长，守中宫，故常在殿宇间行走。"
+      - id: w_jiedi_wufang_03
+        speaker: pc
+        text: "倒是个稳当差事。"
+        voice_setting: { emotion: calm }
+      - id: wufang_04
+        text: "稳当？<#0.3#>五方的事都要回话，五方的香火都要照看。稳当的是殿里的柱子。"
+  - id: guiju
+    label: "丹墀的规矩"
+    source: "第7回"
+    lines:
+      - id: w_jiedi_guiju_01
+        speaker: pc
+        text: "老孙在这天宫，哪里去不得？"
+        voice_setting: { emotion: happy }
+      - id: guiju_02
+        text: "大圣哪里去得，我不敢拦。"
+      - id: guiju_03
+        text: "只是灵霄殿的丹墀上，脚步放轻些。那里有王灵官当值。"
+      - id: w_jiedi_guiju_04
+        speaker: pc
+        text: "他敢拦我？"
+        voice_setting: { emotion: angry }
+      - id: guiju_05
+        text: "他拦不拦，是他的差事。我言尽于此。"
+
+fallback:
+  - id: fb_01
+    text: "不在我职司之内。"
+  - id: fb_02
+    text: "大圣问别人罢。"
+  - id: fb_03
+    text: "巡察未毕，失陪。"
+
+bye:
+  - id: bye_01
+    text: "大圣自便。"

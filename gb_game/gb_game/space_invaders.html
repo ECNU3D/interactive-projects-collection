@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>SPACE INVADERS · GB</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  /* ============ 页面 chrome(Game Boy 机身风) ============ */
+  html,body{
+    margin:0; padding:0; background:#c4bebb;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none; user-select:none;
+    touch-action:none; overscroll-behavior:none;
+  }
+  #wrap{
+    min-height:100vh; box-sizing:border-box;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:14px 10px; gap:10px;
+  }
+  /* 机身屏幕外框:灰紫机身 + 深色镜面框 + 圆角 */
+  #bezel{
+    background:#5c5660; padding:16px 18px 12px; border-radius:16px;
+    box-shadow: inset 0 2px 0 #7d7681, inset 0 -4px 0 #463f4b, 0 8px 22px rgba(40,30,45,.35);
+  }
+  #frame{
+    background:#221e26; padding:10px; border-radius:10px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.7);
+  }
+  canvas#gb{
+    display:block; width:480px; height:432px; /* JS 会根据窗口改成整数倍 */
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    background:#9bbc0f; border-radius:2px;
+  }
+  #caption{
+    margin-top:8px; text-align:center; color:#a79ea9; font-size:10px; letter-spacing:3px;
+  }
+  /* 常驻按键说明 */
+  #hint{ color:#4a444f; font-size:12px; letter-spacing:1px; text-align:center; }
+  /* ============ 触屏虚拟按键(半透明) ============ */
+  #touch{
+    width:100%; max-width:560px;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:0 6px; box-sizing:border-box;
+  }
+  .pad{ display:grid; grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,46px); gap:4px; }
+  .tbtn{
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(38,32,44,.30); color:#2c2731;
+    border-radius:10px; font-size:18px; font-weight:bold;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .tbtn.on{ background:rgba(38,32,44,.62); color:#12100f; }
+  .tbtn.empty{ background:transparent; pointer-events:none; }
+  .abtn{ width:56px; height:56px; border-radius:50%; font-size:20px; }
+  .sbtn{ width:52px; height:22px; border-radius:12px; font-size:10px; letter-spacing:1px; }
+  #mid{ display:flex; flex-direction:column; gap:10px; align-items:center; }
+  #ab{ display:flex; gap:14px; align-items:center; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="bezel">
+    <div id="frame"><canvas id="gb" width="160" height="144"></canvas></div>
+    <div id="caption">SPACE INVADERS &middot; GB STYLE</div>
+  </div>
+  <div id="ui">
+    <div id="hint">&#8592;&#8594; 移动 &nbsp; X(A) 射击 &nbsp; ENTER(START) 开始</div>
+    <div id="touch">
+      <div class="pad">
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="up">&#9650;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="left">&#9664;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="right">&#9654;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="down">&#9660;</div>
+        <div class="tbtn empty"></div>
+      </div>
+      <div id="mid">
+        <div class="tbtn sbtn" data-k="select">SELECT</div>
+        <div class="tbtn sbtn" data-k="start">START</div>
+      </div>
+      <div id="ab">
+        <div class="tbtn abtn" data-k="b">B</div>
+        <div class="tbtn abtn" data-k="a">A</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+ * SPACE INVADERS · Game Boy 风格太空侵略者(单文件,零依赖)
+ * 操作:方向键左右=移动炮台  X=A(射击,同屏 1 发)  Enter=Start  Shift=Select
+ * 规则:5x11 编队整体平移,触边下移并加速;上 1 行 30 分/中 2 行 20 分/下 2 行 10 分;
+ *      4 个像素级可破坏掩体;神秘飞碟 50~300 分;外星人越少走得越快,
+ *      下到玩家行即 Game Over;清完一波刷新一波且起始位置更低。
+ * ===================================================================== */
+
+/* ---------- 基本常量 ---------- */
+const W = 160, H = 144;                          // GB 逻辑分辨率 160x144
+const PAL = ['#0f380f', '#306230', '#8bac0f', '#9bbc0f']; // DMG 4 色绿
+const COLS = 11, ROWS = 5;                       // 5 行 x 11 列编队
+const PITCHX = 12, PITCHY = 12;                  // 格子间距(像元 11x8 + 缝)
+const CELLW = 11, CELLH = 8;                     // 外星人像元尺寸
+const FX0 = 8, FY0 = 26;                         // 编队初始原点(第 1 波)
+const X_MIN = 4, X_MAX = 156;                    // 编队活动边界
+const STEP_X = 2, DESCEND = 8;                   // 每步横移 / 触边下移
+const PLAYER_Y = 124;                            // 炮台行
+const GROUND_Y = 135;                            // 地面线
+const UFO_Y = 14;                                // 飞碟航道
+const SW = 18, SH = 12, SHIELD_Y = 104;          // 掩体尺寸/高度
+const SHIELD_XS = [18, 54, 90, 126];             // 4 个掩体
+const UFO_SCORES = [50, 100, 150, 200, 250, 300];
+
+const cv = document.getElementById('gb');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+/* 全部画面只允许用 fillRect 画 */
+function R(x, y, w, h, c) {
+  ctx.fillStyle = PAL[c];
+  ctx.fillRect(x | 0, y | 0, w, h);
+}
+
+/* ---------- 8-bit 芯片音效(Web Audio 合成,无音频文件) ---------- */
+const Snd = (() => {
+  let ac = null, master = null, noiseBuf = null;
+  function init() {                       // 首次按键后才创建 AudioContext
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain();
+    master.gain.value = 0.14;
+    master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  function sq(freq, delay, dur, vol, slideTo) {   // 方波
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(delay, dur, vol, hp) {           // 噪声通道
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const s = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+    s.buffer = noiseBuf;
+    s.loop = true;
+    f.type = hp ? 'highpass' : 'lowpass';
+    f.frequency.value = hp ? 1800 : 900;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t); s.stop(t + dur + 0.02);
+  }
+  const N = n => 440 * Math.pow(2, (n - 69) / 12); // MIDI 音号 -> 频率
+  const HEART = [117, 110, 104, 98];               // 心跳 4 音循环(低音)
+  return {
+    init,
+    shoot()     { sq(900, 0, 0.09, 0.32, 240); },                  // 射击"咻"
+    kill()      { noise(0, 0.1, 0.45, true); },                    // 击毁外星人"啪"
+    stepS(i)    { sq(HEART[i & 3], 0, 0.055, 0.6); },              // 心跳低音,随编队加速
+    ufoTick(p)  { sq(p ? 980 : 760, 0, 0.05, 0.16); },             // 飞碟嗡鸣
+    ufoHit()    { noise(0, 0.2, 0.4, true); sq(300, 0, 0.25, 0.4, 1200); }, // 打中飞碟
+    playerHit() { noise(0, 0.5, 0.5, false); sq(220, 0, 0.5, 0.5, 40); },   // 炮台碎裂
+    start()     { sq(N(72), 0, 0.07, 0.45); sq(N(79), 0.07, 0.12, 0.45); },
+    wave()      { [72, 76, 79, 84].forEach((n, i) => sq(N(n), i * 0.07, 0.09, 0.45)); }, // 新一波
+    over()      { [76, 72, 69, 65, 62, 57].forEach((n, i) => sq(N(n), i * 0.14, 0.15, 0.45)); },
+  };
+})();
+
+/* ---------- 8x8 手绘像素字体(画布文字只能用它) ---------- */
+const FONT = (() => {
+  const F = {};
+  const def = (ch, rows) => { F[ch] = rows; };
+  def(' ', ["........","........","........","........","........","........","........","........"]);
+  def('0', [".###....","#...#...","#..##...","#.#.#...","##..#...","#...#...",".###....","........"]);
+  def('1', ["..#.....",".##.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('2', [".###....","#...#...","....#...","..##....",".#......","#.......","#####...","........"]);
+  def('3', ["####....","....#...","....#...",".###....","....#...","....#...","####....","........"]);
+  def('4', ["...##...",".#.#....","#..#....","#####...","...#....","...#....","...#....","........"]);
+  def('5', ["#####...","#.......","####....","....#...","....#...","#...#...",".###....","........"]);
+  def('6', [".###....","#.......","#.......","####....","#...#...","#...#...",".###....","........"]);
+  def('7', ["#####...","....#...","...#....","...#....","..#.....","..#.....","..#.....","........"]);
+  def('8', [".###....","#...#...","#...#...",".###....","#...#...","#...#...",".###....","........"]);
+  def('9', [".###....","#...#...","#...#...",".####...","....#...","#...#...",".###....","........"]);
+  def('A', [".###....","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('B', ["####....","#...#...","#...#...","####....","#...#...","#...#...","####....","........"]);
+  def('C', [".####...","#.......","#.......","#.......","#.......","#.......",".####...","........"]);
+  def('D', ["####....","#...#...","#...#...","#...#...","#...#...","#...#...","####....","........"]);
+  def('E', ["#####...","#.......","#.......","####....","#.......","#.......","#####...","........"]);
+  def('F', ["#####...","#.......","#.......","####....","#.......","#.......","#.......","........"]);
+  def('G', [".####...","#.......","#.......","#.###...","#...#...","#...#...",".####...","........"]);
+  def('H', ["#...#...","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('I', [".###....","..#.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('J', ["..###...","...#....","...#....","...#....","...#....","#..#....",".##.....","........"]);
+  def('K', ["#...#...","#..#....","#.#.....","##......","#.#.....","#..#....","#...#...","........"]);
+  def('L', ["#.......","#.......","#.......","#.......","#.......","#.......","#####...","........"]);
+  def('M', ["#...#...","##.##...","#.#.#...","#.#.#...","#...#...","#...#...","#...#...","........"]);
+  def('N', ["#...#...","##..#...","#.#.#...","#..##...","#...#...","#...#...","#...#...","........"]);
+  def('O', [".###....","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('P', ["####....","#...#...","#...#...","####....","#.......","#.......","#.......","........"]);
+  def('Q', [".###....","#...#...","#...#...","#...#...","#.#.#...","#..#....",".##.#...","........"]);
+  def('R', ["####....","#...#...","#...#...","####....","#.#.....","#..#....","#...#...","........"]);
+  def('S', [".####...","#.......","#.......",".###....","....#...","....#...","####....","........"]);
+  def('T', ["#####...","..#.....","..#.....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('U', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('V', ["#...#...","#...#...","#...#...","#...#...","#...#...",".#.#....","..#.....","........"]);
+  def('W', ["#...#...","#...#...","#...#...","#.#.#...","#.#.#...","##.##...","#...#...","........"]);
+  def('X', ["#...#...","#...#...",".#.#....","..#.....",".#.#....","#...#...","#...#...","........"]);
+  def('Y', ["#...#...","#...#...",".#.#....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('Z', ["#####...","....#...","...#....","..#.....",".#......","#.......","#####...","........"]);
+  def('!', ["..#.....","..#.....","..#.....","..#.....","..#.....","........","..#.....","........"]);
+  def('.', ["........","........","........","........","........","..##....","..##....","........"]);
+  def('-', ["........","........","........",".###....","........","........","........","........"]);
+  def(':', ["........","..##....","..##....","........","..##....","..##....","........","........"]);
+  def('=', ["........","........",".#####..","........",".#####..","........","........","........"]);
+  def('?', [".###....","#...#...","....#...","...#....","..#.....","........","..#.....","........"]);
+  def('*', ["........",".#...#..","..#.#...","...#....","..#.#...",".#...#..","........","........"]);
+  return F;
+})();
+
+/* 画文字:逐像素 fillRect,等宽 8px,可整数放大 */
+function drawText(str, x, y, color, scale) {
+  scale = scale || 1;
+  str = String(str).toUpperCase();
+  for (let i = 0; i < str.length; i++) {
+    const g = FONT[str[i]] || FONT[' '];
+    for (let r = 0; r < 8; r++) {
+      const row = g[r];
+      for (let c = 0; c < 8; c++) {
+        if (row[c] === '#') R(x + i * 8 * scale + c * scale, y + r * scale, scale, scale, color);
+      }
+    }
+  }
+}
+
+/* ---------- 精灵位图(逐像素经典造型,两帧"招手"动画) ---------- */
+/* 位图行 -> 横向连块,绘制时一条 fillRect 画一整段 */
+function sprRuns(rows) {
+  const out = [];
+  for (let y = 0; y < rows.length; y++) {
+    const row = rows[y];
+    let x = 0;
+    while (x < row.length) {
+      if (row[x] === '#') {
+        let x2 = x;
+        while (x2 < row.length && row[x2] === '#') x2++;
+        out.push({ x, y, w: x2 - x });
+        x = x2;
+      } else x++;
+    }
+  }
+  return out;
+}
+function mkSpr(rows) { return { runs: sprRuns(rows), w: rows[0].length, h: rows.length }; }
+function drawSpr(spr, x, y, c) {
+  for (const r of spr.runs) R(x + r.x, y + r.y, r.w, 1, c);
+}
+
+/* 鱿鱼(上 1 行,30 分)8x8 */
+const SQUID = [mkSpr([
+  "...##...",
+  "..####..",
+  ".######.",
+  "##.##.##",
+  "########",
+  "..#..#..",
+  ".#.##.#.",
+  "#.#..#.#",
+]), mkSpr([
+  "...##...",
+  "..####..",
+  ".######.",
+  "##.##.##",
+  "########",
+  ".#.##.#.",
+  "#......#",
+  ".#....#.",
+])];
+/* 螃蟹(中 2 行,20 分)11x8 */
+const CRAB = [mkSpr([
+  "..#.....#..",
+  "...#...#...",
+  "..#######..",
+  ".##.###.##.",
+  "###########",
+  "#.#######.#",
+  "#.#.....#.#",
+  "...##.##...",
+]), mkSpr([
+  "..#.....#..",
+  "#..#...#..#",
+  "#.#######.#",
+  "###.###.###",
+  "###########",
+  ".#########.",
+  "..#.....#..",
+  ".#.......#.",
+])];
+/* 章鱼(下 2 行,10 分)11x8 */
+const OCT = [mkSpr([
+  "....####...",
+  ".#########.",
+  "###########",
+  "##..###..##",
+  "###########",
+  "...##.##...",
+  "..##...##..",
+  ".##.....##.",
+]), mkSpr([
+  "....####...",
+  ".#########.",
+  "###########",
+  "##..###..##",
+  "###########",
+  "..###.###..",
+  ".##.....##.",
+  "##.......##",
+])];
+const ALIEN_SPR = [SQUID, CRAB, OCT];            // 按类型索引
+const ROW_TYPE = [0, 1, 1, 2, 2];                // 行 -> 类型
+const ROW_SCORE = [30, 20, 20, 10, 10];          // 行 -> 分值
+
+/* 神秘飞碟 13x7 */
+const UFO_SPR = mkSpr([
+  ".....###.....",
+  "...#######...",
+  "..#########..",
+  ".##.##.##.##.",
+  "#############",
+  "..###...###..",
+  "..#.......#..",
+]);
+/* 玩家炮台 13x8 */
+const PLAYER_SPR = mkSpr([
+  "......#......",
+  ".....###.....",
+  ".....###.....",
+  ".###########.",
+  "#############",
+  "#############",
+  "#############",
+  "#############",
+]);
+/* 外星人被击毁的爆裂帧 11x8 */
+const AEXP = mkSpr([
+  ".#...#...#.",
+  "..#.#.#.#..",
+  "#..#...#..#",
+  "..#.###.#..",
+  "#..#####..#",
+  "..#.###.#..",
+  "#..#...#..#",
+  "..#.#.#.#..",
+]);
+/* 炮台碎裂两帧 13x8 */
+const PEXP = [mkSpr([
+  "......#......",
+  "#....#.#....#",
+  ".#..#...#..#.",
+  "..#..###..#..",
+  "#.#..###..#.#",
+  "..#..###..#..",
+  ".#..#...#..#.",
+  "#....#.#....#",
+]), mkSpr([
+  "..#.......#..",
+  ".#...#.#...#.",
+  "....#...#....",
+  "#.#..#.#..#.#",
+  "....#...#....",
+  ".#...#.#...#.",
+  "..#.......#..",
+  "......#......",
+])];
+/* HUD 命数小炮台 7x3 */
+const MINI = mkSpr([
+  "...#...",
+  ".#####.",
+  "#######",
+]);
+/* 掩体造型 18x12(像素级可破坏,逐点存储) */
+const SHIELD_ROWS = [
+  "....##########....",
+  "..##############..",
+  ".################.",
+  "##################",
+  "##################",
+  "##################",
+  "##################",
+  "##################",
+  "##################",
+  "######......######",
+  "#####........#####",
+  "####..........####",
+];
+/* 炸弹锯齿 3 宽,4 相位循环 */
+const BOMB_ROWS = ['#..', '.#.', '..#', '.#.'];
+
+/* ---------- 输入:键盘 + 触屏(按住连发 / 单次触发都可靠) ---------- */
+const keys = { left: 0, right: 0, up: 0, down: 0, a: 0, b: 0, start: 0, select: 0 };
+const pressed = {};                    // 按下沿,逻辑帧消费,绝不丢输入
+const KEYMAP = {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+  KeyX: 'a', KeyZ: 'b', Enter: 'start', ShiftLeft: 'select', ShiftRight: 'select',
+};
+window.addEventListener('keydown', e => {
+  const k = KEYMAP[e.code];
+  if (!k) return;
+  e.preventDefault();
+  Snd.init();                          // 首次按键才初始化音频
+  if (!keys[k]) pressed[k] = 1;
+  keys[k] = 1;
+});
+window.addEventListener('keyup', e => {
+  const k = KEYMAP[e.code];
+  if (k) keys[k] = 0;
+});
+function hit(k) { if (pressed[k]) { pressed[k] = 0; return true; } return false; }
+function clearPressed() { for (const k in pressed) pressed[k] = 0; }
+
+/* 触屏按钮(pointer 事件,鼠标同样可用) */
+document.querySelectorAll('[data-k]').forEach(el => {
+  const k = el.getAttribute('data-k');
+  const down = e => {
+    e.preventDefault(); Snd.init();
+    if (!keys[k]) pressed[k] = 1;
+    keys[k] = 1;
+    el.classList.add('on');
+    if (el.setPointerCapture && e.pointerId !== undefined) {
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+  };
+  const up = e => { e.preventDefault(); keys[k] = 0; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+});
+
+/* ---------- 游戏状态 ---------- */
+const ST = { TITLE: 0, CARD: 1, PLAY: 2, DYING: 3, OVER: 4 };
+const game = {
+  state: ST.TITLE, frame: 0,
+  score: 0, lives: 3, wave: 1,
+  cardT: 0, dieT: 0, overT: 0,
+};
+let aliens = [];                       // [r][c] = 0/1
+let fx = FX0, fy = FY0, fdir = 1;      // 编队原点(像素)与方向
+let anim = 0;                          // 招手动画帧 0/1
+let alive = 0;                         // 存活外星人数(决定速度)
+let alienTimer = 1;                    // 距下一步的帧数
+let stepC = 0;                         // 心跳步数(4 音循环)
+const player = { x: 73, y: PLAYER_Y, w: 13, h: 8 };
+const bullet = { x: 0, y: 0, active: false };   // 同屏 1 发
+let bombs = [];                        // 外星人炸弹 {x,y}
+let explosions = [];                   // 外星人爆裂 {x,y,t,type}
+let popups = [];                       // 飘分 {x,y,txt,t}
+let shields = [];                      // 掩体 {x,y,px}
+const ufo = { active: false, x: 0, dir: 1, timer: 600 };
+let bombCd = 30;
+
+/* ---------- 掩体:像素级破坏 ---------- */
+function resetShields() {
+  shields = SHIELD_XS.map(x => {
+    const px = new Uint8Array(SW * SH);
+    for (let ly = 0; ly < SH; ly++)
+      for (let lx = 0; lx < SW; lx++)
+        if (SHIELD_ROWS[ly][lx] === '#') px[ly * SW + lx] = 1;
+    return { x, y: SHIELD_Y, px };
+  });
+}
+/* 世界坐标是否命中某个掩体的实心像素 */
+function shieldSolidAt(wx, wy) {
+  wx |= 0; wy |= 0;
+  for (const s of shields) {
+    if (wx >= s.x && wx < s.x + SW && wy >= s.y && wy < s.y + SH) {
+      if (s.px[(wy - s.y) * SW + (wx - s.x)]) return s;
+    }
+  }
+  return null;
+}
+/* 弹着点炸出圆形凹坑(双方子弹共用) */
+function crater(s, wx, wy, r) {
+  const cx = Math.round(wx - s.x), cy = Math.round(wy - s.y);
+  if (cx >= 0 && cx < SW && cy >= 0 && cy < SH) s.px[cy * SW + cx] = 0; // 弹着点必碎
+  for (let dy = -r; dy <= r; dy++)
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy > r * r + 1) continue;
+      if (Math.random() > 0.9) continue;   // 边缘参差,像被"啃"掉
+      const lx = cx + dx, ly = cy + dy;
+      if (lx >= 0 && lx < SW && ly >= 0 && ly < SH) s.px[ly * SW + lx] = 0;
+    }
+}
+/* 外星人压过掩体时把覆盖到的像素磨掉(原版行为) */
+function erodeShields() {
+  for (const s of shields)
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) {
+        if (!aliens[r][c]) continue;
+        const ax = fx + c * PITCHX, ay = fy + r * PITCHY;
+        if (ax + CELLW <= s.x || ax >= s.x + SW || ay + CELLH <= s.y || ay >= s.y + SH) continue;
+        for (let ly = Math.max(0, ay - s.y); ly < Math.min(SH, ay + CELLH - s.y); ly++)
+          for (let lx = Math.max(0, ax - s.x); lx < Math.min(SW, ax + CELLW - s.x); lx++)
+            s.px[ly * SW + lx] = 0;
+      }
+}
+
+/* ---------- 编队 ---------- */
+function recount() {
+  alive = 0;
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (aliens[r][c]) alive++;
+}
+/* 存活编队的外接框;全灭返回 null */
+function alienBBox() {
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      if (!aliens[r][c]) continue;
+      const ax = fx + c * PITCHX, ay = fy + r * PITCHY;
+      if (ax < x0) x0 = ax;
+      if (ax + CELLW > x1) x1 = ax + CELLW;
+      if (ay < y0) y0 = ay;
+      if (ay + CELLH > y1) y1 = ay + CELLH;
+    }
+  return x1 < 0 ? null : { x0, y0, x1, y1 };
+}
+/* 经典加速机制:步进间隔 = 存活数 x 系数,最后 1 个每帧都动(几乎闪现) */
+function stepInterval() {
+  const k = Math.max(0.18, 0.55 - (game.wave - 1) * 0.05);
+  return Math.max(1, Math.round(alive * k));
+}
+/* 编队整体走一步:触边则整体下移并反向;每步一声心跳 */
+function stepAliens() {
+  const bb = alienBBox();
+  if (!bb) return;
+  if ((fdir > 0 && bb.x1 + STEP_X > X_MAX) || (fdir < 0 && bb.x0 - STEP_X < X_MIN)) {
+    fy += DESCEND;
+    fdir = -fdir;
+  } else {
+    fx += fdir * STEP_X;
+  }
+  anim ^= 1;
+  Snd.stepS(stepC++);
+  erodeShields();
+  const nb = alienBBox();
+  if (nb && nb.y1 >= PLAYER_Y) gameOver();  // 压到玩家行:直接 Game Over
+}
+function killAlien(r, c) {
+  if (!aliens[r][c]) return;
+  aliens[r][c] = 0;
+  alive--;
+  game.score += ROW_SCORE[r];
+  explosions.push({ x: fx + c * PITCHX, y: fy + r * PITCHY, t: 8, type: ROW_TYPE[r] });
+  Snd.kill();
+  if (alienTimer > stepInterval()) alienTimer = stepInterval(); // 击杀立刻提速
+}
+
+/* ---------- 波次 ---------- */
+function buildWave() {
+  aliens = [];
+  for (let r = 0; r < ROWS; r++) aliens.push(new Array(COLS).fill(1));
+  alive = COLS * ROWS;
+  fx = FX0;
+  fy = FY0 + Math.min(game.wave - 1, 3) * 8;   // 每波起始位置更低(封顶 +24)
+  fdir = 1;
+  anim = 0;
+  alienTimer = stepInterval();
+  bullet.active = false;
+  bombs = [];
+  explosions = [];
+  popups = [];
+  ufo.active = false;
+  ufo.timer = (500 + Math.random() * 700) | 0;
+  bombCd = 40;
+  player.x = 73;
+}
+function newGame() {
+  game.score = 0;
+  game.lives = 3;
+  game.wave = 1;
+  resetShields();                    // 掩体按"币"恢复,波次之间不修复
+  buildWave();
+  game.cardT = 0;
+  game.state = ST.CARD;
+  clearPressed();
+}
+
+/* ---------- 战斗 ---------- */
+function fire() {
+  bullet.x = player.x + 6;
+  bullet.y = PLAYER_Y - 4;
+  bullet.active = true;
+  Snd.shoot();
+}
+function hitUfo() {
+  const v = UFO_SCORES[(Math.random() * UFO_SCORES.length) | 0];
+  game.score += v;
+  popups.push({ x: Math.max(2, Math.min(W - 26, ufo.x)), y: UFO_Y, txt: '' + v, t: 50 });
+  ufo.active = false;
+  ufo.timer = (700 + Math.random() * 900) | 0;
+  Snd.ufoHit();
+}
+function updateUfo() {
+  if (!ufo.active) {
+    if (--ufo.timer <= 0) {
+      ufo.active = true;
+      ufo.dir = Math.random() < 0.5 ? 1 : -1;
+      ufo.x = ufo.dir > 0 ? -13 : W;
+    }
+    return;
+  }
+  ufo.x += ufo.dir;
+  if ((game.frame & 7) === 0) Snd.ufoTick((game.frame >> 3) & 1);
+  if ((ufo.dir > 0 && ufo.x > W) || (ufo.dir < 0 && ufo.x < -13)) {
+    ufo.active = false;
+    ufo.timer = (700 + Math.random() * 900) | 0;
+  }
+}
+function maxBombs() { return Math.min(3, 2 + (game.wave - 1)); }
+/* 从某一列最底层外星人丢炸弹;该列全灭则顺移找下一列 */
+function spawnBomb(col) {
+  if (alive <= 0) return;
+  let c = col === undefined ? (Math.random() * COLS) | 0 : col;
+  for (let t = 0; t < COLS; t++, c = (c + 1) % COLS)
+    for (let r = ROWS - 1; r >= 0; r--)
+      if (aliens[r][c]) {
+        bombs.push({ x: fx + c * PITCHX + 4, y: fy + r * PITCHY + CELLH });
+        return;
+      }
+}
+function updateBombs() {
+  if (bombCd > 0) bombCd--;
+  if (bombs.length < maxBombs() && bombCd <= 0 && Math.random() < 0.03) {
+    spawnBomb();
+    bombCd = 16;
+  }
+  for (let i = bombs.length - 1; i >= 0; i--) {
+    const b = bombs[i];
+    b.y += 2;
+    if (b.y + 8 >= GROUND_Y) { bombs.splice(i, 1); continue; }
+    let sh = null;
+    for (let dy = 4; dy < 8 && !sh; dy++)
+      for (let dx = 0; dx < 3 && !sh; dx++)
+        sh = shieldSolidAt(b.x + dx, b.y + dy);
+    if (sh) { crater(sh, b.x + 1, b.y + 6, 2); bombs.splice(i, 1); continue; }
+    if (b.x < player.x + player.w && b.x + 3 > player.x &&
+        b.y + 8 > PLAYER_Y && b.y < PLAYER_Y + player.h) {
+      bombs.splice(i, 1);
+      hitPlayer();
+      return;
+    }
+  }
+}
+function updateBullet() {
+  if (!bullet.active) return;
+  bullet.y -= 4;
+  if (bullet.y < 10) { bullet.active = false; return; }
+  /* 飞碟 */
+  if (ufo.active && bullet.x >= ufo.x && bullet.x < ufo.x + 13 &&
+      bullet.y < UFO_Y + 7 && bullet.y + 4 > UFO_Y) {
+    hitUfo();
+    bullet.active = false;
+    return;
+  }
+  /* 外星人 */
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      if (!aliens[r][c]) continue;
+      const ax = fx + c * PITCHX, ay = fy + r * PITCHY;
+      if (bullet.x >= ax && bullet.x < ax + CELLW &&
+          bullet.y < ay + CELLH && bullet.y + 4 > ay) {
+        killAlien(r, c);
+        bullet.active = false;
+        return;
+      }
+    }
+  /* 拦截炸弹(经典对撞) */
+  for (let i = bombs.length - 1; i >= 0; i--) {
+    const b = bombs[i];
+    if (bullet.x < b.x + 3 && bullet.x + 1 > b.x &&
+        bullet.y < b.y + 8 && bullet.y + 4 > b.y) {
+      bombs.splice(i, 1);
+      bullet.active = false;
+      return;
+    }
+  }
+  /* 掩体:命中处凹陷 */
+  for (let i = 0; i < 4; i++) {
+    const s = shieldSolidAt(bullet.x, bullet.y + i);
+    if (s) {
+      crater(s, bullet.x, bullet.y + i, 2);
+      bullet.active = false;
+      return;
+    }
+  }
+}
+function hitPlayer() {
+  if (game.state !== ST.PLAY) return;
+  game.state = ST.DYING;               // 炮台碎裂动画
+  game.dieT = 0;
+  bullet.active = false;
+  Snd.playerHit();
+}
+function afterDeath() {
+  game.lives--;
+  if (game.lives <= 0) { gameOver(); return; }
+  player.x = 73;
+  bombs = [];
+  game.state = ST.PLAY;
+  clearPressed();
+}
+function gameOver() {
+  game.state = ST.OVER;
+  game.overT = 0;
+  Snd.over();
+}
+
+/* ---------- 主逻辑帧 ---------- */
+function stepPlay() {
+  explosions = explosions.filter(e => --e.t > 0);
+  popups = popups.filter(p => --p.t > 0);
+  if (keys.left) player.x -= 1.4;
+  if (keys.right) player.x += 1.4;
+  player.x = Math.max(X_MIN, Math.min(X_MAX - player.w, player.x));
+  if (keys.a && !bullet.active) fire();        // 按住连发,同屏 1 发
+  updateUfo();
+  if (--alienTimer <= 0) {
+    alienTimer = stepInterval();
+    stepAliens();
+  }
+  if (game.state !== ST.PLAY) return;
+  updateBombs();
+  if (game.state !== ST.PLAY) return;
+  updateBullet();
+  if (game.state === ST.PLAY && alive <= 0) {  // 清完一波:刷新且更低
+    game.wave++;
+    buildWave();
+    game.cardT = 0;
+    game.state = ST.CARD;
+    Snd.wave();
+  }
+}
+function step() {
+  game.frame++;
+  switch (game.state) {
+    case ST.TITLE:
+      if (hit('start')) { newGame(); Snd.start(); }
+      break;
+    case ST.CARD:
+      if (++game.cardT >= 90) { game.state = ST.PLAY; clearPressed(); }
+      break;
+    case ST.PLAY:
+      stepPlay();
+      break;
+    case ST.DYING:
+      if (++game.dieT >= 80) afterDeath();
+      break;
+    case ST.OVER:
+      game.overT++;
+      if (game.overT > 30 && hit('start')) game.state = ST.TITLE;
+      break;
+  }
+}
+
+/* ---------- 渲染 ---------- */
+function drawHUD() {
+  drawText('SCORE', 2, 0, 0);
+  drawText(String(game.score).padStart(6, '0'), 44, 0, 0);
+  for (let i = 0; i < game.lives; i++) drawSpr(MINI, 6 + i * 10, 140, 0); // 小炮台=命
+  const wv = 'WAVE ' + game.wave;
+  drawText(wv, W - wv.length * 8 - 2, 136, 0);
+}
+function drawShields() {
+  for (const s of shields)
+    for (let ly = 0; ly < SH; ly++)
+      for (let lx = 0; lx < SW; lx++)
+        if (s.px[ly * SW + lx]) R(s.x + lx, s.y + ly, 1, 1, 1);
+}
+function drawAliens() {
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      if (!aliens[r][c]) continue;
+      const spr = ALIEN_SPR[ROW_TYPE[r]][anim];
+      drawSpr(spr, fx + c * PITCHX + ((CELLW - spr.w) >> 1), fy + r * PITCHY, 0);
+    }
+}
+function drawExplosions() {
+  for (const e of explosions) {
+    if (e.t === 8) {                           // 命中瞬间:浅色闪爆 1 帧
+      const spr = ALIEN_SPR[e.type][0];
+      drawSpr(spr, e.x + ((CELLW - spr.w) >> 1), e.y, 2);
+    } else {
+      drawSpr(AEXP, e.x, e.y, 0);
+    }
+  }
+}
+function drawBomb(b) {
+  const ph = (game.frame >> 2) & 3;
+  for (let i = 0; i < 8; i++) {
+    const row = BOMB_ROWS[(i + ph) & 3];
+    for (let dx = 0; dx < 3; dx++) if (row[dx] === '#') R(b.x + dx, b.y + i, 1, 1, 0);
+  }
+}
+function drawScene() {
+  drawHUD();
+  R(0, GROUND_Y, W, 1, 1);
+  drawShields();
+  drawAliens();
+  drawExplosions();
+  if (ufo.active) drawSpr(UFO_SPR, ufo.x, UFO_Y, 0);
+  for (const b of bombs) drawBomb(b);
+  if (bullet.active) R(bullet.x, bullet.y, 1, 4, 0);
+  if (game.state === ST.DYING) {               // 炮台碎裂:两帧交替闪烁
+    const f = (game.dieT >> 2) & 1;
+    drawSpr(PEXP[f], player.x, PLAYER_Y, f ? 1 : 0);
+  } else {
+    drawSpr(PLAYER_SPR, player.x, PLAYER_Y, 0);
+  }
+  for (const p of popups) drawText(p.txt, p.x, p.y, 0);
+}
+
+/* 标题:大字 + 经典记分表 + 闪烁的 PRESS START */
+function drawTitle() {
+  drawText('SPACE', 40, 14, 0, 2);
+  drawText('INVADERS', 16, 32, 0, 2);
+  drawText('SCORE ADVANCE TABLE', 4, 62, 0);
+  drawSpr(UFO_SPR, 16, 76, 0);
+  drawText('=??? MYSTERY', 38, 76, 0);
+  drawSpr(SQUID[0], 19, 86, 0);
+  drawText('=30 POINTS', 38, 86, 0);
+  drawSpr(CRAB[0], 17, 96, 0);
+  drawText('=20 POINTS', 38, 96, 0);
+  drawSpr(OCT[0], 17, 106, 0);
+  drawText('=10 POINTS', 38, 106, 0);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 126, 0); // 闪烁,灵魂所在
+}
+function drawCard() {
+  R(0, 0, W, H, 0);
+  const t = 'WAVE ' + game.wave;
+  drawText(t, (W - t.length * 8) / 2, 68, 3);
+}
+function drawOver() {
+  R(0, 0, W, H, 0);
+  drawText('GAME OVER', 44, 44, 3);
+  drawText('SCORE ' + String(game.score).padStart(6, '0'), 32, 68, 3);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 100, 3);
+}
+
+function render() {
+  R(0, 0, W, H, 3);                            // 背景 = 最浅色
+  switch (game.state) {
+    case ST.TITLE: drawTitle(); break;
+    case ST.CARD: drawCard(); break;
+    case ST.PLAY: drawScene(); break;
+    case ST.DYING: drawScene(); break;
+    case ST.OVER: drawOver(); break;
+  }
+}
+
+/* ---------- 主循环:requestAnimationFrame + 固定 60fps 逻辑帧 ---------- */
+let lastTs = 0, acc = 0;
+function frameLoop(ts) {
+  requestAnimationFrame(frameLoop);
+  if (!lastTs) lastTs = ts;
+  let dt = ts - lastTs;
+  lastTs = ts;
+  if (dt > 250) dt = 250;                      // 切后台回来不追帧
+  acc += dt;
+  while (acc >= 1000 / 60) { step(); acc -= 1000 / 60; }
+  render();
+}
+
+/* ---------- 画布整数倍放大(3~5 倍,像素锐利) ---------- */
+function fit() {
+  const ui = document.getElementById('ui');
+  const chrome = (ui ? ui.offsetHeight : 120) + 64;
+  const availW = window.innerWidth - 20, availH = window.innerHeight - chrome;
+  let s = Math.floor(Math.min(availW / 160, availH / 144));
+  s = Math.max(3, Math.min(5, s));
+  cv.style.width = 160 * s + 'px';
+  cv.style.height = 144 * s + 'px';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', fit);
+resetShields();                                // 标题期不需要,但保证测试钩子可用
+fit();
+requestAnimationFrame(frameLoop);
+
+/* ---------- 离屏测试钩子(不影响游戏本身) ---------- */
+window.__test = {
+  ST, game, keys, pressed, step, render,
+  newGame, buildWave, resetShields, fire, spawnBomb, forceUfo,
+  stepInterval, stepAliens, alienBBox, killAlien, killAllBut, recount, setFormation,
+  shieldPixelCount, setAlienTimer,
+  PITCHX, PITCHY, CELLW, CELLH, COLS, ROWS, FX0, FY0,
+  X_MIN, X_MAX, PLAYER_Y, GROUND_Y, UFO_Y, SW, SH, SHIELD_Y,
+  key(k, down) { if (down && !keys[k]) pressed[k] = 1; keys[k] = down ? 1 : 0; },
+  get aliens() { return aliens; },
+  get fx() { return fx; },
+  get fy() { return fy; },
+  get fdir() { return fdir; },
+  get anim() { return anim; },
+  get alive() { return alive; },
+  get stepC() { return stepC; },
+  get player() { return player; },
+  get bullet() { return bullet; },
+  get bombs() { return bombs; },
+  get shields() { return shields; },
+  get ufo() { return ufo; },
+  get explosions() { return explosions; },
+  get popups() { return popups; },
+};
+function forceUfo(dir) {
+  ufo.active = true;
+  ufo.dir = dir;
+  ufo.x = dir > 0 ? -13 : W;
+}
+function setFormation(x, y, dir) { fx = x; fy = y; fdir = dir; }
+function setAlienTimer(v) { alienTimer = v; }
+function shieldPixelCount(i) {
+  const px = shields[i].px;
+  let n = 0;
+  for (let k = 0; k < px.length; k++) if (px[k]) n++;
+  return n;
+}
+function killAllBut(n) {                         // 只留前 n 个外星人(测试加速用)
+  let kept = 0;
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++) {
+      if (!aliens[r][c]) continue;
+      if (kept < n) kept++; else aliens[r][c] = 0;
+    }
+  recount();
+}
+</script>
+</body>
+</html>

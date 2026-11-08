@@ -1,0 +1,106 @@
+id: li_jing
+name: 托塔李天王
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Reliable_Executive"
+  speed: 0.95
+  pitch: -3
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "齐天大圣。今日不在蟠桃园督理，到本帅殿前做甚么？"
+  - id: greet_02
+    text: "大圣脚步好快，殿前的金甲神人，一个都没看清你。"
+  - id: greet_03
+    text: "来了？坐。军中只有清茶。"
+
+topics:
+  - id: bingbai
+    label: "花果山那一阵"
+    source: "第4回"
+    lines:
+      - id: bingbai_01
+        text: "那一阵，是我轻敌。先锋折了锐气，三太子也带伤回来。"
+      - id: w_lj_01
+        speaker: pc
+        text: "天王客气。那一日，老孙还未使出真本事哩。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: bingbai_02
+        text: "兵家胜负，常事耳。只是你记住——天庭的兵马，不是花果山的猴群，败了，还会再来。"
+      - id: w_lj_02
+        speaker: pc
+        text: "再来？再来老孙还打。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: bingbai_03
+        text: "所以如今你坐在天上，本帅看着你。这样最好，两下都省事。"
+  - id: zhaoyaojing
+    label: "照妖镜"
+    source: "第6回；照玩家为本作设定"
+    lines:
+      - id: w_lj_03
+        speaker: pc
+        text: "听闻天王有一面照妖镜，上界下界，无不现形？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: zhaoyaojing_01
+        text: "然。妖邪至此镜前，毛发皆现，无所遁迹。"
+      - id: zhaoyaojing_02
+        text: "……镜中清清净净。你如今是齐天大圣，不是妖。收起来了。"
+      - id: w_lj_04
+        speaker: pc
+        text: "照出甚么没有？老孙自己倒想瞧瞧。"
+        voice_setting: { emotion: surprised, speed: 1.2 }
+  - id: tuota
+    label: "手里那座塔"
+    source: "第83回"
+    lines:
+      - id: w_lj_05
+        speaker: pc
+        text: "天王这塔，日夜托着，胳膊不酸么？"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: tuota_01
+        text: "此乃佛赐之物。托的是塔，安的是家。"
+      - id: tuota_02
+        text: "家事不必外人过问。大圣，喝茶。"
+  - id: junfa
+    label: "军法与律条"
+    source: "第4回、第83回"
+    lines:
+      - id: w_lj_06
+        speaker: pc
+        text: "当年巨灵神败阵回来，听闻天王要将他推出斩之？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: junfa_01
+        text: "这厮剉吾锐气，推出斩之！"
+        quote: true
+      - id: junfa_02
+        text: "军法如此。三太子讨情，便饶了。一军之中，恩威都得有。"
+      - id: w_lj_07
+        speaker: pc
+        text: "好大的官威。老孙若在你帐下，早挨了八十刀了。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: junfa_03
+        text: "律云：『诬告加三等。』"
+        quote: true
+      - id: junfa_04
+        text: "嘴上留德，脚下留神。你如今在天上有名有箓，也在法度之内。"
+      - id: w_lj_08
+        speaker: pc
+        text: "那天王何时再下界立功？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: junfa_05
+        text: "不入虎穴，安得虎子。"
+        quote: true
+      - id: junfa_06
+        text: "只是如今海晏河清，本帅宁可这塔上落灰。"
+
+fallback:
+  - id: fb_01
+    text: "军中无戏言。大圣请回。"
+  - id: fb_02
+    text: "此事本帅不知。要过问，去通明殿问天师。"
+
+bye:
+  - id: bye_01
+    text: "慢走。蟠桃园是个好差事，安生做着。"
+  - id: bye_02
+    text: "本帅还有军务，不送。"

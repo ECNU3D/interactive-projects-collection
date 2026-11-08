@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>红楼梦 · 入府游</title>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": { "three": "./lib/three.module.js" } }
+</script>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+
+<div id="grain"></div>
+<div id="vignette"></div>
+
+<!-- 入府標題頁 -->
+<div id="title-screen">
+  <div class="title-frame">
+    <div class="title-col">
+      <h1 class="title-vertical">红楼梦</h1>
+      <div class="seal">入府</div>
+    </div>
+    <div class="title-side">
+      <p class="title-sub-vertical">清 · 曹雪芹 撰</p>
+      <p class="title-sub-vertical dim">宁荣二府 · 大观园</p>
+    </div>
+  </div>
+  <div class="title-bottom">
+    <p class="title-note">元春省亲已毕，会芳园墙垣既拆，二府连属；姊妹俱已入园</p>
+    <button id="enter-btn" disabled>入 府 一 游</button>
+    <p class="hint-line">鼠标环顾 · W A S D 行走 · Shift 疾行 · M 展图 · F 凭虚御风 · 行至妙处自有讲解</p>
+    <p id="load-status" class="hint-line dim">正在兴造⋯⋯</p>
+  </div>
+</div>
+
+<!-- 講解字幕 -->
+<div id="narration-box" class="hidden">
+  <div id="narration-title"></div>
+  <div id="narration-text"></div>
+  <div id="narration-next"></div>
+</div>
+
+<!-- 到達題名 -->
+<div id="poi-plaque" class="hidden"></div>
+<!-- 人物名牌 -->
+<div id="npc-name" class="hidden"></div>
+<!-- 進屋提示 -->
+<div id="enter-hint" class="hidden"></div>
+
+<!-- 觸屏搖桿 -->
+<div id="joystick" class="hidden"><div id="joy-knob"></div></div>
+
+<!-- 右上小地圖 -->
+<div id="minimap">
+  <canvas id="minimap-canvas" width="360" height="360"></canvas>
+  <div id="minimap-label">宁荣街</div>
+</div>
+
+<!-- 全屏府邸全圖 -->
+<div id="bigmap" class="hidden">
+  <div id="bigmap-inner">
+    <canvas id="bigmap-canvas" width="2320" height="1960"></canvas>
+  </div>
+  <div id="bigmap-tip">点景点可神游直达 · 沿朱线走不会迷路 · 再按 M 收图</div>
+</div>
+
+<div id="hud-corner">
+  <button id="mute-btn" title="静音">乐</button>
+  <button id="map-btn" title="地图">图</button>
+  <button id="view-btn" title="视角">游</button>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

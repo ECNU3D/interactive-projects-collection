@@ -1,0 +1,92 @@
+id: taishang_laojun
+name: 太上老君
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Humorous_Elder"
+  speed: 0.95
+  pitch: -3
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣不在蟠桃园，上这离恨天做甚么？"
+  - id: greet_02
+    text: "老道这里只有炉灶，没有甚么可看的。"
+  - id: greet_03
+    text: "讲道未毕，你且在廊下坐地。"
+
+topics:
+  - id: suodan
+    label: "讨九转还魂丹"
+    source: "第39回"
+    lines:
+      - id: suodan_01
+        text: "讨丹？老道的九转金丹，是那里土块捘的，这等容易？"
+      - id: suodan_01__p1
+        text: "咄！快去！没有！"
+        quote: true
+        voice_setting: { emotion: angry, speed: 1.15 }
+      - id: suodan_01__p2
+        text: "这泼猴却也缠帐，没有没有，出去出去。"
+        quote: true
+        voice_setting: { emotion: angry, speed: 1.15 }
+      - id: suodan_01__p3
+        text: "去去去！"
+        quote: true
+        voice_setting: { emotion: angry, speed: 1.15 }
+      - id: suodan_01__p4
+        text: "这猴子惫懒哩，说去就去，只怕溜进来就偷。"
+        quote: true
+        voice_setting: { emotion: calm, speed: 0.95 }
+      - id: suodan_01__p5
+        text: "你这猴子，手脚不稳，我把这还魂丹送你一丸罢。"
+        quote: true
+        voice_setting: { emotion: calm, speed: 0.95 }
+  - id: danfang
+    label: "丹房的葫芦"
+    source: "第5回"
+    lines:
+      - id: danfang_01
+        text: "丹房里五个葫芦，都是老道的性命根苗。你看便看，手不许动。"
+      - id: w_lj_danfang_02
+        speaker: pc
+        text: "老官儿，开一个小缝儿，叫老孙闻闻香。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: danfang_03
+        text: "闻不得。丹气冲鼻，你要睡倒三日。"
+  - id: bagualu
+    label: "八卦炉"
+    source: "第7回"
+    lines:
+      - id: bagualu_01
+        text: "那炉按乾、坎、艮、震、巽、离、坤、兑八卦安位。文火烧，武火煅，老道的丹都在里头。"
+      - id: w_lj_bagualu_02
+        speaker: pc
+        text: "巽位是风口？老孙替你守着那一位如何？"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: bagualu_03
+        text: "不劳。你离炉远一步，老道的丹就多一分安稳。"
+  - id: jiangdao
+    label: "朱陵丹台讲道"
+    source: "第5回"
+    lines:
+      - id: jiangdao_01
+        text: "老道与燃灯古佛在朱陵丹台讲道，众仙童侍立。你既来了，便在檐下听一听。"
+      - id: w_lj_jiangdao_02
+        speaker: pc
+        text: "老孙听不得讲道，一听，眼皮就打架。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: jiangdao_03
+        text: "不听便罢，坐远些，莫聒噪众仙童。"
+
+fallback:
+  - id: fb_01
+    text: "没有，没有。老道这里没有你要的东西。"
+  - id: fb_02
+    text: "去罢，去罢。老道的炉火正紧。"
+
+bye:
+  - id: bye_01
+    text: "好去，好去。"
+  - id: bye_02
+    text: "走罢。仔细脚下，莫错走到老道这里来。"

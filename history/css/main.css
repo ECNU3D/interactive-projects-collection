@@ -1,0 +1,3870 @@
+/* css/main.css
+   《山河岁月》主样式表 —— 水墨宣纸长卷视觉系统
+   设计基调：宣纸底纹 + 水墨/朱砂/鎏金三色体系；横向长卷阅读；克制留白与阴影；
+   衬线感中文字体；200–400ms 缓动动效。避免通用"AI 紫渐变"审美。
+*/
+
+/* ========================= 1. 基础与变量 ========================= */
+
+@font-face {
+  /* 使用系统内置衬线字体，无需外部资源，file:// 亦可用 */
+  font-family: "ShyBodyFallback";
+  src: local("Songti SC"), local("STSong"), local("Noto Serif SC");
+}
+
+:root {
+  /* 水墨基础色 */
+  --c-ink: #2a231a;
+  --c-ink-soft: #574a3a;
+  --c-ink-faint: #8a7a63;
+  --c-paper-base: #efe3c8;
+  --c-paper-line: rgba(42, 35, 26, 0.08);
+  --c-vermilion: #a8341f;
+  --c-vermilion-deep: #7c2417;
+  --c-gold: #c8a24a;
+  --c-gold-deep: #a67c1e;
+  --c-locked: #b4ab99;
+  --c-locked-bg: #d9d0ba;
+
+  /* 每章注入色（JS 覆盖），此处为默认值（第一章基调） */
+  --c-primary: #8a6d3b;
+  --c-bg: #f4ead6;
+  --c-accent: #a33c22;
+
+  /* 字体栈 */
+  --font-title: "Songti SC", "STSong", "Noto Serif SC", "Songti TC", serif;
+  --font-body: "Songti SC", "STSong", "Noto Serif SC", "PingFang SC", serif;
+
+  /* 动效节奏 */
+  --ease-standard: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --t-fast: 220ms;
+  --t-mid: 320ms;
+  --t-theme: 480ms;
+
+  color-scheme: light;
+
+  /* ---- 长卷布局尺寸令牌 ----
+     这十个量同时被 CSS 与 js/scroll.js 的 chapterMinWidth() 消费。媒体查询只改这里的值，
+     JS 用 getComputedStyle 读同一份口径，章节宽度与年表刻度尺因此恒等。
+     切勿在具体规则里写回字面像素值——那正是断点漂移的来源。 */
+  --node-w: 98px;          /* .node-wrap 与 .node-label 宽度 */
+  --node-gap: 39px;        /* .timeline-nodes 的 gap */
+  --intro-w: 260px;        /* 章引言卡宽度（flex-basis 与 max-width 必须同值，见该规则注释） */
+  --title-w: 148px;        /* 章题栏宽度 */
+  --timeline-pad: 56px;    /* 时间轴单侧内边距 */
+  --node-dot: 22px;        /* 节点圆点直径 */
+  --node-thumb: 44px;      /* 已完成节点缩略图直径 */
+  --node-label-fs: 11.5px; /* 节点标签字号 */
+  --tick-len: 22px;        /* 轴线连向标签的短竖线长度，同时决定标签离轴距离 */
+  --chapter-title-fs: 25px;/* 章名竖排字号 */
+}
+
+/* 平板：视口高度充裕，整体放大填充——节点更大更疏、缩略图与字号同步放大。
+   与手机档、桌面档互不重叠（601–1024px）。 */
+@media (min-width: 601px) and (max-width: 1024px) {
+  :root {
+    --node-w: 120px;
+    --node-gap: 48px;
+    --intro-w: 320px;
+    --title-w: 172px;
+    --timeline-pad: 64px;
+    --node-dot: 26px;
+    --node-thumb: 64px;
+    --node-label-fs: 13px;
+    --tick-len: 30px;
+    --chapter-title-fs: 30px;
+  }
+}
+
+/* 平板竖屏：可用高度 1100px+ 时纵向仍显空旷，把标签推得更远、年代水印放大填充留白 */
+@media (min-width: 601px) and (max-width: 1024px) and (orientation: portrait) {
+  :root { --tick-len: 40px; }
+  .chapter-year-watermark { font-size: clamp(160px, 22vw, 320px); }
+}
+
+* { box-sizing: border-box; }
+
+/* 防御式规则：确保原生 hidden 属性始终生效，不被同选择器权重的 author 规则意外覆盖
+   （author 样式表的 display 声明会盖过 UA 样式表的 [hidden]{display:none}，与选择器权重无关） */
+[hidden] { display: none !important; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* iOS Safari 的地址栏/工具栏会随滚动收放，收放前后 100%/100vh 都固定按"地址栏收起"后的
+   大视口计算（这是 vh 单位的既定语义，不是 bug），于是地址栏展开时 body 实际可视高度比
+   100vh 声明的矮，被地址栏遮住的一截会落在页面底部——本项目底部正好是长卷视图的年表刻度尺
+   （.scroll-ruler，5.3 节），首当其冲被吃掉一部分。100dvh（dynamic viewport height）跟随
+   地址栏实际收放实时更新，是 iOS Safari 专门为这个场景引入的单位；不支持 100dvh 的浏览器
+   （极旧内核）会整体丢弃这条声明，回落到上面 html,body 规则里已经生效的 height:100%
+   兜底（2026-07-28 复审订正：本文件不存在任何 100vh 声明，上一版这里写"100% / 100vh
+   兜底"是笔误——真正兜底的只有 html,body 的 height:100% 这一条），不会出现"两条都不生效"
+   的空档。桌面浏览器与本项目验证器（固定 CDP 视口、无地址栏收放）下 100dvh 在数值上等于
+   100vh，不改变任何布局或断言结果。 */
+body {
+  height: 100dvh;
+  font-family: var(--font-body);
+  color: var(--c-ink);
+  background-color: var(--c-bg);
+  transition: background-color var(--t-theme) ease;
+  overflow: hidden; /* 横向长卷自行滚动，页面本体不滚动 */
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* body 改为纵向 flex：#top-bar 自身高度决定，#views 自动填满剩余空间，
+     避免小屏下 #top-bar 换行时 #views 的固定 calc(100vh - 56px) 与实际高度错位 */
+  display: flex;
+  flex-direction: column;
+}
+
+/* 宣纸底纹：径向渐变叠加 + SVG feTurbulence 噪点，营造纤维质感 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(ellipse at 15% 10%, rgba(255, 252, 240, 0.5), transparent 55%),
+    radial-gradient(ellipse at 85% 90%, rgba(120, 96, 58, 0.12), transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.16  0 0 0 0 0.13  0 0 0 0 0.09  0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: auto, auto, 240px 240px;
+  mix-blend-mode: multiply;
+  opacity: 0.55;
+  transition: opacity var(--t-theme) ease;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-title);
+  font-weight: 600;
+  margin: 0;
+}
+
+p { margin: 0; }
+
+/* ========================= 2. 顶部 HUD ========================= */
+
+#top-bar {
+  position: relative;
+  z-index: 20;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 22px;
+  /* 左右内边距叠加安全区：横屏刘海/圆角机型（如 iPhone 14 横屏）刘海通常偏向屏幕一侧，
+     顶栏内容会被刘海或圆角遮住一截。max() 取"设计稿原值"与"系统安全区"中较大者——
+     无刘海设备 env() 解析为 0，max(22px, 0px) = 22px，与改动前逐像素一致，零回归；
+     有刘海设备 env() 大于 22px 时才会把内边距顶大，让内容整体避开刘海。 */
+  padding-left: max(22px, env(safe-area-inset-left));
+  padding-right: max(22px, env(safe-area-inset-right));
+  height: 56px;
+  background: linear-gradient(180deg, rgba(244, 234, 214, 0.96), rgba(244, 234, 214, 0.88));
+  border-bottom: 1px solid var(--c-paper-line);
+  box-shadow: 0 2px 10px rgba(42, 35, 26, 0.06);
+}
+
+#app-title {
+  font-size: 20px;
+  letter-spacing: 0.12em;
+  color: var(--c-ink);
+  white-space: nowrap;
+}
+
+#app-title::before {
+  content: "史";
+  display: inline-block;
+  margin-right: 8px;
+  width: 22px;
+  height: 22px;
+  line-height: 22px;
+  text-align: center;
+  font-size: 13px;
+  color: #fff;
+  background: var(--c-vermilion);
+  border-radius: 2px;
+  box-shadow: 1px 1px 0 rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.15);
+  vertical-align: middle;
+}
+
+#score-hud {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--c-ink-soft);
+}
+
+.hud-total {
+  font-family: var(--font-title);
+  font-size: 17px;
+  color: var(--c-vermilion-deep);
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-title-badge {
+  padding: 2px 10px;
+  border: 1px solid var(--c-gold-deep);
+  border-radius: 999px;
+  color: var(--c-gold-deep);
+  background: rgba(200, 162, 74, 0.12);
+  white-space: nowrap;
+}
+
+.hud-chapter-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.hud-grade-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.hud-grade-seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 2px;
+  background: var(--c-vermilion);
+  color: #fff;
+  font-size: 12px;
+  box-shadow: 1px 1px 0 rgba(0,0,0,0.2);
+}
+
+#top-bar-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+#top-bar-actions button {
+  padding: 7px 14px;
+  font-size: 13px;
+  border-radius: 3px;
+  border: 1px solid var(--c-ink-faint);
+  background: transparent;
+  color: var(--c-ink-soft);
+  transition: background var(--t-fast) var(--ease-standard), color var(--t-fast) var(--ease-standard), border-color var(--t-fast) var(--ease-standard);
+}
+
+#top-bar-actions button:hover {
+  background: var(--c-ink);
+  color: var(--c-bg);
+  border-color: var(--c-ink);
+}
+
+#btn-mute[aria-pressed="true"] {
+  background: var(--c-ink-faint);
+  color: #fff;
+  border-color: var(--c-ink-faint);
+}
+
+#btn-restart {
+  border-color: var(--c-vermilion);
+  color: var(--c-vermilion-deep);
+}
+#btn-restart:hover {
+  background: var(--c-vermilion);
+  color: #fff;
+  border-color: var(--c-vermilion);
+}
+
+/* 顶栏按钮的长/短标签：桌面与平板显示全称，手机显示短称，靠媒体查询二选一，
+   不用 JS 改文案——静音按钮的文案由 refreshHud() 运行时用 textContent 整体重写
+   （"静音"/"已静音"切换），若也用 JS 改 btn-graph/btn-restart 的文案，则每次
+   refreshHud() 都要重复"当前是手机还是桌面"的判断逻辑，纯 CSS 二选一不必关心这些 */
+.btn-label-short { display: none; }
+
+/* 全局轻提示：抉择进行中拦截顶栏导航时弹出（app.js showToast），与具体视图无关，
+   故置于全局层级（body 直接子元素），z-index 高于抉择 overlay 与事件卡 modal */
+.shy-toast {
+  position: fixed;
+  left: 50%;
+  top: 72px;
+  z-index: 500;
+  padding: 9px 20px;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: #fdf6e8;
+  background: rgba(42, 35, 26, 0.92);
+  border: 1px solid rgba(200, 162, 74, 0.4);
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -8px);
+  transition: opacity 260ms var(--ease-standard), transform 260ms var(--ease-standard);
+}
+.shy-toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shy-toast { transition: opacity 1ms linear; }
+}
+
+/* ========================= 3. 视图容器 ========================= */
+
+#views {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0; /* 允许 flex 子项收缩到小于内容高度，把剩余高度真实让给内部滚动容器 */
+  width: 100%;
+  overflow: hidden;
+}
+
+#scroll-view, #choice-view, #graph-view, #ending-view, #about-view {
+  height: 100%;
+  width: 100%;
+}
+
+#scroll-view {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  /* 2026-07-28 复审订正：曾经只写 pan-x（本意"横向滚动交给系统、纵向不需要就明确禁掉"），
+     但按 CSS Touch Action 规范，一次触摸被允许的手势是"命中元素到根的整条祖先链 touch-action
+     的交集"——#scroll-view 是横向长卷所有内容（含章引言卡）共同的滚动祖先，这里一旦声明
+     pan-x，交集里就不再含纵向分量，后代任何元素（哪怕自己声明 pan-y 甚至 auto）都不可能单独
+     要回纵向手势，交集运算不允许子代扩大父代已经排除的轴向。真实后果：.chapter-intro-card
+     在矮屏/窄屏两档都有 max-height + overflow-y:auto（本文件 8 节），手指在卡片上纵向划动
+     本该触发卡内滚动，却被这条祖先声明堵死，玩家读不到溢出的引言正文。改成 pan-x pan-y
+     （即放行两个轴向，具体在哪个元素上滚动仍由普通 overflow 计算决定，不影响横向长卷的原生
+     惯性滚动）后卡内纵向滚动才能生效。'纵向不需要，明确禁掉'这条理由本身也不成立：
+     body 是 overflow:hidden（110 行），#scroll-view 自己是 overflow-y:hidden，两者都没有可
+     纵向橡皮筋的内容，pan-x 单独声明省下的"防误触"收益趋近于零，禁用纵向手势换来的却是
+     卡内滚动被连坐堵死，得不偿失。 */
+  touch-action: pan-x pan-y;
+  cursor: grab;
+}
+
+#scroll-view.is-drag-scrolling { cursor: grabbing; scroll-behavior: auto; }
+
+/* ========================= 4. 长卷 · 章节段落 ========================= */
+
+.scroll-track {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  height: 100%;
+  width: max-content;
+}
+
+.chapter-section {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  flex: 0 0 auto;
+  height: 100%;
+}
+
+/* 章节分隔虚线：绝对定位而非 border——border 会计入 offsetWidth，使每章比
+   chapterMinWidth() 宽 1px，年表刻度尺（按 chapterMinWidth 排布）随之整体错位。 */
+.chapter-section::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 0;
+  border-right: 1px dashed var(--c-paper-line);
+  pointer-events: none;
+}
+
+.chapter-section::before {
+  /* 章节背景色随主题过渡 */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.10), transparent 40%);
+  pointer-events: none;
+}
+
+/* 年代大字水印：极低对比衬于章节背景，填补长卷大面积空旷区。绝对定位子项不参与
+   flex 布局，z-index 0 保证画在 ::before 之上、真实内容（title-block/timeline，两者
+   均显式 z-index:1）之下——即便脱离常规文档流也不会遮挡节点与文字。 */
+.chapter-year-watermark {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-title);
+  font-size: clamp(120px, 15vw, 240px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--c-ink);
+  opacity: 0.05;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.chapter-title-block {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 var(--title-w);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px 10px;
+  background: linear-gradient(90deg, rgba(42,35,26,0.05), transparent);
+  border-right: 1px solid var(--c-paper-line);
+}
+
+.chapter-seal {
+  flex: 0 0 auto;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-vermilion);
+  color: #fdf6e8;
+  font-family: var(--font-title);
+  font-size: 14px;
+  letter-spacing: 0.05em;
+  border-radius: 2px;
+  box-shadow: 1.5px 1.5px 0 rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.18);
+  transform: rotate(-1.5deg);
+  writing-mode: vertical-rl;
+}
+
+.chapter-title-vertical {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: var(--chapter-title-fs);
+  letter-spacing: 0.16em;
+  color: var(--c-ink);
+  line-height: 1.3;
+}
+
+.chapter-subtitle-vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: var(--c-ink-soft);
+}
+
+.chapter-years {
+  writing-mode: vertical-rl;
+  font-size: 12px;
+  color: var(--c-ink-faint);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+/* 章节评级印章：本章完成（finalizeChapterGrade 写入 chapterEarned）后由 scroll.js 揭开，
+   与 .chapter-seal（章序号墨章）区分，呈鎏金色，钤于章题旁 */
+.chapter-grade-seal {
+  flex: 0 0 auto;
+  min-width: 26px;
+  min-height: 26px;
+  padding: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-gold-deep);
+  color: #fdf6e8;
+  font-family: var(--font-title);
+  font-size: 14px;
+  letter-spacing: 0.05em;
+  border-radius: 2px;
+  box-shadow: 1.5px 1.5px 0 rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.18);
+  transform: rotate(1.5deg);
+}
+
+/* ========================= 5. 时间轴 · 江河与节点珠串 ========================= */
+
+.timeline {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--timeline-pad);
+  gap: 8px;
+}
+
+.timeline-river {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 5px;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  /* 静态渐变仅作首次渲染前的兜底；实际配色由 scroll.js updateRiverGradients() 按已完成/
+     当前/未来分段着色（红→金→灰）并两端渐隐为透明，以内联 style 覆盖本规则。 */
+  background: linear-gradient(90deg, transparent, var(--c-accent) 6%, var(--c-primary) 45%, var(--c-locked) 94%, transparent);
+  opacity: 0.9;
+  box-shadow: 0 1px 3px rgba(42, 35, 26, 0.25);
+  transition: background 420ms ease;
+  z-index: 0;
+}
+
+.timeline-nodes {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--node-gap);
+}
+
+/* ---- 5.1 章引言卡：宣纸质感，随行居中于河流轴线（跨轴），填补章首空旷区 ---- */
+
+/* max-width 必须与 flex-basis 同值，不可删：Safari(WebKit) 计算 .timeline-nodes 的
+   max-content 固有宽度时不把 flex item 的 flex-basis 当作上限，而是按"引言全文不换行"
+   的行宽来算本卡片的贡献值；.scroll-track 是 width:max-content，该虚高宽度会一路撑到
+   .chapter-section（flex:0 0 auto，仅有 min-width 下限、无上限），使每章在节点结束后
+   多出 ≈引言字数×10.9px 的空白（实测全卷 20554px → 50291px），且底部刻度尺仍按
+   chapterMinWidth() 排布因而整体错位。Chromium 会按 flex-basis 截断故无此现象。
+   max-width 参与固有尺寸贡献的截断，两端引擎行为一致。 */
+.chapter-intro-card {
+  /* position:relative 只为给矮屏/窄屏两档（8 节）可能追加的底部渐隐遮罩 ::after 提供定位
+     锚点；桌面/平板档本身不溢出、不需要遮罩，未声明 top/left 等偏移量，不改变本规则在此处
+     的视觉与布局（不脱离 .timeline 的正常 flex 流）。 */
+  position: relative;
+  flex: 0 0 var(--intro-w);
+  max-width: var(--intro-w);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 16px;
+  background:
+    linear-gradient(160deg, rgba(255, 252, 240, 0.92), rgba(239, 227, 200, 0.86));
+  border: 1px solid var(--c-paper-line);
+  border-radius: 6px;
+  box-shadow: 0 8px 22px rgba(42, 35, 26, 0.14), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.chapter-intro-seal {
+  flex: 0 0 auto;
+  writing-mode: vertical-rl;
+  font-family: var(--font-title);
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  color: #fdf6e8;
+  background: var(--c-vermilion);
+  padding: 8px 5px;
+  border-radius: 2px;
+  box-shadow: 1.5px 1.5px 0 rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.chapter-intro-body { min-width: 0; }
+
+.chapter-intro-subtitle {
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  color: var(--c-vermilion-deep);
+  margin-bottom: 8px;
+}
+
+.chapter-intro-text {
+  font-size: 12.5px;
+  line-height: 1.9;
+  color: var(--c-ink-soft);
+  text-align: justify;
+}
+
+/* 引言卡的开篇影片封面缩略图：只在影片可用时由 JS 插入，作为"这里有片可看"的提示。
+   宽度跟随卡片、高度按 16:9 裁切，不撑高卡片本身的既有布局节奏。 */
+.chapter-intro-thumb-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 10px;
+  overflow: hidden;
+  border-radius: 3px;
+  border: 1px solid rgba(42, 35, 26, 0.18);
+}
+.chapter-intro-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* 播放三角的呼应：缩略图右下角一个小角标，暗示可播放 */
+.chapter-intro-thumb-wrap::after {
+  content: "▶";
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  font-size: 11px;
+  color: rgba(240, 230, 210, 0.9);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+/* ---- 5.2 节点：圆点/菱形直接嵌在轴线上，标签上下交替 + tick 连接线 ---- */
+
+.node-wrap {
+  position: relative;
+  height: 100%;
+  width: var(--node-w);
+  flex: 0 0 auto;
+}
+
+/* 节点本体绝对定位、居中于轴线（top:50%+负外边距代替 transform:translate，
+   使 transform 属性可留给悬停缩放/菱形旋转单独使用，避免相互覆盖冲突） */
+.node {
+  appearance: none;
+  border: none;
+  padding: 0;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--node-dot);
+  height: var(--node-dot);
+  margin: calc(var(--node-dot) / -2) 0 0 calc(var(--node-dot) / -2);
+  border-radius: 50%;
+  background: var(--c-locked-bg);
+  box-shadow: inset 0 0 0 2px var(--c-locked);
+  transition: transform var(--t-fast) var(--ease-standard), box-shadow var(--t-fast) var(--ease-standard), background var(--t-fast) var(--ease-standard);
+  z-index: 3;
+}
+
+/* 抉择点菱形：与圆点同位嵌在轴线上，不再另悬于标签下方 */
+.node--choice {
+  border-radius: 3px;
+  width: calc(var(--node-dot) - 4px);
+  height: calc(var(--node-dot) - 4px);
+  margin: calc((var(--node-dot) - 4px) / -2) 0 0 calc((var(--node-dot) - 4px) / -2);
+  transform: rotate(45deg);
+}
+.node--choice.node--current,
+.node--choice.node--done { transform: rotate(45deg) scale(1); }
+
+/* 三态 */
+.node--locked {
+  cursor: default;
+  filter: grayscale(0.4);
+  opacity: 0.72;
+}
+
+.node--done {
+  background: var(--c-vermilion);
+  box-shadow: inset 0 0 0 2px var(--c-vermilion-deep), 0 1px 4px rgba(124,36,23,0.35);
+  cursor: pointer;
+}
+.node--done:hover { transform: scale(1.15); }
+.node--choice.node--done:hover { transform: rotate(45deg) scale(1.15); }
+
+.node--current {
+  background: radial-gradient(circle at 35% 30%, #fff2c8, var(--c-gold) 55%, var(--c-gold-deep) 100%);
+  box-shadow: 0 0 0 3px rgba(200,162,74,0.28), 0 2px 8px rgba(166,124,30,0.45);
+  cursor: pointer;
+  animation: shy-pulse 2.3s ease-in-out infinite;
+}
+.node--current.node--choice { animation: shy-pulse-diamond 2.3s ease-in-out infinite; }
+.node--current:hover { transform: scale(1.12); }
+.node--choice.node--current:hover { transform: rotate(45deg) scale(1.12); }
+
+@keyframes shy-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(200,162,74,0.28), 0 2px 8px rgba(166,124,30,0.45); }
+  50% { box-shadow: 0 0 0 9px rgba(200,162,74,0.05), 0 2px 12px rgba(166,124,30,0.55); }
+}
+@keyframes shy-pulse-diamond {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(200,162,74,0.28), 0 2px 8px rgba(166,124,30,0.45); }
+  50% { box-shadow: 0 0 0 8px rgba(200,162,74,0.05), 0 2px 12px rgba(166,124,30,0.55); }
+}
+
+.node-wrap.node-climax .node {
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  background: radial-gradient(circle at 35% 30%, #fff6da, var(--c-gold) 40%, var(--c-vermilion) 100%);
+  box-shadow: 0 0 0 4px rgba(200,162,74,0.3), 0 4px 16px rgba(124,36,23,0.5);
+}
+
+/* tick：轴线连向标签的细短竖线，另一侧留给缩略图 */
+.node-tick {
+  position: absolute;
+  left: 50%;
+  width: 1px;
+  background: rgba(42, 35, 26, 0.3);
+  z-index: 1;
+}
+.node-wrap.label-below .node-tick { top: 50%; height: var(--tick-len); }
+.node-wrap.label-above .node-tick { bottom: 50%; height: var(--tick-len); }
+.node-wrap.node-climax.label-below .node-tick { top: 50%; height: 26px; }
+.node-wrap.node-climax.label-above .node-tick { bottom: 50%; height: 26px; }
+
+/* 标签：与轴线保持≥16px间距（tick 占据该间距），标题/日期分两行，日期更小更淡；
+   绝不与轴线本体重叠——由 ui-polish-verify.js 抽查节点做矩形相交断言 */
+.node-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: var(--node-w);
+  z-index: 2;
+  font-size: var(--node-label-fs);
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--c-ink-soft);
+  text-align: center;
+  white-space: normal;
+}
+/* 偏移基线用 max(--tick-len, 圆点半径+2px 安全余量)，不能只写 var(--tick-len)：多数断点下
+   --tick-len 本就比圆点半径大很多，max() 不改变观感；但平板档 --node-dot:26px 撞上矮屏档
+   --tick-len:14px 这一实际会同时命中的组合下，圆点半径 13px 只比 14px 小 1px，标签离圆点仅
+   1px（iPhone 14 横屏实测），低于本轮要求的 ≥2px 可见余量。改成 max() 后该组合自动补到 15px
+   （13+2），其余组合因 tick-len 已够大而不受影响——同一处顺带修，不必再为圆点单独开一条
+   媒体查询覆盖。 */
+.node-wrap.label-below .node-label { top: calc(50% + max(var(--tick-len), calc(var(--node-dot) / 2 + 2px))); }
+.node-wrap.label-above .node-label { bottom: calc(50% + max(var(--tick-len), calc(var(--node-dot) / 2 + 2px))); }
+.node-wrap.node-climax.label-below .node-label { top: calc(50% + 26px); }
+.node-wrap.node-climax.label-above .node-label { bottom: calc(50% + 26px); }
+
+.node-label .node-label-date {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--c-ink-faint);
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+.node-wrap.node-climax .node-label {
+  font-weight: 700;
+  color: var(--c-vermilion-deep);
+}
+
+/* 抉择点菱形（.node--choice）的标签/缩略图偏移：菱形边长是 (--node-dot - 4px)，旋转 45°后
+   getBoundingClientRect() 量到的外接盒对角线变成边长 × √2（≈边长 × 1.4142，半对角线
+   ×0.7071），比令牌值整整大一圈——这是根因，不是某个断点凑巧太挤。当 --tick-len 小于这个
+   半对角线时标签会直接压进菱形：已实测发生在 iPhone 14 横屏（平板档 --node-dot:26px 撞上
+   矮屏档 --tick-len:14px，半对角线 15.56px > 14px，压穿 1.56px，tools/responsive-check.mjs
+   的 A4c-label-clear-node 可复现）。用 max() 让实际偏移在"当前 --tick-len"与"菱形半对角线
+   + 2px 安全余量"之间取更大者，随 --node-dot/--tick-len 任意组合自动成立，不必逐断点手工
+   调数；0.708 是 √2/2（≈0.70711）向上取整的保守值，只会让余量更宽不会更窄。DOM 顺序是
+   tick → node → label → thumb-wrap（见 js/scroll.js buildNode），label/thumb-wrap 均在
+   .node--choice 之后，故用通用兄弟选择器 ~ 精确命中，无需 :has()、也不影响圆点节点。 */
+.node-wrap.label-below .node--choice ~ .node-label {
+  top: calc(50% + max(var(--tick-len), calc((var(--node-dot) - 4px) * 0.708 + 2px)));
+}
+.node-wrap.label-above .node--choice ~ .node-label {
+  bottom: calc(50% + max(var(--tick-len), calc((var(--node-dot) - 4px) * 0.708 + 2px)));
+}
+.node-wrap.label-below .node--choice ~ .node-thumb-wrap {
+  bottom: calc(50% + max(var(--tick-len), calc((var(--node-dot) - 4px) * 0.708 + 2px)));
+}
+.node-wrap.label-above .node--choice ~ .node-thumb-wrap {
+  top: calc(50% + max(var(--tick-len), calc((var(--node-dot) - 4px) * 0.708 + 2px)));
+}
+
+/* 已完成节点缩略图：44px圆形小照片，置于与标签相对一侧（避免同侧挤占），
+   宣纸细边框；仅 node-wrap--done（见 applyNodeStates）且有配图时可见 */
+.node-thumb-wrap {
+  display: none;
+  position: absolute;
+  left: 50%;
+  width: var(--node-thumb);
+  height: var(--node-thumb);
+  z-index: 2;
+}
+.node-wrap--done .node-thumb-wrap { display: block; }
+/* 与上方 .node-label 同一处 max() 理由：偏移基线不能只看 --tick-len，还要保证不小于
+   "圆点半径 + 2px 安全余量"，否则平板档 --node-dot × 矮屏档 --tick-len 那一组合会让缩略图
+   离圆点太近。 */
+.node-wrap.label-below .node-thumb-wrap { bottom: calc(50% + max(var(--tick-len), calc(var(--node-dot) / 2 + 2px))); transform: translateX(-50%); }
+.node-wrap.label-above .node-thumb-wrap { top: calc(50% + max(var(--tick-len), calc(var(--node-dot) / 2 + 2px))); transform: translateX(-50%); }
+/* 高潮节点（node-climax）圆点是 34px 直径（半径17px）字面值特例，不随 --tick-len 令牌缩放；
+   tick/label 已各自用固定 26px 覆盖避免压穿圆点，缩略图与它们同处轴线两侧、需要同一口径的
+   固定偏移，否则矮屏档 --tick-len:14px 会让缩略图（半径≥16px）撞进圆点。 */
+.node-wrap.node-climax.label-below .node-thumb-wrap { bottom: calc(50% + 26px); }
+.node-wrap.node-climax.label-above .node-thumb-wrap { top: calc(50% + 26px); }
+
+.node-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(253, 246, 232, 0.85);
+  box-shadow: 0 3px 10px rgba(42, 35, 26, 0.3), inset 0 0 0 1px rgba(42, 35, 26, 0.15);
+}
+
+/* ---- 5.3 年表刻度尺：底部横贯，随卷轴同容器滚动 ---- */
+
+.scroll-ruler {
+  position: absolute;
+  left: 0;
+  /* 横屏刘海机型（如 iPhone 14 横屏）Home 指示条/圆角在底部，会盖住贴底的刻度尺；
+     env() 第二参数 0px 是无安全区时的显式回退，与原先裸写 bottom:0 数值上完全相同，
+     A3/A4a 断言依赖的刻度尺位置在无刘海环境（本项目验证器）下不受影响。 */
+  bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 6;
+  display: flex;
+  flex-direction: row;
+  height: 26px;
+  pointer-events: none;
+}
+
+.ruler-segment {
+  position: relative;
+  flex: 0 0 auto;
+  height: 100%;
+  background-color: rgba(239, 227, 200, 0.5);
+  background-repeat: no-repeat;
+  border-top: 1px solid rgba(42, 35, 26, 0.22);
+  box-shadow: 0 -1px 3px rgba(42, 35, 26, 0.08);
+}
+
+.ruler-mark {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ruler-mark-line {
+  width: 1px;
+  height: 9px;
+  background: var(--c-gold-deep);
+}
+
+.ruler-mark-label {
+  margin-top: 1px;
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+  color: var(--c-ink-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ========================= 6. 事件卡片 / Modal ========================= */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 左右按安全区扩张：viewport-fit=cover（Task 9）下布局视口会延伸到刘海/圆角之下，
+     横屏刘海机（如 iphone-14-land，宽度 844px 超过下方 600px 断点，走的是这条基础规则
+     而非手机档的 padding:0 贴底样式）事件卡左右缘可能贴到刘海或圆角。max() 保底：无
+     刘海时 env() 恒为 0，max(24px, 0) 仍是 24px，与改动前逐像素相同。上下暂不需要
+     ——本规则的卡片垂直居中，且矮屏横屏的上下安全区通常为 0（刘海/圆角只占左右两侧），
+     未观察到压穿证据前不动上下两向，避免引入未验证的改动。 */
+  padding: 24px max(24px, env(safe-area-inset-right)) 24px max(24px, env(safe-area-inset-left));
+  background: rgba(24, 18, 12, 0.5);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t-mid) var(--ease-standard);
+}
+.modal-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.event-card {
+  position: relative;
+  width: min(680px, 100%);
+  max-height: 86vh;
+  /* dvh（dynamic viewport height）跟随 iOS 地址栏实际收放实时更新，86vh 在地址栏展开时会
+     比真实可视高度虚高，是设计文档第三节明确点名要治的场景（同 body 的 100dvh 处理手法，
+     4 节注释）：vh 先声明作为不支持 dvh 的老内核兜底，dvh 紧跟其后按 CSS 层叠覆盖它——
+     支持时用 dvh 覆盖，不支持时整条 dvh 声明被丢弃，落回上一行已生效的 86vh，不会出现两条
+     都不生效的空档。桌面浏览器与本项目验证器（固定 CDP 视口、无地址栏收放）下二者数值相等，
+     不改变任何布局或断言结果。 */
+  max-height: 86dvh;
+  overflow-y: auto;
+  /* 手机档卡片贴底展开（见下方 max-width:600px 里的 .modal-backdrop { align-items:flex-end }），
+     Home 指示条会盖住卡内最后一行按钮；无安全区时 env() 回退到 0px，与改动前无 padding-bottom
+     的默认值 0 完全相同。 */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--c-bg);
+  color: var(--c-ink);
+  border-radius: 5px;
+  box-shadow: 0 24px 60px rgba(20,14,8,0.4), 0 2px 0 rgba(255,255,255,0.4) inset;
+  transform: translateY(18px) scale(0.97);
+  opacity: 0;
+  transition: transform var(--t-mid) var(--ease-standard), opacity var(--t-mid) var(--ease-standard), background-color var(--t-theme) ease;
+}
+.modal-backdrop.is-open .event-card {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+}
+
+.event-card--climax {
+  box-shadow: 0 24px 70px rgba(124,36,23,0.5), 0 0 0 2px var(--c-gold);
+}
+
+.card-banner {
+  display: none;
+}
+.event-card--climax .card-banner {
+  display: block;
+  padding: 10px 20px;
+  text-align: center;
+  font-family: var(--font-title);
+  font-size: 15px;
+  letter-spacing: 0.4em;
+  color: #fff8e6;
+  background: linear-gradient(90deg, var(--c-vermilion-deep), var(--c-gold-deep) 50%, var(--c-vermilion-deep));
+}
+
+.card-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(42,35,26,0.12);
+  color: var(--c-ink);
+  font-size: 16px;
+  line-height: 1;
+  transition: background var(--t-fast) ease, transform var(--t-fast) ease;
+}
+.card-close:hover { background: var(--c-vermilion); color: #fff; transform: rotate(90deg); }
+
+.card-image-placeholder {
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-ink-faint);
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  background-color: rgba(42,35,26,0.05);
+  background-image: repeating-linear-gradient(135deg, rgba(42,35,26,0.06) 0, rgba(42,35,26,0.06) 1px, transparent 1px, transparent 14px);
+  border-bottom: 1px solid var(--c-paper-line);
+}
+
+.card-image-wrap { max-width: 100%; }
+.card-image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 220px;
+  object-fit: cover;
+  border-radius: 5px 5px 0 0;
+  border-bottom: 1px solid var(--c-paper-line);
+}
+/* 事件卡视频（image 为 .mp4/.webm 时以 <video controls> 渲染）：宽度/圆角与 img 一致，
+   高度按片源比例自适应、不裁切画面，黑底承托 4:3 等窄画幅。 */
+video.card-image {
+  height: auto;
+  max-height: 340px;
+  object-fit: contain;
+  background: #1a1712;
+}
+.card-image-credit {
+  margin: 0;
+  padding: 5px 26px;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--c-ink-faint);
+  text-align: right;
+  background: rgba(42,35,26,0.03);
+  border-bottom: 1px solid var(--c-paper-line);
+}
+
+.card-header {
+  padding: 20px 26px 6px;
+}
+
+.card-title {
+  font-size: 23px;
+  color: var(--c-ink);
+  letter-spacing: 0.04em;
+}
+
+.card-meta {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--c-ink-faint);
+  letter-spacing: 0.05em;
+}
+
+.card-body {
+  padding: 14px 26px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.card-summary {
+  font-size: 15px;
+  line-height: 1.95;
+  color: var(--c-ink);
+  text-align: justify;
+}
+
+.card-significance {
+  padding: 14px 16px;
+  border-left: 3px solid var(--c-vermilion);
+  background: rgba(168,52,31,0.06);
+  border-radius: 0 3px 3px 0;
+}
+.card-significance h4 {
+  font-size: 13px;
+  color: var(--c-vermilion-deep);
+  letter-spacing: 0.15em;
+  margin-bottom: 6px;
+}
+.card-significance p {
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--c-ink-soft);
+}
+
+.card-extra {
+  border: 1px solid var(--c-paper-line);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.card-extra summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 14px;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: var(--c-gold-deep);
+  background: rgba(200,162,74,0.1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background var(--t-fast) ease;
+}
+.card-extra summary::-webkit-details-marker { display: none; }
+.card-extra summary::before {
+  content: "钩";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+  color: #fff;
+  background: var(--c-gold-deep);
+  border-radius: 2px;
+}
+.card-extra summary:hover { background: rgba(200,162,74,0.18); }
+.card-extra[open] summary { border-bottom: 1px solid var(--c-paper-line); }
+.card-extra-body {
+  padding: 12px 16px 14px;
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: var(--c-ink-soft);
+}
+.card-extra-earned {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--c-vermilion-deep);
+}
+
+.card-choice-status {
+  display: inline-block;
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 2px 10px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--c-gold-deep);
+  background: rgba(200, 162, 74, 0.12);
+  border: 1px solid rgba(166, 124, 30, 0.35);
+  border-radius: 999px;
+}
+
+.card-persons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.person-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 56px;
+}
+
+.person-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-title);
+  font-size: 15px;
+  color: #fdf6e8;
+  background: linear-gradient(150deg, var(--c-primary), var(--c-accent));
+  box-shadow: 0 2px 6px rgba(42,35,26,0.25);
+  transition: transform var(--t-fast) var(--ease-standard), box-shadow var(--t-fast) var(--ease-standard);
+}
+
+.person-avatar--photo {
+  object-fit: cover;
+  border: 1px solid rgba(255,255,255,0.5);
+}
+
+/* 人物头像点击跳转人物星图（Task 12），需要可视化的可点击提示 */
+.person-chip--clickable { cursor: pointer; }
+.person-chip--clickable:hover .person-avatar,
+.person-chip--clickable:focus-visible .person-avatar {
+  transform: translateY(-2px) scale(1.06);
+  box-shadow: 0 4px 12px rgba(200, 162, 74, 0.45);
+}
+.person-chip--clickable:focus-visible { outline: 2px solid var(--c-gold); outline-offset: 3px; border-radius: 6px; }
+
+.person-name {
+  font-size: 11px;
+  color: var(--c-ink-soft);
+  text-align: center;
+  line-height: 1.3;
+}
+
+.card-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 26px 22px;
+  background: linear-gradient(180deg, transparent, var(--c-bg) 30%);
+}
+
+.btn-continue {
+  padding: 10px 30px;
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  color: #fdf6e8;
+  background: linear-gradient(120deg, var(--c-vermilion-deep), var(--c-vermilion));
+  border: none;
+  border-radius: 3px;
+  box-shadow: 0 4px 14px rgba(124,36,23,0.35);
+  transition: transform var(--t-fast) var(--ease-standard), box-shadow var(--t-fast) var(--ease-standard);
+}
+.btn-continue:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(124,36,23,0.45); }
+.btn-continue:active { transform: translateY(0); }
+
+.btn-close-text {
+  padding: 10px 26px;
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  color: var(--c-ink-soft);
+  background: transparent;
+  border: 1px solid var(--c-ink-faint);
+  border-radius: 3px;
+  transition: background var(--t-fast) ease, color var(--t-fast) ease;
+}
+.btn-close-text:hover { background: var(--c-ink); color: var(--c-bg); }
+
+/* ========================= 7. 关于 / 结局 / 星图 视图占位 ========================= */
+
+#about-view, #ending-view, #graph-view {
+  overflow-y: auto;
+  padding: 40px clamp(20px, 6vw, 100px);
+}
+
+.about-article {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.about-btn-back {
+  align-self: flex-start;
+  padding: 6px 16px;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: var(--c-ink-soft);
+  background: transparent;
+  border: 1px solid var(--c-ink-faint);
+  border-radius: 999px;
+  transition: background var(--t-fast) ease, color var(--t-fast) ease;
+}
+.about-btn-back:hover { background: var(--c-ink); color: var(--c-bg); }
+.about-article h2 {
+  font-size: 24px;
+  color: var(--c-vermilion-deep);
+  border-bottom: 1px solid var(--c-paper-line);
+  padding-bottom: 10px;
+}
+.about-article section h3 {
+  font-size: 15px;
+  color: var(--c-ink);
+  margin-bottom: 8px;
+  letter-spacing: 0.08em;
+}
+.about-article section p {
+  font-size: 14px;
+  line-height: 1.95;
+  color: var(--c-ink-soft);
+  text-align: justify;
+}
+.about-restart-row { padding-top: 8px; }
+
+.placeholder-hint {
+  color: var(--c-ink-faint);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+}
+
+/* ========================= 8. 响应式（≥375px） ========================= */
+
+@media (max-width: 600px) {
+  /* 手机：横向压缩以提高节点密度——章中段（引言卡之外）390px 宽下
+     (390 − 76 − 16×2) / (62 + 22) ≈ 3.36 个节点可见，让"一屏 3-4 个节点"的密度目标成立 */
+  :root {
+    --node-w: 62px;
+    --node-gap: 22px;
+    --intro-w: 168px;
+    --title-w: 76px;
+    --timeline-pad: 16px;
+    --node-dot: 20px;
+    --node-thumb: 36px;
+    --node-label-fs: 10.5px;
+    --tick-len: 20px;
+    --chapter-title-fs: 17px;
+  }
+
+  /* 引言卡在 .timeline（display:flex; align-items:center）里是垂直居中的：卡片底边 =
+     容器中心 + 卡片高度/2，容器本身的高度又把刻度尺遮挡的底部 R（此处 20px，见下方
+     .scroll-ruler 覆盖）算在里面，所以居中会把卡片推低——要保证底边不压过刻度尺顶边，
+     卡片高度上限须是"容器高度 − 2R"而非"容器高度 − R"。--intro-w 收到 168px 后，本就
+     偏长的章引言文字换行行数变多，在 iPhone SE 等纵向空间没那么充裕的机型上，实测（15
+     章逐一量）有 3 章的卡片自然高度会越过这条线——不是矮屏（那是 Step 3 处理的横屏场景），
+     而是"窄导致高"。48px ≈ 2×20(R) + 8(安全余量)，裁剪超出部分改为卡内滚动，不裁字号。
+
+     2026-07-28 补充（安全区预算）：.scroll-ruler 的 bottom 已改为
+     env(safe-area-inset-bottom, 0px)（5.3 节，Task 9），刻度尺整体随安全区 S 一起上移，
+     它的顶边因此变成"距容器底边 R+S"而不再是单纯的 R——对上面这段推导而言 S 和 R 是同一种
+     量（都只是"顶边距离容器底边多远"），把推导里的 R 换成 R+S 重新展开就是
+     h ≤ 容器高 − 2(R+S) = 容器高 − 2R − 2S，S 同样要按 ×2 计、不能只加一份：若只加一份 S，
+     卡片底边只会跟着上移 S/2，刻度尺顶边却整份上移了 S，二者之差仍会侵入 S/2 − 4 ≈ 13px
+     （以 iPhone 刘海机常见的 S=34px 算，−4 是原有 8px 安全余量折半后的净空），并没有把
+     Task 9 引入的这处回归真正清零。因此扣减量在原有 48px 之外再减去
+     2×env(safe-area-inset-bottom, 0px)；S=0（无安全区，本项目验证器所在环境）时这一项恒为
+     0，与改动前逐像素相同。 */
+  .chapter-intro-card {
+    max-height: calc(100% - 48px - env(safe-area-inset-bottom, 0px) * 2);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  /* 底部渐隐遮罩：设计文档 2026-07-26 第二节明确要求矮屏档配这个提示，此前一直没做——手机
+     竖屏档同样有 max-height + 溢出（刚推导过），没有它玩家只看到文字被截断，毫无"还能往下
+     滚"的视觉线索，在 item 1 的 touch-action 修复之前甚至连滚动手段都没有。遮罩用 ::after
+     叠在卡片内部底边：它的定位祖先就是 .chapter-intro-card 自己（也是滚动容器本身），
+     bottom:0 因此锚定在卡片可视裁切区（padding box）的底边，不随卡内滚动的 scrollTop 变化
+     而移动——不管滚动到哪，视觉上都贴着卡片最下缘一条窄带。pointer-events:none 确保它不吃
+     触摸事件，不会跟上面 touch-action 的修复打架。渐变终止透明度只到 0.9（不到 1，不是纯色
+     遮挡），高度控制在贴近卡片自身 padding-bottom（这里 14px）的量级：多数引言不溢出、卡片
+     自然高度小于上限时，这条窄带落在 padding 留白区，基本碰不到真实文字；少数溢出的章节，
+     被裁在可视区外的最后一行本就读不全，这条渐隐带只是把"还有更多"画出来，不构成新的可读性
+     损失。::after 内嵌在卡片盒内、不撑高 getBoundingClientRect()，不影响 A4a「引言卡不得
+     越过刻度尺」的判定。 */
+  .chapter-intro-card::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 14px;
+    background: linear-gradient(to bottom, rgba(239, 227, 200, 0), rgba(239, 227, 200, 0.9));
+    pointer-events: none;
+    border-radius: 0 0 6px 6px;
+  }
+
+  /* 顶栏收为单行：按钮换短标签、HUD 只留总分，详见下方各条注释 */
+  .btn-label-full { display: none; }
+  .btn-label-short { display: inline; }
+  /* padding 拆成四向：上下维持 6px 不变，左右改用 max(10px, 安全区) ——手机档横屏
+     （iPhone 14 横屏落在本断点之外，但 iPhone SE/14 竖屏本身也可能带侧边圆角）左右若有
+     安全区大于 10px 时顶栏内容才需要额外避让；无安全区时 max(10px, 0px)=10px，与改动前
+     逐像素相同，不影响 Task 4/5 已校准的顶栏横向预算。 */
+  #top-bar {
+    gap: 8px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+    height: 48px;
+  }
+  #app-title { font-size: 16px; }
+  #app-title::before { width: 18px; height: 18px; line-height: 18px; font-size: 11px; }
+  /* #top-bar 是 #views 之外的全局唯一顶栏，#btn-ending 的显隐只由全局 state.finished 决定
+     （js/app.js:216），与当前显示哪个视图无关——玩家通关后，不论正看着长卷/事件卡/星图/
+     舆图/抉择/关于哪一个，顶栏永远是同一份 DOM、同一次 6 按钮判定，不存在"切到别的视图就
+     恢复成 5 按钮"这回事（这一点在 Task 4 审查中被指出：报告曾经写错，css 注释也曾经写错，
+     现已一并订正）。因此下面的应对必须让"总分可见 + 全部按钮可达"在 6 按钮态本身成立，
+     不能指望某个视图会更宽松。 */
+  .hud-title-badge, .hud-chapter-badge { display: none; }
+  /* 字号从桌面/平板继承来的 17px 覆写到 12px（2026-07-27 task-5b 从 14px 进一步调小，
+     原因见下方 #score-hud min-width 注释里"为什么最终选字号而不是 min-width"一段）。 */
+  .hud-total { font-size: 12px; }
+  /* flex-shrink:999：两边都要让位时优先牺牲 HUD，本代码库里"永远第一个被牺牲"的元素。
+     站标文字改为无条件收起（见下方 .app-title-text 规则）后，5 按钮态下 #score-hud
+     实测自然拿到 81px（iPhone SE）/96px（iPhone 14），比旧版的 9-24px 宽裕得多——
+     #top-bar-actions 依旧完全不受影响（它是 flex:0 1 auto，站标腾出的空间不会被它
+     争抢，全部记到 flex-grow:1 的 #score-hud 头上）。 */
+  #score-hud { gap: 8px; font-size: 12px; flex-shrink: 999; }
+  /* 站标文字"山河岁月"在手机档无条件收起、只留"史"印章方块（2026-07-27 task-5b 修复）。
+     ***背景（曾经的坑）***：上一版把这条收纳限定在 :has(#btn-ending:not([hidden]))——只在
+     通关后 6 按钮态生效，5 按钮态（玩家日常游玩、绝大多数时间所在的状态）标题仍占约 98px，
+     #score-hud 只能拿到 9-24px 版心余量，而"420 分"当时在 .hud-total 的 14px 字号下自然
+     宽度约 37px——5 按钮态总分因此整场游戏都显示不全（截断+换行成"42"/"分"两行），这是
+     本轮修复的起因，比 6 按钮态的问题更严重、更常见（几乎每个玩家的每一局都会撞到，6 按钮
+     态只有通关后才会遇到）。
+     ***现在的做法***：站标收纳挪出 :has()，直接对 @media (max-width:600px) 全体生效——不再
+     区分 5/6 按钮。手机屏幕本来就寸土寸金，"山河岁月"四个大字对已经点开 App 的玩家边际
+     信息量很低（应用名不是这个场景下需要反复确认的信息），"史"印章 + 顶栏其余元素足以确认
+     身份；换来的约 65-85px（视设备/状态而定，实测见 task-5b-report.md）几乎全部记到
+     #score-hud 头上——#app-title 未设 flex-grow，收窄后腾出的空间由 flex:1 1 auto 的
+     #score-hud 独占（#top-bar-actions 的 flex-grow 恒为 0：桌面 flex:0 0 auto，手机档
+     覆写为 flex:0 1 auto 只加了可收缩性、没加可增长性，不参与站标腾出空间的再分配）。
+     连带好处：这条规则不再依赖 :has()，兼容性风险降低一处——旧版需要 :has() 才能让 6
+     按钮态的总分有维持可读的空间，:has() 在不支持它的浏览器上会让整条规则被解析器丢弃
+     （不是"选择器不匹配"，是"整条规则失效"）；下方 min-width 规则也已同步简化为无条件
+     生效（见其注释），本文件目前不再有任何 :has() 选择器。
+     无障碍：视觉隐藏 .app-title-text 不影响可读的应用名——#app-title 这个 <h1> 元素本身带
+     aria-label="山河岁月"（见 index.html），且 aria-label 在计算可访问名时优先于子节点文本，
+     屏幕阅读器读到的仍是完整的"山河岁月"，不会因为视觉上只剩"史"字而退化成单字。 */
+  .app-title-text {
+    display: none;
+  }
+  /* min-width 兜底（2026-07-27 task-5b 简化为无条件生效，不再靠 :has() 区分 5/6 按钮）。
+     ***历史教训（曾经确实踩过，原样保留存档）***：第一版把 min-width:26px 写成无条件
+     全局值，以为"反正 5 按钮态本来就有 11-26px，加个 26px 下限只是保底、不会有副作用"——
+     实测错了：当时 5 按钮态版心预算只留得出 11.31px 给 HUD（站标"山河岁月"四字仍完整
+     显示，占约 98px），若强行把下限抬到 26px，多出的 14.69px 缺口会从"唯一还带
+     flex-shrink 的兄弟" #top-bar-actions 身上扣，把它从天然的 230px 压到 215.31px，
+     导致"重来"按钮被裁掉一截、5 按钮态平白无故需要横向滚动才能看全——因此当时把这条
+     min-width 用 :has(#btn-ending:not([hidden])) 限定成只在通关后 6 按钮态生效。
+     ***前提已变、重新实测确认这条历史限制可以解除***：本轮（task-5b）把站标文字收纳从
+     "只在 6 按钮态生效"改成了"@media (max-width:600px) 下无条件生效"（见上方
+     .app-title-text 规则），5 按钮态的版心预算因此从 11-26px 暴涨到 81-96px（实测：
+     iPhone SE 81px、iPhone 14 96px）——这正是上面那条"踩过的坑"能够成立的前提（"5 按钮态
+     本来就紧、任何下限都会侵蚀 #top-bar-actions"），重新实测证实这个前提在当前代码上已
+     不成立：81/96px 远大于下面这个 26px 的下限，min-width 在 5 按钮态根本不会被触发
+     （自然宽度已经够），#top-bar-actions 因此在 5 按钮态下完全不受影响，值保持 26px 不变，
+     只是去掉 :has() 限定、变成无条件生效——这一步简化本身没有引入任何回归。
+     ***走过的另一条弯路（本轮内部，未提交，教训记在这里防止后人重踩）***：一度以为 6 按钮态
+     "总分被挤成两行"的问题也能靠继续加大这个 min-width（试过 40px）解决——实测发现方向错了：
+     6 按钮态下 #score-hud 的自然宽度（约 34px，标题收纳后的既有量）与需要的单行宽度
+     （"420 分" 14px 字号自然宽度约 37.2px）之间只差约 3px，但 min-width 一旦超过这约 34px
+     的自然值就会开始向右挤占同排"唯一还能收缩"的 #top-bar-actions（min-width:0 意味着它
+     没有下限、会一直让）——挤占几像素看似无害，实际后果是把"重来"按钮整体向右推移，而
+     Task 5 第三轮专门为这个按钮的右边缘调了一个刚好够用的 padding-right:2px（真实命中边界
+     卡在约 21.9px，仅比 44×44 门槛所需的 21.5px 多一点点安全余量）——按钮一旦被推移，这
+     几乎零余量的调校立刻失效，`node tools/responsive-check.mjs` 实测直接复现：min-width
+     ≥36px 时 iphone-se/ending 的 A5-touch-target（#top-bar-actions button 右方向）真实
+     未命中，min-width:40px 时命中边界从 21.9px 掉到 16.9px，远低于门槛——这是用真实验证器
+     跑出来的确凿回归，不是猜测。换句话说，"总分空间"和"重来按钮触控热区"这两个 Task 4/5
+     反复拉扯过的预算，共享同一段可挤占空间，从 min-width 这一侧去够总分所需的几像素，必然
+     从触控热区那一侧扣回来，此路不通。
+     ***真正解法：调小字号而不是加宽容器***：改在 .hud-total 上把字号从 14px 降到 12px（见
+     上方 .hud-total 规则），把"420 分"需要的自然宽度从约 37.2px 降到约 32px（实测
+     29-33px，视浏览器字体度量而定），压到 6 按钮态既有的约 34px 自然余量以内——不需要向
+     #top-bar-actions 要一丝一毫空间，Task 5 对"重来"按钮的触控热区调校完全不受触碰，
+     min-width 因此可以维持在历史上从未出过问题的 26px、只做"标题收纳万一失效时"的最后
+     一道兜底，不需要主动承担"撑开总分空间"这个职责。
+     ***连带简化***：min-width 不再靠 :has() 区分状态后，本文件不再有任何 :has() 选择器
+     ——原先专门为 :has() 兼容性风险准备的 `@supports not selector(:has(a))` 退化分支
+     （给不支持 :has() 的旧版 Chrome/Firefox 兜底同一个 min-width）随之失去存在意义，
+     一并删除，不再需要维护两条分支。 */
+  #score-hud {
+    min-width: 26px;
+  }
+  /* #top-bar-actions 平时（≤5 个按钮）在 375/390px 下都放得开，下面这组属性不会触发；
+     6 按钮态下，上面的标题收纳已经能让一切单行放下（375/390px 均实测不需要滚动，见
+     task-4-report.md 的宽度预算表），这里仍保留 flex-shrink:1 + min-width:0 +
+     overflow-x:auto 作为兜底防线——不隐藏原生滚动条（去掉了先前的 scrollbar-width:none /
+     ::-webkit-scrollbar{display:none}），万一未来出现比当前更挤的组合（更长的短标签、
+     更窄的设备）真的需要滚动，原生滚动条本身就是可见的可滚动提示，不会出现"重新开始"
+     入口静默藏在视口外、玩家却毫无察觉可以横向滑动的情况——这正是本轮审查指出的问题。 */
+  #top-bar-actions {
+    gap: 5px;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch; /* iOS 惯性滚动，与 #scroll-view 已有写法一致 */
+  }
+  /* flex-shrink:0：按钮自身不参与压缩，万一仍需要滚动，超出的宽度全部体现为
+     #top-bar-actions 的内部横向滚动，而不是把短标签文字或内边距进一步压扁到不可读 */
+  #top-bar-actions button { padding: 6px 8px; font-size: 12px; flex-shrink: 0; }
+
+  .chapter-title-block { padding: 14px 4px; gap: 10px; }
+  .chapter-intro-card { padding: 14px 12px; gap: 8px; }
+  .chapter-intro-text { font-size: 11.5px; line-height: 1.75; }
+  .chapter-year-watermark { font-size: clamp(80px, 22vw, 160px); }
+  .scroll-ruler { height: 20px; }
+  .ruler-mark-line { height: 7px; }
+  .ruler-mark-label { font-size: 8.5px; }
+
+  .modal-backdrop { padding: 0; align-items: flex-end; }
+  .event-card {
+    width: 100%;
+    max-height: 92vh;
+    /* 同上（86vh/86dvh 那处注释）：手机档卡片是贴底展开的抽屉（align-items:flex-end），
+       正是 vh 与真实可视高度错位后最容易把底部按钮推到地址栏后面的形态，是设计文档第三节
+       点名要用 dvh 的地方；padding-bottom: env(safe-area-inset-bottom) 只挡得住 Home 指示
+       条，挡不住地址栏本身。 */
+    max-height: 92dvh;
+    border-radius: 10px 10px 0 0;
+  }
+  .card-title { font-size: 19px; }
+  .card-header, .card-body, .card-footer { padding-left: 16px; padding-right: 16px; }
+  .card-image { height: 168px; }
+  .card-image-placeholder { height: 168px; }
+  .card-image-credit { padding: 5px 16px; }
+  .card-persons { gap: 10px; }
+  .person-chip { width: 48px; }
+  .person-avatar { width: 34px; height: 34px; font-size: 13px; }
+  .card-footer { flex-direction: column; }
+  .btn-continue, .btn-close-text { width: 100%; text-align: center; }
+}
+
+/* 矮屏（手机横屏 844×390 等）：可用高度不足 340px，引言卡整段文字会压穿底部年表刻度尺。
+   卡片高度收进可视区并允许内部滚动；缩略图与 tick 同步缩短，保证标签不与轴线打架。
+   与宽度断点正交（可与手机档、平板档同时命中），故单独一块、不嵌套在上面的 max-width 里。
+   max-height 的扣减量不是"刻度尺高度 R"而是"2R"：卡片在 .timeline（align-items:center）里
+   垂直居中，居中容器的高度把刻度尺遮住的那部分也算了进去，卡片底边 = 容器中心 + 卡片高度/2，
+   要让底边不越过刻度尺顶边就必须多扣一份 R 去抵消居中造成的下移（实测验证，见
+   tools/responsive-check.mjs 的 A4a）。这里按未与手机宽度档同时命中时的刻度尺高度 26px 取
+   2×26=52 再加安全余量，得 60px；若同时命中手机宽度档（刻度尺已收窄到 20px，2×20=40）60px
+   仍绰绰有余，两种组合都不会压穿。
+
+   2026-07-28 补充（安全区预算）：.scroll-ruler 的 bottom 已改为
+   env(safe-area-inset-bottom, 0px)（5.3 节，Task 9），刻度尺整体随安全区 S 一起上移，顶边
+   变成"距容器底边 R+S"。S 与 R 是同一种量，把上面推导里的 R 换成 R+S 重新展开：
+   h ≤ 容器高 − 2(R+S) = 容器高 − 2R − 2S，S 同样要按 ×2 计——只加一份 S 只够把卡片底边推上
+   移 S/2，刻度尺顶边却整份上移了 S，S=34px（常见刘海机）时仍会侵入约 13px，没有把 Task 9
+   引入的回归清零。因此扣减量在原有 60px 之外再减去 2×env(safe-area-inset-bottom, 0px)；
+   S=0（无安全区，本项目验证器环境）时这一项恒为 0，与改动前逐像素相同。 */
+@media (max-height: 480px) {
+  :root {
+    --node-thumb: 32px;
+    --tick-len: 14px;
+  }
+  .chapter-intro-card {
+    max-height: calc(100% - 60px - env(safe-area-inset-bottom, 0px) * 2);
+    overflow-y: auto;
+    /* overscroll-behavior:contain 防的是"卡内纵向滚动触底后触发浏览器默认的滚动链/回弹表现
+       （如 iOS 的橡皮筋）"，不是"带跑卷轴"——2026-07-28 复审订正：旧注释想象的"滚到底把卷轴
+       一起带跑"这个场景在当前结构下不可能发生，纵向（卡内）与横向（卷轴）本是两个正交轴，
+       #scroll-view 自身 overflow-y:hidden，压根没有纵向滚动可言，不存在"纵向滚动链到横向
+       滚动"这种滚动链路，旧措辞是想当然、与实现不符。 */
+    overscroll-behavior: contain;
+  }
+  /* 底部渐隐遮罩：同上方手机宽度档同一条设计要求（设计文档第二节），矮屏档同样有溢出，补法
+     与理由完全一致（见手机宽度档 .chapter-intro-card::after 注释），高度改用贴近本档基础
+     padding-bottom（18px，本档未覆写 .chapter-intro-card 的 padding）的量级，其余不变。 */
+  .chapter-intro-card::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 18px;
+    background: linear-gradient(to bottom, rgba(239, 227, 200, 0), rgba(239, 227, 200, 0.9));
+    pointer-events: none;
+    border-radius: 0 0 6px 6px;
+  }
+  .chapter-intro-text { line-height: 1.65; }
+}
+
+/* 减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .node--current { animation: none; }
+  * { scroll-behavior: auto !important; }
+}
+
+/* ========================================================================
+   9. 沉浸抉择模式（js/choice.js，Task 11 追加）
+   全屏 overlay：panorama 背景（或水墨降级）+ Ken Burns 缓慢推近；旁白逐句淡入；
+   问题/选项卡片浮现；答对金印「史笔如铁」/答错墨晕；历史真实走向卷轴展开。
+   ======================================================================== */
+
+#choice-view {
+  position: relative;
+  overflow: hidden;
+}
+
+.choice-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: #fdf6e8;
+}
+
+/* ---- 9.1 背景层：panorama 或水墨降级 + Ken Burns ---- */
+
+.choice-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: var(--c-ink);
+}
+
+.choice-bg-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: 52% 42%;
+}
+
+.choice-bg-fallback {
+  position: absolute;
+  inset: 0;
+  transform-origin: 52% 42%;
+  background:
+    radial-gradient(ellipse at 26% 18%, rgba(255, 252, 240, 0.22), transparent 55%),
+    linear-gradient(155deg, var(--c-primary), var(--c-accent) 55%, var(--c-ink) 145%);
+}
+
+.choice-bg-fallback::before {
+  /* 水墨纤维噪点纹样，复用 body::before 的 feTurbulence 手法 */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.98  0 0 0 0 0.94  0 0 0 0 0.82  0 0 0 0.4 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 240px 240px;
+  mix-blend-mode: overlay;
+  opacity: 0.5;
+}
+
+.choice-bg-fallback-seal {
+  position: absolute;
+  right: 6%;
+  bottom: 14%;
+  writing-mode: vertical-rl;
+  font-family: var(--font-title);
+  font-size: clamp(64px, 14vw, 200px);
+  letter-spacing: 0.2em;
+  color: rgba(253, 246, 232, 0.16);
+  -webkit-text-stroke: 1px rgba(253, 246, 232, 0.22);
+  user-select: none;
+  transform: rotate(-1.5deg);
+}
+
+@keyframes shy-choice-kenburns {
+  from { transform: scale(1); }
+  to { transform: scale(1.08); }
+}
+
+.choice-kenburns {
+  animation: shy-choice-kenburns 20s ease-in-out infinite alternate;
+}
+
+.choice-bg-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  /* 底部渐变强度较此前降约20%（0.88→0.7、0.55→0.44、0.12→0.1、0.35→0.28），顶部全景多露一些 */
+  background:
+    linear-gradient(0deg, rgba(20, 14, 8, 0.7) 0%, rgba(20, 14, 8, 0.44) 38%, rgba(20, 14, 8, 0.1) 62%, rgba(20, 14, 8, 0.28) 100%);
+  transition: opacity 420ms var(--ease-standard);
+}
+
+.choice-ai-badge {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 5;
+  padding: 3px 10px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: rgba(253, 246, 232, 0.92);
+  background: rgba(20, 14, 8, 0.45);
+  border: 1px solid rgba(253, 246, 232, 0.3);
+  border-radius: 999px;
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+  transition: opacity 420ms var(--ease-standard);
+}
+
+/* ---- 9.1b 观景模式：面板/问题/反馈/角标淡出，只留全景可拖拽环视 ---- */
+
+/* ---- 9.1c 走入历史：高斯泼溅3D漫游（js/walkin.js 独立创建/销毁的DOM，与choice.js overlay分离） ---- */
+
+.choice-walkin-toggle {
+  position: absolute;
+  top: 18px;
+  right: 150px;
+  z-index: 8;
+  padding: 8px 18px;
+  font-size: 12.5px;
+  letter-spacing: 0.25em;
+  color: rgba(253, 246, 232, 0.92);
+  background: rgba(20, 14, 8, 0.4);
+  border: 1px solid rgba(227, 192, 122, 0.5);
+  border-radius: 999px;
+  backdrop-filter: blur(3px);
+  transition: opacity 320ms var(--ease-standard), background 220ms ease;
+}
+.choice-walkin-toggle:hover { background: rgba(20, 14, 8, 0.6); border-color: var(--c-gold); }
+.choice-overlay.is-viewing .choice-walkin-toggle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.walkin-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: #000;
+}
+.walkin-canvas-wrap { position: absolute; inset: 0; }
+.walkin-canvas-wrap canvas { display: block; width: 100%; height: 100%; }
+
+.walkin-progress {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(253, 246, 232, 0.92);
+  font-size: 14px;
+  letter-spacing: 0.15em;
+  text-align: center;
+}
+
+.walkin-error {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 320px;
+  text-align: center;
+  color: rgba(253, 246, 232, 0.92);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.walkin-error button {
+  margin-top: 14px;
+  padding: 8px 20px;
+  font-size: 12.5px;
+  letter-spacing: 0.2em;
+  color: rgba(253, 246, 232, 0.92);
+  background: rgba(20, 14, 8, 0.5);
+  border: 1px solid rgba(227, 192, 122, 0.5);
+  border-radius: 999px;
+}
+
+.walkin-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  color: rgba(253, 246, 232, 0.75);
+  font-size: 12px;
+  letter-spacing: 0.15em;
+}
+
+.walkin-exit {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  padding: 8px 18px;
+  font-size: 12.5px;
+  letter-spacing: 0.25em;
+  color: rgba(253, 246, 232, 0.92);
+  background: rgba(20, 14, 8, 0.4);
+  border: 1px solid rgba(227, 192, 122, 0.5);
+  border-radius: 999px;
+  backdrop-filter: blur(3px);
+}
+.walkin-exit:hover { background: rgba(20, 14, 8, 0.6); border-color: var(--c-gold); }
+
+/* 环视模式：提示条从"操作说明"降格为"状态指示"，仅弱化字重感与透明度（位置已由
+   基础 .walkin-hint 规则居中，此处无需再设 left/right/transform） */
+.walkin-overlay--orbit .walkin-hint {
+  letter-spacing: 0.2em;
+  opacity: 0.5;
+}
+
+.choice-viewmode-toggle,
+.choice-viewmode-exit {
+  position: absolute;
+  z-index: 8;
+  padding: 8px 18px;
+  font-size: 12.5px;
+  letter-spacing: 0.25em;
+  color: rgba(253, 246, 232, 0.92);
+  background: rgba(20, 14, 8, 0.4);
+  border: 1px solid rgba(227, 192, 122, 0.5);
+  border-radius: 999px;
+  backdrop-filter: blur(3px);
+  transition: opacity 320ms var(--ease-standard), transform 220ms var(--ease-standard), background 220ms ease;
+}
+.choice-viewmode-toggle:hover,
+.choice-viewmode-exit:hover { background: rgba(20, 14, 8, 0.6); border-color: var(--c-gold); }
+
+.choice-viewmode-toggle {
+  top: 18px;
+  right: 18px;
+  opacity: 1;
+}
+.choice-overlay.is-viewing .choice-viewmode-toggle {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+}
+
+.choice-viewmode-exit {
+  left: 50%;
+  bottom: 34px;
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+}
+.choice-overlay.is-viewing .choice-viewmode-exit {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 观景态：面板（含问题/选项/反馈/历史走向/操作按钮）与角标彻底淡出，shade 渐至近无，
+   只留全景（.choice-bg-pano 等背景层，不受 is-viewing 影响）可拖拽环视；
+   纯视觉切换，不触碰作答状态与计分逻辑（DOM 内容未被清空/重渲染） */
+.choice-overlay.is-viewing .choice-panel,
+.choice-overlay.is-viewing .choice-ai-badge,
+.choice-overlay.is-viewing .choice-pano-hint {
+  opacity: 0;
+  pointer-events: none;
+}
+.choice-overlay.is-viewing .choice-bg-shade {
+  opacity: 0.08;
+}
+
+/* 放映模式的环绕段：is-viewing 会把 AI 角标一并淡出，但环绕恰恰是全景最抢眼的时刻，
+   按项目硬规则（AI 生成图必须标注）此时角标必须可见。两条选择器全由类选择器构成
+   （不含任何元素/标签选择器）——.is-autoplay.is-viewing 复合选择器比上面 .is-viewing
+   单条规则多一个类（四个类 vs 三个类），特异度更高，足以覆盖之。 */
+.choice-overlay.is-autoplay.is-viewing .choice-ai-badge {
+  opacity: 1;
+  pointer-events: none;
+}
+
+/* ---- 9.2 抉择卷轴面板 ---- */
+
+.choice-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  max-height: 82%;
+  overflow-y: auto;
+  padding: 30px clamp(20px, 6vw, 96px) 26px;
+  background: linear-gradient(180deg, rgba(42, 35, 26, 0) 0%, var(--c-bg) 14%, var(--c-bg) 100%);
+  transition: opacity 420ms var(--ease-standard);
+}
+
+.choice-panel-rod {
+  position: sticky;
+  top: -30px;
+  margin: 0 auto 14px;
+  width: min(220px, 60%);
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--c-gold-deep), var(--c-gold) 50%, var(--c-gold-deep));
+  box-shadow: 0 1px 4px rgba(20, 14, 8, 0.35);
+}
+.choice-panel-rod::before,
+.choice-panel-rod::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--c-gold-deep);
+  transform: translateY(-50%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+.choice-panel-rod::before { left: -16px; }
+.choice-panel-rod::after { right: -16px; }
+
+.choice-kind-tag {
+  display: inline-block;
+  margin-bottom: 10px;
+  padding: 3px 12px;
+  font-size: 12px;
+  letter-spacing: 0.15em;
+  color: var(--c-vermilion-deep);
+  background: rgba(168, 52, 31, 0.1);
+  border: 1px solid rgba(168, 52, 31, 0.3);
+  border-radius: 999px;
+}
+
+.choice-scene {
+  max-width: 74ch;
+  margin: 0 auto 20px;
+  font-size: 15.5px;
+  line-height: 2;
+  color: var(--c-ink);
+  text-align: justify;
+}
+
+.choice-scene-sentence {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 520ms var(--ease-standard), transform 520ms var(--ease-standard);
+}
+.choice-scene-sentence.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.choice-question {
+  max-width: 74ch;
+  margin: 0 auto 18px;
+  font-family: var(--font-title);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--c-vermilion-deep);
+  text-align: center;
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity var(--t-theme) var(--ease-standard), transform var(--t-theme) var(--ease-standard);
+}
+.choice-question.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.choice-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  max-width: 74ch;
+  margin: 0 auto 8px;
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity var(--t-theme) var(--ease-standard) 80ms, transform var(--t-theme) var(--ease-standard) 80ms;
+}
+.choice-options.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.choice-option {
+  flex: 1 1 220px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  text-align: left;
+  color: var(--c-ink);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--c-paper-line);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(42, 35, 26, 0.1);
+  transition: transform var(--t-fast) var(--ease-standard), box-shadow var(--t-fast) var(--ease-standard), background var(--t-fast) var(--ease-standard), border-color var(--t-fast) var(--ease-standard);
+}
+.choice-option:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(42, 35, 26, 0.18);
+  border-color: var(--c-gold-deep);
+}
+.choice-option:disabled { cursor: default; }
+
+.choice-option-ordinal {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-title);
+  font-size: 13px;
+  color: #fdf6e8;
+  background: var(--c-ink-soft);
+  border-radius: 3px;
+}
+
+.choice-option-text {
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.choice-option.is-selected .choice-option-ordinal {
+  background: var(--c-ink);
+}
+.choice-option.is-correct-answer {
+  background: rgba(200, 162, 74, 0.16);
+  border-color: var(--c-gold-deep);
+}
+.choice-option.is-correct-answer .choice-option-ordinal {
+  background: var(--c-gold-deep);
+}
+.choice-option.is-wrong-answer {
+  background: rgba(168, 52, 31, 0.12);
+  border-color: var(--c-vermilion);
+}
+.choice-option.is-wrong-answer .choice-option-ordinal {
+  background: var(--c-vermilion);
+}
+
+/* 自动放映选中正确项前的短暂高亮：让观众看清"选的是哪一项"，而不是选项凭空跳到已答态。
+   只做描边呼吸，不改布局，避免面板在放映中抖动。 */
+.choice-option.is-auto-picking {
+  border-color: var(--c-gold);
+  box-shadow: 0 0 0 2px rgba(198, 160, 74, 0.55), 0 0 18px rgba(198, 160, 74, 0.35);
+  animation: autoPickPulse 0.8s ease-in-out;
+}
+@keyframes autoPickPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(198, 160, 74, 0.0), 0 0 0 rgba(198, 160, 74, 0.0); }
+  50%  { box-shadow: 0 0 0 3px rgba(198, 160, 74, 0.7), 0 0 22px rgba(198, 160, 74, 0.5); }
+  100% { box-shadow: 0 0 0 2px rgba(198, 160, 74, 0.55), 0 0 18px rgba(198, 160, 74, 0.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .choice-option.is-auto-picking { animation: none; }
+}
+
+/* ---- 9.3 作答反馈 ---- */
+
+.choice-feedback {
+  max-width: 74ch;
+  margin: 18px auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity var(--t-mid) var(--ease-standard), transform var(--t-mid) var(--ease-standard);
+}
+.choice-feedback.is-open {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.choice-feedback-block {
+  padding: 12px 16px;
+  border-radius: 3px;
+  border-left: 3px solid var(--c-ink-faint);
+  background: rgba(42, 35, 26, 0.05);
+}
+.choice-feedback-block .choice-feedback-label {
+  margin-bottom: 4px;
+  font-size: 12.5px;
+  letter-spacing: 0.1em;
+  color: var(--c-ink-soft);
+}
+.choice-feedback-block p {
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: var(--c-ink);
+  text-align: justify;
+}
+
+.choice-feedback-selected.is-correct {
+  border-left-color: var(--c-gold-deep);
+  background: rgba(200, 162, 74, 0.1);
+}
+.choice-feedback-selected.is-correct .choice-feedback-label { color: var(--c-gold-deep); }
+
+.choice-feedback-selected.is-wrong {
+  border-left-color: var(--c-vermilion);
+  background: rgba(168, 52, 31, 0.08);
+}
+.choice-feedback-selected.is-wrong .choice-feedback-label { color: var(--c-vermilion-deep); }
+
+.choice-feedback-correct {
+  border-left-color: var(--c-gold-deep);
+  background: rgba(200, 162, 74, 0.1);
+}
+.choice-feedback-correct .choice-feedback-label { color: var(--c-gold-deep); }
+.choice-feedback-correct-option {
+  font-weight: 600;
+  margin-bottom: 4px !important;
+}
+
+/* ---- 9.4 历史真实走向卷轴 ---- */
+
+.choice-historynote-inner {
+  max-width: 74ch;
+  margin: 18px auto 0;
+  padding: 16px 20px;
+  background: rgba(168, 52, 31, 0.06);
+  border: 1px solid rgba(168, 52, 31, 0.22);
+  border-radius: 3px;
+  transform: scaleY(0);
+  transform-origin: top center;
+  opacity: 0;
+  transition: transform 460ms var(--ease-standard), opacity 460ms var(--ease-standard);
+}
+.choice-historynote.is-open .choice-historynote-inner {
+  transform: scaleY(1);
+  opacity: 1;
+}
+.choice-historynote-title {
+  margin-bottom: 6px;
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  color: var(--c-vermilion-deep);
+}
+.choice-historynote-text {
+  font-size: 13.5px;
+  line-height: 1.9;
+  color: var(--c-ink-soft);
+  text-align: justify;
+}
+
+/* ---- 9.5 操作按钮 ---- */
+
+.choice-actions {
+  max-width: 74ch;
+  margin: 20px auto 0;
+  display: flex;
+  justify-content: center;
+}
+
+.choice-btn {
+  padding: 11px 34px;
+  font-size: 14px;
+  letter-spacing: 0.2em;
+  color: #fdf6e8;
+  border: none;
+  border-radius: 3px;
+  transition: transform var(--t-fast) var(--ease-standard), box-shadow var(--t-fast) var(--ease-standard);
+}
+.choice-btn:hover { transform: translateY(-1px); }
+.choice-btn:active { transform: translateY(0); }
+
+.choice-btn-learn {
+  background: linear-gradient(120deg, var(--c-ink-soft), var(--c-ink));
+  box-shadow: 0 4px 14px rgba(42, 35, 26, 0.35);
+}
+
+.choice-btn-continue {
+  background: linear-gradient(120deg, var(--c-vermilion-deep), var(--c-vermilion));
+  box-shadow: 0 4px 14px rgba(124, 36, 23, 0.35);
+}
+
+/* ---- 9.6 金印「史笔如铁」/ 墨晕动效 ---- */
+
+.choice-seal {
+  /* 定位在背景区上方，避开面板随反馈/历史走向内容增高后可能触及的区域（面板 max-height:82%，
+     即其顶边最高可达 18% 处），故取 top:9% 留出安全余量，避免鎏金印章与卡片文字视觉重叠 */
+  position: absolute;
+  top: 9%;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  padding: 12px 9px;
+  border: 3px solid var(--c-gold);
+  border-radius: 4px;
+  font-family: var(--font-title);
+  font-size: 22px;
+  letter-spacing: 0.3em;
+  color: var(--c-gold);
+  writing-mode: vertical-rl;
+  background: rgba(20, 14, 8, 0.25);
+  box-shadow: 0 0 0 2px rgba(200, 162, 74, 0.25), 0 10px 40px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(2.4) rotate(-12deg);
+}
+.choice-seal.is-show {
+  animation: shy-choice-seal-drop 900ms cubic-bezier(0.2, 0.9, 0.3, 1.1) forwards;
+}
+.choice-seal.is-recede {
+  /* 停留片刻后化入背景，让位给随后展开的历史走向卷轴，如印泥渐渐沉入纸面 */
+  opacity: 0.32 !important;
+  transition: opacity 900ms ease;
+}
+@keyframes shy-choice-seal-drop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(2.6) rotate(-14deg); }
+  55% { opacity: 0.95; transform: translate(-50%, -50%) scale(0.92) rotate(-4deg); }
+  75% { transform: translate(-50%, -50%) scale(1.06) rotate(-7deg); }
+  100% { opacity: 0.92; transform: translate(-50%, -50%) scale(1) rotate(-6deg); }
+}
+
+.choice-inkblot {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  z-index: 3;
+  width: 60vmin;
+  height: 60vmin;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(20, 14, 8, 0.85) 0%, rgba(20, 14, 8, 0.55) 40%, transparent 72%);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0);
+}
+.choice-inkblot.is-show {
+  animation: shy-choice-inkblot-spread 900ms var(--ease-standard) forwards;
+}
+@keyframes shy-choice-inkblot-spread {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.1); }
+  35% { opacity: 0.85; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* ---- 9.7 响应式（375px）：选项纵排全宽 ---- */
+
+@media (max-width: 600px) {
+  .choice-panel { padding: 22px 16px 20px; max-height: 88%; }
+  .choice-scene { font-size: 14px; line-height: 1.85; }
+  .choice-question { font-size: 16px; }
+  .choice-options { flex-direction: column; }
+  .choice-option { flex: 1 1 auto; width: 100%; }
+  .choice-ai-badge { right: 8px; bottom: 8px; font-size: 10px; padding: 2px 8px; }
+  .choice-seal { font-size: 18px; padding: 10px 7px; }
+  .choice-btn { width: 100%; text-align: center; }
+  .choice-viewmode-toggle { top: 10px; right: 10px; padding: 6px 12px; font-size: 11px; letter-spacing: 0.15em; }
+  .choice-viewmode-exit { bottom: 18px; padding: 7px 16px; font-size: 11.5px; }
+  .choice-walkin-toggle { top: 46px; right: 10px; padding: 6px 12px; font-size: 11px; letter-spacing: 0.15em; }
+  .walkin-exit { top: 10px; right: 10px; padding: 6px 12px; font-size: 11px; letter-spacing: 0.15em; }
+  .walkin-hint { bottom: 14px; font-size: 10.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .choice-kenburns { animation: none; }
+  .choice-seal.is-show,
+  .choice-inkblot.is-show { animation: none; opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .choice-viewmode-toggle,
+  .choice-viewmode-exit { transition: opacity 1ms linear; }
+  .choice-walkin-toggle { transition: opacity 1ms linear; }
+}
+
+/* ========================================================================
+   10. 人物知识星图（js/graph.js，Task 12 追加）
+   与宣纸长卷的昼景形成对照：深墨蓝夜空底 + 星点闪烁，已点亮人物如星辰显现，
+   未点亮者只是灰暗剪影，避免剧透；关系连线五色分类，图例常驻右上角；
+   点选人物展开右侧（375px 降级为底部）抽屉呈现小传与已点亮关系网络。
+   ======================================================================== */
+
+#graph-view {
+  padding: 0;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% -10%, #142138 0%, #0a1120 55%, #060a14 100%);
+}
+
+.graph-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  color: #e8e2d0;
+}
+
+.graph-hud {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 24px;
+  border-bottom: 1px solid rgba(200, 162, 74, 0.18);
+}
+
+.graph-progress {
+  font-family: var(--font-title);
+  letter-spacing: 0.08em;
+  font-size: 14px;
+  color: #f0e6c8;
+  font-variant-numeric: tabular-nums;
+}
+
+.graph-btn-back {
+  padding: 7px 18px;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: var(--c-gold);
+  background: rgba(200, 162, 74, 0.08);
+  border: 1px solid var(--c-gold-deep);
+  border-radius: 3px;
+  transition: background var(--t-fast) var(--ease-standard), color var(--t-fast) var(--ease-standard);
+}
+.graph-btn-back:hover { background: var(--c-gold); color: #0b1220; }
+
+.graph-canvas-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 星空底纹：多层小尺寸 radial-gradient 平铺，营造疏密错落的星点 */
+.graph-canvas-wrap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(ellipse at 18% 15%, rgba(122, 150, 200, 0.16), transparent 58%),
+    radial-gradient(ellipse at 82% 78%, rgba(123, 94, 167, 0.14), transparent 55%),
+    radial-gradient(1.6px 1.6px at 10% 20%, rgba(255, 255, 255, 0.85), transparent 60%),
+    radial-gradient(1.2px 1.2px at 60% 70%, rgba(255, 255, 255, 0.65), transparent 60%),
+    radial-gradient(1.6px 1.6px at 80% 30%, rgba(255, 255, 255, 0.75), transparent 60%),
+    radial-gradient(1.2px 1.2px at 35% 85%, rgba(255, 255, 255, 0.55), transparent 60%),
+    radial-gradient(1.2px 1.2px at 92% 92%, rgba(255, 255, 255, 0.55), transparent 60%),
+    radial-gradient(1px 1px at 45% 40%, rgba(255, 255, 255, 0.45), transparent 60%);
+  background-repeat: no-repeat, no-repeat, repeat, repeat, repeat, repeat, repeat, repeat;
+  background-size: auto, auto, 180px 180px, 180px 180px, 220px 220px, 220px 220px, 260px 260px, 140px 140px;
+}
+
+.graph-svg {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none; /* 缩放/平移交给 d3.zoom；不写则浏览器默认手势（页面滚动/双指刷新等）会抢走双指事件 */
+}
+.graph-svg:active { cursor: grabbing; }
+
+/* ---- 10.1 节点 / 连线 ---- */
+
+.graph-node-circle {
+  transition: r var(--t-fast) var(--ease-standard), fill var(--t-fast) var(--ease-standard), stroke var(--t-fast) var(--ease-standard);
+}
+.graph-node.is-lit .graph-node-circle {
+  stroke: #fdf6e8;
+  stroke-width: 1.2px;
+  filter: drop-shadow(0 0 4px rgba(212, 162, 23, 0.45));
+}
+.graph-node.is-unlit .graph-node-circle {
+  opacity: 0.55;
+}
+.graph-node.is-selected .graph-node-circle {
+  stroke: var(--c-vermilion);
+  stroke-width: 2.4px;
+  filter: drop-shadow(0 0 9px rgba(168, 52, 31, 0.65));
+}
+.graph-node.is-lit:hover .graph-node-circle { stroke: var(--c-gold); }
+
+.graph-node-glyph {
+  font-family: var(--font-title);
+  font-size: 11px;
+  fill: #fdf6e8;
+  pointer-events: none;
+  user-select: none;
+}
+.graph-node-label {
+  font-size: 10.5px;
+  fill: #c9d3e0;
+  pointer-events: none;
+  user-select: none;
+}
+.graph-node-label.is-blurred {
+  fill: #57617a;
+  font-size: 9px;
+}
+
+.graph-link {
+  opacity: 0;
+  stroke-width: 1px;
+  pointer-events: none;
+  transition: opacity 260ms ease, stroke-width 260ms ease;
+}
+.graph-link.is-visible.is-both-lit { opacity: 0.85; stroke-width: 1.8px; }
+.graph-link.is-visible.is-partial-lit { opacity: 0.3; stroke-width: 1px; stroke-dasharray: 3 3; }
+
+.graph-ripple { pointer-events: none; }
+
+/* ---- 10.2 图例（右上角常驻） ---- */
+
+.graph-legend {
+  position: absolute;
+  z-index: 3;
+  top: 14px;
+  right: 14px;
+  padding: 12px 15px;
+  border-radius: 6px;
+  background: rgba(10, 16, 28, 0.82);
+  border: 1px solid rgba(200, 162, 74, 0.3);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  color: #e8e2d0;
+  font-size: 12px;
+  pointer-events: none;
+  transition: right var(--t-mid) var(--ease-standard), top var(--t-mid) var(--ease-standard), bottom var(--t-mid) var(--ease-standard);
+}
+/* 抽屉打开时图例让位，避免被 340px 宽抽屉遮挡（340 + 14 原有间距 = 354） */
+.graph-canvas-wrap.has-drawer-open .graph-legend {
+  right: 354px;
+}
+.graph-legend-title {
+  font-size: 12px;
+  letter-spacing: 0.15em;
+  margin-bottom: 8px;
+  color: var(--c-gold);
+}
+.graph-legend-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.graph-legend-item { display: flex; align-items: center; gap: 8px; }
+.graph-legend-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+/* ---- 10.3 侧栏抽屉 ---- */
+
+.graph-drawer {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 340px;
+  max-width: 88vw;
+  padding: 26px 22px;
+  overflow-y: auto;
+  color: #e8e2d0;
+  background: linear-gradient(160deg, rgba(14, 20, 34, 0.97), rgba(9, 13, 24, 0.97));
+  border-left: 1px solid rgba(200, 162, 74, 0.3);
+  box-shadow: -14px 0 30px rgba(0, 0, 0, 0.45);
+  transform: translateX(100%);
+  transition: transform var(--t-mid) var(--ease-standard);
+}
+.graph-drawer.is-open { transform: translateX(0); }
+
+.graph-drawer-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(200, 162, 74, 0.4);
+  background: transparent;
+  color: var(--c-gold);
+  font-size: 16px;
+  line-height: 1;
+  transition: background var(--t-fast) ease, color var(--t-fast) ease;
+}
+.graph-drawer-close:hover { background: var(--c-gold); color: #0b1220; }
+
+.graph-drawer-portrait-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+.graph-drawer-portrait {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #0e1422;
+  border: 3px solid #f3e9cf;
+  box-shadow: 0 0 0 1px rgba(200,162,74,0.4), 0 6px 18px rgba(0,0,0,0.5);
+}
+.graph-drawer-image-credit {
+  margin: 0 0 14px;
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  color: #8a93ab;
+  text-align: center;
+}
+
+.graph-drawer-name { font-size: 20px; color: #fdf6e8; margin-bottom: 4px; }
+.graph-drawer-courtesy { font-size: 12.5px; color: #b9c2d4; margin-bottom: 6px; }
+.graph-drawer-years {
+  font-size: 12px;
+  color: var(--c-gold);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 10px;
+}
+.graph-drawer-role { font-size: 13px; color: #d7cba0; margin-bottom: 12px; }
+.graph-drawer-bio {
+  font-size: 13px;
+  line-height: 1.9;
+  color: #c7cede;
+  text-align: justify;
+  margin-bottom: 18px;
+}
+.graph-drawer-relations-title {
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: var(--c-gold);
+  margin-bottom: 8px;
+}
+.graph-drawer-empty { font-size: 12px; color: #6d7690; }
+
+.graph-relation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.graph-relation-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition: background 180ms ease;
+}
+.graph-relation-item:hover,
+.graph-relation-item:focus-visible {
+  background: rgba(200, 162, 74, 0.16);
+  outline: none;
+}
+.graph-relation-tag {
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #fdf6e8;
+}
+.graph-relation-name { font-size: 12.5px; color: #eee5cf; }
+.graph-relation-note { flex-basis: 100%; font-size: 11px; color: #8a93ab; }
+
+/* ---- 10.4 响应式（375px）：抽屉降级为底部面板 ---- */
+
+@media (max-width: 600px) {
+  .graph-hud { padding: 10px 14px; }
+  .graph-progress { font-size: 12px; }
+  .graph-btn-back { padding: 6px 13px; font-size: 12px; }
+
+  .graph-legend {
+    top: auto;
+    bottom: 10px;
+    right: 10px;
+    padding: 9px 11px;
+    font-size: 10.5px;
+  }
+  .graph-legend-title { font-size: 10.5px; margin-bottom: 6px; }
+  .graph-legend-swatch { width: 12px; }
+
+  /* 底部抽屉（62% 高）打开时图例改贴顶部，避免被贴底抽屉遮挡 */
+  .graph-canvas-wrap.has-drawer-open .graph-legend {
+    top: 10px;
+    bottom: auto;
+    right: 10px;
+  }
+
+  .graph-drawer {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: none;
+    height: 62%;
+    border-left: none;
+    border-top: 1px solid rgba(200, 162, 74, 0.3);
+    border-radius: 14px 14px 0 0;
+    transform: translateY(100%);
+  }
+  .graph-drawer.is-open { transform: translateY(0); }
+  .graph-drawer-portrait { width: 76px; height: 76px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .graph-drawer { transition: none; }
+  .graph-node-circle { transition: none; }
+}
+
+/* ========================================================================
+   11. 终章卷轴（js/ending.js，Task 14 追加）
+   竖向红色主题卷轴：深绛红底 + 金色题字，宣纸纤维质感延续（噪点纹样重着色）；
+   五星红旗色调渐变元素纯 CSS 实现（渐变横幅 + clip-path 五角星，不用图片）；
+   各节滚动进入时由 IntersectionObserver 触发淡入（.ending-sect.is-visible）。
+   ======================================================================== */
+
+#ending-view {
+  position: relative;
+  padding: 0;
+  background:
+    radial-gradient(ellipse at 20% -6%, rgba(232, 184, 96, 0.16), transparent 46%),
+    linear-gradient(178deg, #4a0f0f 0%, #34090a 46%, #220607 100%);
+}
+
+/* 宣纸纤维质感延续：复用 body::before 同款 feTurbulence 噪点，但改走浅金色叠加，
+   在深绛红底上呈现细微纸纹，而非水墨底上的暗纹理 */
+#ending-view::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.92  0 0 0 0 0.78  0 0 0 0 0.45  0 0 0 0.3 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 240px 240px;
+  mix-blend-mode: overlay;
+  opacity: 0.5;
+}
+
+.ending-scroll {
+  position: relative;
+  z-index: 1;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 clamp(18px, 6vw, 60px) 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---- 11.1 各节淡入容器 ---- */
+
+.ending-sect {
+  padding-top: 44px;
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 760ms var(--ease-standard), transform 760ms var(--ease-standard);
+}
+.ending-sect.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.ending-sect-title {
+  font-size: 16px;
+  letter-spacing: 0.3em;
+  text-align: center;
+  color: #e3c07a;
+  margin-bottom: 20px;
+}
+
+/* ---- 11.2 卷首：题字 / 总分称号 / 十五章评级阵列 ---- */
+
+.ending-sect--cover {
+  padding-top: 56px;
+  text-align: center;
+}
+
+.ending-cover-emblem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin: 0 auto 18px;
+  border-radius: 2px;
+  background: linear-gradient(145deg, #e3c07a, #a67c1e);
+  color: #3a0b0b;
+  font-family: var(--font-title);
+  font-size: 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.ending-cover-title {
+  font-size: clamp(30px, 7vw, 44px);
+  letter-spacing: 0.4em;
+  padding-left: 0.4em; /* 补偿末字 letter-spacing 造成的视觉不居中 */
+  color: #f3d999;
+  text-shadow: 0 0 22px rgba(227, 192, 122, 0.45), 0 2px 0 rgba(0, 0, 0, 0.3);
+}
+
+.ending-cover-years {
+  margin-top: 10px;
+  font-size: 14px;
+  letter-spacing: 0.3em;
+  color: rgba(243, 230, 210, 0.7);
+  font-variant-numeric: tabular-nums;
+}
+
+.ending-cover-stats {
+  display: flex;
+  justify-content: center;
+  gap: clamp(24px, 8vw, 64px);
+  margin: 34px 0 40px;
+}
+
+.ending-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.ending-stat-value {
+  font-family: var(--font-title);
+  font-size: clamp(26px, 6vw, 34px);
+  color: #f3d999;
+  font-variant-numeric: tabular-nums;
+}
+.ending-stat-value--title {
+  font-size: clamp(18px, 4.5vw, 24px);
+  letter-spacing: 0.1em;
+}
+
+.ending-stat-label {
+  font-size: 11px;
+  letter-spacing: 0.25em;
+  color: rgba(243, 230, 210, 0.55);
+}
+
+.ending-grade-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px 10px;
+}
+
+.ending-grade-seal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 4px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(227, 192, 122, 0.18);
+}
+
+.ending-grade-seal-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 2px;
+  font-family: var(--font-title);
+  font-size: 14px;
+  box-shadow: 1.5px 1.5px 0 rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+.ending-grade-seal.is-jia .ending-grade-seal-mark { background: #d4a017; color: #2c0808; }
+.ending-grade-seal.is-yi  .ending-grade-seal-mark { background: #c46a2f; color: #fdf6e8; }
+.ending-grade-seal.is-bing .ending-grade-seal-mark { background: #6b4a3a; color: #fdf6e8; }
+.ending-grade-seal.is-none .ending-grade-seal-mark { background: rgba(255, 255, 255, 0.12); color: rgba(243, 230, 210, 0.6); }
+
+.ending-grade-seal-label {
+  font-size: 9.5px;
+  line-height: 1.3;
+  text-align: center;
+  color: rgba(243, 230, 210, 0.65);
+  letter-spacing: 0.02em;
+}
+
+/* ---- 11.3 抉择回顾：26 张时间序卡片 ---- */
+
+.ending-choice-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ending-choice-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(227, 192, 122, 0.14);
+}
+
+.ending-choice-seal {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 3px;
+  font-family: var(--font-title);
+  font-size: 15px;
+  box-shadow: 1.5px 1.5px 0 rgba(0, 0, 0, 0.3), inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+.ending-choice-card.is-correct .ending-choice-seal { background: #d4a017; color: #2c0808; }
+.ending-choice-card.is-wrong   .ending-choice-seal { background: #241414; color: #c9a9a9; box-shadow: inset 0 0 0 1px rgba(201, 169, 169, 0.35); }
+.ending-choice-card.is-unanswered .ending-choice-seal { background: rgba(255, 255, 255, 0.08); color: rgba(243, 230, 210, 0.5); }
+
+.ending-choice-body { flex: 1 1 auto; min-width: 0; }
+
+.ending-choice-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 13px;
+}
+.ending-choice-year {
+  color: #e3c07a;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+}
+.ending-choice-title { color: #f3e6d2; letter-spacing: 0.04em; }
+.ending-choice-status {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: rgba(243, 230, 210, 0.55);
+}
+.ending-choice-card.is-correct .ending-choice-status { color: #d4a017; }
+.ending-choice-card.is-wrong .ending-choice-status { color: #c9a9a9; }
+
+.ending-choice-note {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: rgba(243, 230, 210, 0.72);
+}
+
+/* ---- 11.4 致敬段落 + 五星红旗色调渐变 ---- */
+
+.ending-sect--tribute { text-align: center; }
+
+.ending-flag-motif {
+  position: relative;
+  height: 46px;
+  margin: 0 auto 26px;
+  width: 100%;
+  max-width: 320px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #de2910 0%, #b8230c 60%, #8a1a0a 100%);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+/* 五角星：标准五角星 clip-path 多边形，纯 CSS 实现，取五星红旗"一大四小"布局意象，
+   置于渐变横幅左侧，呼应"五星红旗色调渐变元素"要求，不引入任何图片资源 */
+.ending-star {
+  position: absolute;
+  display: block;
+  background: #f3d999;
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+.ending-star--lg { width: 20px; height: 20px; top: 13px; left: 16px; }
+.ending-star--sm { width: 7px; height: 7px; }
+.ending-star--sm.s1 { top: 6px; left: 42px; }
+.ending-star--sm.s2 { top: 15px; left: 52px; }
+.ending-star--sm.s3 { top: 26px; left: 52px; }
+.ending-star--sm.s4 { top: 34px; left: 42px; }
+
+.ending-tribute-text {
+  font-size: 14.5px;
+  line-height: 2.1;
+  color: #f3e6d2;
+  text-align: justify;
+  text-indent: 2em;
+}
+
+/* ---- 11.5 数据来源致谢 ---- */
+
+.ending-sect--credit { padding-top: 24px; }
+.ending-credit-text {
+  font-size: 11.5px;
+  line-height: 1.8;
+  color: rgba(243, 230, 210, 0.5);
+  text-align: center;
+}
+
+/* ---- 11.6 重走长卷 ---- */
+
+.ending-sect--restart {
+  text-align: center;
+  padding-bottom: 12px;
+}
+
+.ending-restart-btn {
+  padding: 13px 46px;
+  border: 1px solid rgba(227, 192, 122, 0.6);
+  border-radius: 3px;
+  background: linear-gradient(120deg, #7c2417, #a8341f);
+  color: #f3d999;
+  font-family: var(--font-title);
+  font-size: 15px;
+  letter-spacing: 0.35em;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  transition: transform var(--t-fast) var(--ease-standard), box-shadow var(--t-fast) var(--ease-standard);
+}
+.ending-restart-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5); }
+.ending-restart-btn:active { transform: translateY(0); }
+
+/* ---- 11.7 响应式（375px） ---- */
+
+@media (max-width: 600px) {
+  .ending-scroll { padding: 0 16px 48px; gap: 8px; }
+  .ending-sect { padding-top: 32px; }
+  .ending-cover-stats { gap: 24px; margin: 26px 0 30px; }
+  .ending-grade-grid { grid-template-columns: repeat(3, 1fr); }
+  .ending-choice-card { padding: 12px; gap: 10px; }
+  .ending-choice-status { margin-left: 0; flex-basis: 100%; }
+  .ending-restart-btn { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ending-sect { transition: none; }
+}
+
+/* ---- 9.8 360°环景背景（2:1等距全景：拖拽环视 + 缓慢自动环绕） ---- */
+
+.choice-bg-pano {
+  position: absolute;
+  inset: 0;
+  background-repeat: repeat-x;
+  background-size: auto 100%;
+  background-position: 0 50%;
+  will-change: background-position;
+  cursor: grab;
+  touch-action: pan-y; /* 水平拖拽自理，纵向滚动留给系统 */
+}
+
+.choice-overlay.is-pano-dragging { user-select: none; }
+.choice-overlay.is-pano-dragging .choice-bg-pano { cursor: grabbing; }
+
+.choice-pano-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: 6px 16px;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  color: rgba(253, 246, 232, 0.9);
+  background: rgba(20, 14, 8, 0.5);
+  border: 1px solid rgba(253, 246, 232, 0.25);
+  border-radius: 999px;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+  user-select: none;
+}
+
+.choice-pano-hint.is-visible { opacity: 1; }
+
+.choice-pano-hint-arrow {
+  display: inline-block;
+  margin: 0 6px;
+  animation: shy-pano-arrow 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes shy-pano-arrow {
+  from { transform: translateX(-2px); }
+  to { transform: translateX(2px); }
+}
+
+@media (max-width: 600px) {
+  .choice-pano-hint { bottom: 64px; font-size: 11px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .choice-pano-hint-arrow { animation: none; }
+}
+
+/* ========================================================================
+   12. 语音解说 / BGM 小按钮（Task 19 MiniMax 音频接入追加）
+   事件卡标题行重播/停止、章引言卡播放、抉择面板重听旁白——均为克制的圆形/胶囊
+   小按钮，沿用既有水墨/朱砂/鎏金三色体系，不引入新色板。
+   ======================================================================== */
+
+/* ---- 12.1 事件卡标题行：⟲重播 / ▮停止 ---- */
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.card-title-row .card-title { flex: 1 1 auto; min-width: 0; }
+
+.card-voice-controls {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+}
+
+.card-voice-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(42, 35, 26, 0.18);
+  background: rgba(42, 35, 26, 0.06);
+  color: var(--c-ink-soft);
+  font-size: 12px;
+  line-height: 1;
+  transition: background var(--t-fast) ease, color var(--t-fast) ease, transform var(--t-fast) ease;
+}
+.card-voice-btn:hover {
+  background: var(--c-vermilion);
+  color: #fff;
+  border-color: var(--c-vermilion);
+  transform: translateY(-1px);
+}
+.card-voice-btn:active { transform: translateY(0); }
+
+/* ---- 12.2 章引言卡：▶ 播放引言解说 ---- */
+
+.chapter-intro-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.chapter-intro-head .chapter-intro-subtitle { margin-bottom: 0; }
+
+.chapter-intro-play {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(168, 52, 31, 0.35);
+  background: rgba(168, 52, 31, 0.08);
+  color: var(--c-vermilion-deep);
+  font-size: 9px;
+  line-height: 1;
+  transition: background var(--t-fast) ease, color var(--t-fast) ease;
+}
+.chapter-intro-play:hover { background: var(--c-vermilion); color: #fff; }
+
+/* ---- 12.3 抉择面板：⟲ 重听旁白（紧邻 kind-tag，同行胶囊按钮） ---- */
+
+.choice-voice-replay {
+  display: inline-block;
+  margin: 0 0 10px 10px;
+  padding: 3px 12px;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  color: #fdf6e8;
+  background: rgba(253, 246, 232, 0.12);
+  border: 1px solid rgba(253, 246, 232, 0.3);
+  border-radius: 999px;
+  vertical-align: middle;
+  transition: background var(--t-fast) ease, transform var(--t-fast) ease;
+}
+.choice-voice-replay:hover { background: rgba(253, 246, 232, 0.24); transform: translateY(-1px); }
+.choice-voice-replay:active { transform: translateY(0); }
+
+/* ---- 12.4 响应式（375px） ---- */
+
+@media (max-width: 600px) {
+  .card-voice-btn { width: 24px; height: 24px; font-size: 11px; }
+  .chapter-intro-play { width: 18px; height: 18px; font-size: 8px; }
+  .choice-voice-replay { font-size: 10.5px; padding: 2px 10px; margin-left: 8px; }
+}
+
+
+/* ========================================================================
+   13. 山河舆图（js/map.js：水墨矢量中国地图 + 事件标注 + 历史足迹）
+   配色严格沿用墨色/朱砂/鎏金体系；动效节奏沿用 --t-fast/--t-mid/--t-theme。
+   ======================================================================== */
+
+#map-view {
+  height: 100%;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.map-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.map-hud {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--c-paper-line);
+}
+
+.map-title {
+  font-size: 20px;
+  letter-spacing: 0.32em;
+  color: var(--c-ink);
+}
+
+.map-subtitle {
+  font-size: 12.5px;
+  letter-spacing: 0.08em;
+  color: var(--c-ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.map-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 进入动效第一步：容器如宣纸展开 */
+.map-stage.map-enter { animation: map-unfold var(--t-theme) var(--ease-standard); }
+@keyframes map-unfold {
+  from { opacity: 0; transform: scaleY(0.965); }
+  to { opacity: 1; transform: none; }
+}
+
+.map-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none; /* 拖拽平移交由 pointer 事件处理，禁浏览器默认触摸滚动 */
+}
+.map-svg:active { cursor: grabbing; }
+
+.map-content { transform-origin: 0 0; }
+
+/* ---- 13.1 底图各层 ---- */
+
+.map-neighbors {
+  fill: rgba(42, 35, 26, 0.06);
+  stroke: rgba(42, 35, 26, 0.28);
+  stroke-width: 1;
+}
+
+.map-china {
+  fill: rgba(244, 234, 214, 0.85);
+  stroke: var(--c-ink);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+
+.map-provinces {
+  fill: none;
+  stroke: rgba(42, 35, 26, 0.22);
+  stroke-width: 0.6;
+}
+
+.map-river {
+  fill: none;
+  stroke: rgba(42, 35, 26, 0.5);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.map-sea-label {
+  fill: rgba(42, 35, 26, 0.45);
+  font-family: var(--font-title);
+  font-size: 14px;
+}
+
+/* 河流名注记：比海域名稍小、墨色更淡，避免压过河线本体 */
+.map-river-label {
+  fill: rgba(42, 35, 26, 0.38);
+  font-family: var(--font-title);
+  font-size: 13px;
+}
+
+.map-inset-frame {
+  fill: rgba(244, 234, 214, 0.5);
+  stroke: rgba(42, 35, 26, 0.4);
+  stroke-width: 0.8;
+}
+
+.map-inset-dashes {
+  fill: none;
+  stroke: rgba(42, 35, 26, 0.5);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.map-inset-island { fill: rgba(42, 35, 26, 0.55); }
+
+.map-inset-label {
+  fill: rgba(42, 35, 26, 0.5);
+  font-family: var(--font-title);
+  font-size: 10.5px;
+}
+
+/* ---- 13.2 事件标注（三态 + 菱形 + 涟漪） ---- */
+
+.map-marker { cursor: pointer; outline: none; }
+
+/* 进入动效第三步：事件点按时间序 staggered 落点（animation-delay 由内联样式给出） */
+.map-marker-inner {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.map-enter .map-marker-inner {
+  animation: map-marker-in 480ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes map-marker-in {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+.map-marker-shape {
+  fill: var(--c-vermilion);
+  stroke: var(--c-vermilion-deep);
+  stroke-width: 1;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform var(--t-fast) var(--ease-standard);
+}
+/* 抉择 = 旋转 45° 菱形（与长卷节点语言一致）；旋转经 CSS 而非属性实现，hover 才能叠加缩放 */
+.map-marker--choice .map-marker-shape { transform: rotate(45deg); }
+.map-marker:hover .map-marker-shape,
+.map-marker:focus-visible .map-marker-shape { transform: scale(1.3); }
+.map-marker--choice:hover .map-marker-shape,
+.map-marker--choice:focus-visible .map-marker-shape { transform: rotate(45deg) scale(1.3); }
+
+/* 当前前沿：鎏金 + 呼吸光晕（节奏对齐长卷 shy-pulse 的 2.3s） */
+.map-marker--current .map-marker-shape {
+  fill: var(--c-gold);
+  stroke: var(--c-gold-deep);
+}
+.map-marker-halo {
+  fill: none;
+  stroke: rgba(200, 162, 74, 0.55);
+  stroke-width: 1.5;
+  transform-box: fill-box;
+  transform-origin: center;
+  pointer-events: none; /* 呼吸时光晕放大超出本体，不参与命中测试 */
+  animation: map-halo 2.3s ease-in-out infinite;
+}
+@keyframes map-halo {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.7); opacity: 0.1; }
+}
+
+/* 开国大典 e1401：鎏金大标记 + 金色外圈 */
+.map-marker--climax .map-marker-shape {
+  fill: var(--c-gold);
+  stroke: var(--c-vermilion);
+  stroke-width: 1.4;
+}
+.map-marker-ring {
+  fill: none;
+  stroke: rgba(200, 162, 74, 0.7);
+  stroke-width: 1.2;
+}
+
+/* 落点涟漪环（随 map-enter 播放，delay 跟随落点错峰） */
+.map-ripple {
+  fill: none;
+  stroke: rgba(168, 52, 31, 0.5);
+  stroke-width: 1.2;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  pointer-events: none; /* 动画结束后仍占位，避免挡住邻近 marker 的悬停/点击 */
+}
+.map-enter .map-ripple { animation: map-ripple 720ms ease-out both; }
+@keyframes map-ripple {
+  0% { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(2.8); opacity: 0; }
+}
+
+/* focus(eventId)：目标点三圈金色同心圆扩散（第二/三圈 delay 由内联样式给出） */
+.map-focus-ring {
+  fill: none;
+  stroke: var(--c-gold);
+  stroke-width: 1.6;
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  pointer-events: none;
+  animation: map-focus-ring 900ms ease-out both;
+}
+@keyframes map-focus-ring {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(3.2); opacity: 0; }
+}
+
+/* ---- 13.3 历史足迹线与行进光点 ---- */
+
+.map-trail {
+  fill: none;
+  stroke: var(--c-gold);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  opacity: 0.75;
+  filter: drop-shadow(0 0 3px rgba(200, 162, 74, 0.45));
+}
+
+.map-trail-dot { pointer-events: none; }
+.map-trail-dot-halo { fill: rgba(200, 162, 74, 0.25); }
+.map-trail-dot-core {
+  fill: #ffe9ad;
+  stroke: var(--c-gold-deep);
+  stroke-width: 1;
+  filter: drop-shadow(0 0 5px rgba(200, 162, 74, 0.9));
+}
+
+/* ---- 13.4 提示卡 / 域外注记 / 图例 / 复位 ---- */
+
+.map-tooltip {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  max-width: 240px;
+  padding: 8px 12px;
+  background: rgba(244, 234, 214, 0.97);
+  border: 1px solid var(--c-ink-faint);
+  border-radius: 4px;
+  box-shadow: 0 4px 14px rgba(42, 35, 26, 0.18);
+}
+.map-tooltip strong {
+  display: block;
+  font-family: var(--font-title);
+  font-size: 13.5px;
+  color: var(--c-ink);
+}
+.map-tooltip span {
+  font-size: 11.5px;
+  color: var(--c-ink-faint);
+}
+
+/* 域外注记：虚线引线指向图外（引线由伪元素绘在标签与图缘之间） */
+.map-notes {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+.map-note {
+  position: absolute;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 46%;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+  color: var(--c-ink-soft);
+  background: rgba(244, 234, 214, 0.92);
+  border: 1px dashed var(--c-ink-faint);
+  border-radius: 3px;
+  transition: border-color var(--t-fast) var(--ease-standard), color var(--t-fast) var(--ease-standard);
+}
+.map-note:hover { border-color: var(--c-vermilion); color: var(--c-vermilion); }
+.map-note--right { right: 26px; }
+.map-note--left { left: 26px; }
+.map-note--right::after,
+.map-note--left::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  border-top: 1px dashed rgba(42, 35, 26, 0.45);
+}
+.map-note--right::after { right: -24px; }
+.map-note--left::before { left: -24px; }
+.map-note-tag {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  color: var(--c-gold-deep);
+}
+.map-note-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-legend {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--c-ink-soft);
+  background: rgba(244, 234, 214, 0.85);
+  border: 1px solid var(--c-paper-line);
+  border-radius: 3px;
+}
+.map-legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+.map-legend .lg-dot { border-radius: 50%; background: var(--c-vermilion); }
+.map-legend .lg-diamond { background: var(--c-vermilion); transform: rotate(45deg); }
+.map-legend .lg-current {
+  border-radius: 50%;
+  background: var(--c-gold);
+  box-shadow: 0 0 0 2px rgba(200, 162, 74, 0.35);
+}
+
+.map-reset {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 5;
+  padding: 6px 14px;
+  font-size: 12px;
+  letter-spacing: 0.15em;
+  color: var(--c-ink-soft);
+  background: rgba(244, 234, 214, 0.92);
+  border: 1px solid var(--c-ink-faint);
+  border-radius: 3px;
+  transition: background var(--t-fast) var(--ease-standard), color var(--t-fast) var(--ease-standard), border-color var(--t-fast) var(--ease-standard);
+}
+.map-reset:hover {
+  background: var(--c-ink);
+  color: var(--c-bg);
+  border-color: var(--c-ink);
+}
+
+.map-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 15px;
+  letter-spacing: 0.2em;
+  color: var(--c-ink-faint);
+}
+
+/* ---- 13.5 事件卡 meta 行「查看舆图」入口（js/scroll.js 渲染） ---- */
+
+.card-meta-place {
+  padding: 0;
+  font: inherit;
+  color: var(--c-vermilion);
+  background: none;
+  border: none;
+  border-bottom: 1px dashed rgba(168, 52, 31, 0.5);
+  transition: color var(--t-fast) var(--ease-standard), border-bottom-color var(--t-fast) var(--ease-standard);
+}
+.card-meta-place:hover {
+  color: var(--c-vermilion-deep);
+  border-bottom: 1px solid var(--c-vermilion-deep);
+}
+
+/* ---- 13.6 响应式与减少动效 ---- */
+
+@media (max-width: 600px) {
+  .map-hud { padding: 10px 16px; gap: 12px; }
+  .map-title { font-size: 17px; letter-spacing: 0.22em; }
+  .map-subtitle { font-size: 11px; }
+  .map-note { max-width: 62%; font-size: 10.5px; }
+  .map-legend { gap: 10px; font-size: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-stage.map-enter,
+  .map-enter .map-marker-inner,
+  .map-enter .map-ripple,
+  .map-marker-halo,
+  .map-focus-ring { animation: none; }
+  .map-ripple, .map-focus-ring { opacity: 0; }
+}
+
+/* ========================================================================
+   14. 触控热区（pointer: coarse，Task 5 移动/平板适配追加）
+   iOS HIG 建议可交互元素命中区 ≥44×44px；用 (pointer: coarse) 而非宽度断点——判断依据是
+   "这是不是手指在戳"，不是"屏幕多宽"：ipad-land 视口宽达 1366px（命中桌面默认档
+   --node-dot:22px），但照样是手指操作，按宽度断点会把它误判成"鼠标场景"漏做热区放大；
+   反过来细指针的桌面档（本节点不命中该媒体查询）视觉与命中行为必须保持原样，不受影响。
+   用负 inset 的绝对定位 ::after 叠一层不可见扩张区，而不是 padding/transform:scale——
+   padding 会把内容一起撑开、scale 是整体放大，两者都会改变视觉尺寸；只有"元素本身盒模型
+   不变 + 额外一层看不见的绝对定位扩张层"能在视觉零变化的前提下把命中矩形做大。
+   tools/responsive-check.mjs 的 A5 断言用 __shyHitRect（非 none 的 content、
+   position:absolute、且四边 inset 为负值的 ::after）做算术粗筛，2026-07-27 审查追加
+   __shyRealHit 用 elementFromPoint 做四向真实命中测试作为最终判定——粗筛只认这个口径，
+   但粗筛通过不再等于断言通过，见该文件两个函数的实现与注释。 */
+@media (pointer: coarse) {
+  .node::after,
+  #top-bar-actions button::after,
+  .person-chip::after,
+  .choice-option::after,
+  .card-close::after {
+    content: "";
+    position: absolute;
+    z-index: -1; /* 扩张层必须叠在按钮/节点背景之下，不能盖住图形或悬停态，见各选择器注释 */
+  }
+
+  /* .node 本身已是 position:absolute 且 z-index:3（见 5.2 节），这两者组合已经在 .node 自身
+     建立局部层叠上下文，::after 以它自身为容纳块，不需要再补 position:relative。
+     绘制顺序订正（控制方 2026-07-27 审查指出原注释心智模型有误）：按 CSS2.1 层叠顺序，
+     负 z-index 子元素画在其层叠上下文根（.node 自身）的背景/边框**之上**，不是之下——
+     "负数 = 更靠后 / 被遮挡"是常见的错误直觉，实际只是排在正常流内容与正 z-index 内容
+     之前。.node 内部没有其他与之竞争的定位子内容，::after 本身又不带任何可见样式
+     （content 为空、无 background/border），所以不会遮挡圆点/菱形的视觉呈现，实测
+     （截图 + DOM 检查）圆点填色、呼吸动画（shy-pulse）与悬停缩放均未被遮挡。另外，真正
+     建立层叠上下文的是 .node 自身的 position+z-index 组合，不是 .node-wrap 的
+     position:relative——.node-wrap 没有设 z-index，单纯 position:relative 不建立层叠
+     上下文（同下方 #top-bar-actions button 段落"坑①"的教训，此处只是恰好不受影响，因为
+     承载 ::after 的容纳块本来就是 .node 自身，不涉及 .node-wrap）。
+     inset 用 --node-dot 反推：(44px - --node-dot) / -2，扩张后边长恒为 44px，随手机/平板/
+     桌面三档 --node-dot（20/26/22px）自动换算，不必对每个断点各写一条。border-radius:50%
+     把这个 44×44 方框收成一个直径 44 的圆——已用 elementFromPoint 在相邻节点连线中点采样
+     验证：手机档节点中心间距 84px（--node-w 62 + --node-gap 22），扩张后单节点命中半径
+     最大仅 23px 左右，中点采样点离最近节点中心还有 40px+ 余量，未出现"点 A 却命中 B"的
+     错位，命中的元素都是坐标上距离更近的那一个。
+     ***2026-07-27 审查发现的真实 bug：抉择点菱形本该更小的容纳块被当成了通用 --node-dot***。
+     首轮实现的注释曾断言"菱形命中区天然比同档圆点更宽松、不会更窄"——这个断言是错的，已用
+     elementFromPoint 实测证伪：.node--choice 自身宽高是 calc(var(--node-dot) - 4px)（见下方
+     菱形专属规则），比通用 --node-dot 小 4px，但上面这条 inset 公式统一按未收窄的
+     --node-dot 计算，导致菱形的 ::after 容纳块用错了尺寸——以手机档 --node-dot:20px 为例，
+     菱形自身实际是 16px，公式仍按 (44-20)/-2=-12px 扩张，算出的方框只有 16+12+12=40px
+     （不是需要的 44px），border-radius:50% 把这个偏小的方框收成直径 40 的圆（半径 20，不是
+     该有的半径 22）——且这个偏差与 45° 旋转无关（旋转不改变圆的形状，圆本身是旋转不变的），
+     纯粹是容纳块尺寸算错了 4px。实测 elementFromPoint 在菱形四个方向的命中半径确实只有
+     ~20px，比圆点节点（半径正好 22px）少 2px，四向探测（见 tools/responsive-check.mjs 的
+     __shyRealHit）在 22px 处稳定 MISS。真正的修法见下方 .node--choice::after 的专属
+     inset 覆盖规则，用菱形自身的 (--node-dot - 4px) 反推正确的容纳块尺寸。 */
+  .node::after {
+    inset: calc((44px - var(--node-dot)) / -2);
+    border-radius: 50%;
+  }
+  /* 菱形专属 inset：覆盖上面通用规则里按错误尺寸（未收窄的 --node-dot）算出的扩张量。
+     .node--choice 自身宽高是 calc(var(--node-dot) - 4px)（见 5.2 节），要让扩张后的方框
+     恒为 44×44，扩张量须按这个收窄后的尺寸反推：(44px - (--node-dot - 4px)) / -2，等价于
+     (48px - --node-dot) / -2。选择器与上面的 .node::after 同为（类+伪元素）特异性，源码
+     顺序更靠后，正确覆盖生效。border-radius:50% 沿用通用规则（源码顺序在前，不冲突，两条
+     规则分别贡献 inset 与 border-radius，级联合并）。实测（elementFromPoint 四向探测）
+     修复后菱形命中半径从 ~20px 提升到 ~22px，与圆点节点一致，A5 对 .node--choice 转为
+     真绿。 */
+  .node--choice::after {
+    inset: calc((48px - var(--node-dot)) / -2);
+  }
+
+  /* #top-bar-actions button 默认 position:static（未建立定位上下文），必须显式补 relative——
+     否则 ::after 会以更外层已定位的 #top-bar（position:relative）为容纳块，扩张量摆到错误
+     坐标系里、实际不会盖住按钮本体。手机档按钮实测 42×31px（border-box）。
+     ***实测踩过的坑① z-index 逃逸***：仅补 position:relative（不带 z-index）不够——
+     position:relative 且 z-index:auto 的元素不会建立新的层叠上下文，::after 的 z-index:-1
+     因此不会"退到按钮自己背景之下"，而是穿透到按钮所在的更外层层叠上下文（这里是 #top-bar，
+     position:relative + z-index:20），沉到 #top-bar 自身范围内所有正常流内容之下——实测用
+     elementFromPoint 点击扩张区四边，命中的是 HEADER（#top-bar 本身）或 NAV
+     （#top-bar-actions 容器），根本点不中按钮，扩张等于白扩。.node / .card-close 之所以天然
+     正确，是因为它们本来就带显式 z-index（.node 的 z-index:3、.card-close 的 z-index:2）与
+     position 组合，已经各自建立了局部层叠上下文。这里补一个 z-index:0（只为建立上下文，不
+     改变它在 #top-bar-actions 里相对其他按钮的正常流叠放顺序）即可让 ::after 的 -1 正确落回
+     按钮自己背景之下。
+     ***实测踩过的坑② overflow-x/overflow-y 连坐裁剪***：修完①后，手机宽度档（≤600px）下
+     elementFromPoint 精确探测发现扩张区四边都不足额兑现，根因是 Task 4 给 #top-bar-actions
+     （mobile 档）加的 overflow-x:auto（为保证 6 按钮态"重新开始"按钮不被无声裁掉、必要时可
+     横向滚动，见下方该规则注释）：CSS 规范规定 overflow-x/overflow-y 只要有一个不是
+     visible，另一个若原本是 visible 就会被强制计算成 auto——即使作者显式写
+     overflow-y:visible 也无法覆盖这条计算规则（已实测：加了这行 getComputedStyle 读到的
+     overflowY 依旧是 "auto"，不是 "visible"，因此放弃这个思路）。
+     ***2026-07-27 审查订正***：这条强制计算对**横纵两个方向都成立**，首轮实现（见
+     task-5-report.md）曾误判"只影响纵向、左右两边正常"——2026-07-27 复审用 elementFromPoint
+     四向精确探测证伪：水平方向同样被裁，只是表现形式不同：按钮之间有 gap（手机档 5px），
+     ±2px 的水平扩张量小于半个 gap，中间按钮的左右扩张落在 gap 空隙里、不触发裁剪，实测
+     真实达到（甚至略超）声明的 -2px 扩张；但整条 nav 最外侧——第一个按钮的左边、最后一个
+     按钮的右边——扩张区会撞上 nav 自己的裁剪盒边缘，被同一条"连坐"规则裁掉，且两侧受裁剪
+     的程度并不对称：实测第一个按钮左侧真实边界约 21.9px（比不裁剪时的理论值 23px 少
+     约 1px，但仍在 44×44 门槛之上），最后一个按钮右侧真实边界仅约 20.7-21.0px（少约 2px，
+     跌破门槛）——原因未完全查清（nav 与 #top-bar 左右内边距对称，但排布链路上 #app-title/
+     #score-hud 的宽度分配可能引入了这点不对称），但两侧实测数据不同是可复现的事实，不能
+     笼统说成"水平方向真实增益是 0px"。纵向问题更严重：#top-bar-actions 自身高度与按钮
+     内容高度当时（首轮）分毫不差、没有任何富余，一旦 overflow-y 被连坐算成 auto，按钮
+     ::after 的纵向扩张就整段超出 nav 自己的裁剪盒、被无声裁掉——数值断言 __shyHitRect
+     测不出这个问题（它只做算术加减，不模拟真实渲染裁剪），必须用 elementFromPoint 实测
+     才能发现。真正的解法不是去掉 overflow-x:auto（那会重新放回 Task 4 修过的"6 按钮态
+     重新开始不可达"），而是给 nav 自己的盒子腾出足够的空间，使扩张区落在 nav 的裁剪盒
+     以内、根本不触发裁剪——纵向见下方 #top-bar-actions 的 padding 与 #top-bar 高度补丁；
+     水平方向（仅右侧，第三轮修复新增）见下方 padding-right 补丁及其专门注释。 */
+  #top-bar-actions button {
+    position: relative;
+    z-index: 0;
+  }
+  #top-bar-actions button::after {
+    inset: -8px -2px -12px -2px;
+  }
+
+  /* 承接上面"坑②"：只在"手机宽度档（触发 overflow-x:auto）+ 粗指针（触发按钮纵向扩张）"
+     同时成立时才需要下面这组 padding + 顶栏高度补丁，其余触控设备（iPhone 14 横屏、iPad
+     mini/Pro、iPad 横屏）的 #top-bar-actions 没有设 overflow-x，overflow-y 保持默认
+     visible，扩张区不会被裁，实测 elementFromPoint 已经命中正确，不需要这组补丁也不该
+     无条件套用；细指针窄窗口（罕见的桌面小窗）同样不该被影响，因此都用 (max-width:600px)
+     and (pointer:coarse) 精确圈定，不写进上面通用的 #top-bar-actions 规则、也不写进
+     8. 响应式一节的基础 #top-bar 规则里（那里的 height:48px 保持不变，本节只在触控 +
+     手机宽度同时成立时叠加 6px，细指针窄窗口不受影响）。
+
+     ***2026-07-27 审查追加修复：真正补满纵向缺口***。首轮实现（task-5-report.md 记录）
+     在"不撑高手机顶栏"的约束下，只给 nav 补了对称的 padding:8px 0，实测顶边真实富余
+     7px（接近声明的 8px），但底边只兑现约 3px，且继续加大 padding（8→14px）收益明显
+     递减（底边真实富余只从 3px 涨到 6px），在旧约束下判定为"已知取舍"。本轮控制方明确
+     解除"不撑高顶栏"的约束（手机顶栏两行收单行已经省下 42px，回吐几 px 换真实达标是
+     划算的），于是改用三处联动调整，而不是单独加大 padding：
+     1) nav 的下内边距从 8px 提到 14px（上内边距维持 8px 不变——顶边本来就有余量 7px，
+        已经超过 44×44 目标所需的一半 22px，不需要再加）；
+     2) ::after 的下 inset 从 -8px 放宽到 -12px（上 inset 维持 -8px 不变），原因是诊断中
+        发现"只加大 padding、不加大 inset"存在一个隐藏天花板：::after 自身的声明框边界
+        才是扩张的真正上限，nav 的 padding 只负责"不裁掉这个声明框"，padding 给得再多、
+        声明框本身不变大也无济于事——这正是首轮"padding 8→14px 只换来约一半真实富余"
+        的根本原因之一；用 DOM.getBoxModel + 逐像素 elementFromPoint 扫描另外还观察到
+        nav 底部有一条与 CSS 声明脱节的窄裁剪带，怀疑与 overflow-x:auto 在 1px 真实横向
+        溢出（scrollWidth 231/clientWidth 230）下渲染出的原生横向滚动条占用空间有关，
+        但未能 100% 定位到 Chromium 内部机制，故不作为确定结论，只按实测数值定案；
+     3) 手机档 #top-bar 高度从 48px 提到 54px（只在本媒体查询内生效，见下方 #top-bar
+        规则，8. 响应式一节的基础值不变），给 nav 新的高度（8+31+14=53px）留出不溢出
+        #top-bar 的空间——若不加高顶栏，nav 会比顶栏本身还高，视觉上会溢出顶栏边界。
+     三者联动后用 elementFromPoint 四向精确探测（375×667、390×844 两款设备，5/6 按钮态
+     均测，逐 1px 步进扫描到失败点）实测：中心向上 23px、向下 24px 均命中按钮本体（超过
+     44×44 目标所需的 22px 门槛，各留 1-2px 安全余量），左右方向当时未动（第三轮又追加了
+     仅针对最后一个按钮右侧的 padding-right 修复，见下方专门注释）。完整的按设备/方向
+     实测数据表见 task-5-report.md。
+     视觉验证：nav 是 #top-bar（align-items:center）里的一个 flex 项，加了非对称的上下
+     padding 后 nav 自身盒高从 31 长到 8+31+14=53，小于 #top-bar 新高度 54px（留约 1px
+     缓冲，不溢出）；已用 getBoundingClientRect 实测按钮自身 top/height（8px/31px）在
+     补丁前后完全相同，纯视觉不受影响；5/6 按钮态下 #score-hud 与各按钮的可见性、A1
+     无溢出判定均复核无回归（详见 task-5-report.md）。
+
+     ***2026-07-27 第三轮修复：补齐最后一个按钮右侧的水平缺口***。上面坑②订正一直把
+     "最后一个按钮右侧真实增益接近 0"记成已知取舍——控制方复核后改变主意：这一条常驻红
+     会污染后续任务的信号，值得花 2-3px 的 nav 右内边距去换真绿。用法与上面的纵向 padding
+     完全同源：overflow-x:auto 的裁剪盒边缘就是 nav 的 padding box 边缘，给 nav 右侧腾出
+     空间即可让最后一个按钮的 ::after 右扩落在裁剪盒以内。取值 2px 而非直觉上更"稳妥"的
+     更大值：实测 padding-right 从 0 加到 12px 时，nav 是与 #score-hud（flex-shrink:999，
+     全局公认"永远第一个被牺牲"的元素，见 8. 响应式一节注释）同排的 flex 兄弟，nav 变宽
+     会直接从 #score-hud 身上扣——iPhone SE 5 按钮态下 12px 会把 #score-hud 挤到 0，原样
+     重现 Task 4 修过的"总分永久不可见"（只是这次由 padding-right 触发，方向不同、性质
+     相同）。而实测命中距离并不随 padding-right 线性变长：0.5px 时右侧真实边界约 21.3px
+     （< 44×44 门槛所需的 21.5，仍会判负），1px 时约 21.85px（勉强过线但余量薄），
+     **2px 起真实边界稳定落在约 21.9px，与"声明层面精确等于 44×44、无任何裁剪"的健康
+     元素完全同源**（即前面 finding 3 一节描述的半开区间取整边界，不再是被裁剪的信号）——
+     继续加到 3px 甚至更多不再改变这个边界，只会白白多占 #score-hud 的空间，故不必超过
+     2px。结论：2px 是"刚好越过安全边界、不多占一分空间"的最小值，取更大的 3px 没有额外
+     好处，只有额外代价（#score-hud 再窄 1px）。仅补右侧（padding-left 仍是 0）——左侧
+     的裁剪缺口不在本轮范围内（第一个按钮左边缘紧贴 nav 左边缘是对称的已知取舍，但
+     Task 5 验证器的 A5 断言只检验"命中区≥44×44"，不检验"扩张是否左右对称"，且左侧目前
+     没有产生失败，未在此改动范围内一并处理，避免无谓扩大改动面）。实测 elementFromPoint
+     确认：加了 padding-right:2px 后，最后一个按钮右侧真实命中边界从原来的约 20.7px
+     提升到约 21.9px，四向探测转为真绿；#score-hud 在 iPhone SE/14 × 5/6 按钮态四种组合
+     下宽度分别为 9.48px / 24.39px / 34.03px / 49px（对照改动前 11.47px / 26.375px /
+     36.02px / 51px，均只减少约 2px，未出现归零），A1 无溢出判定四种组合下均复核通过。
+     完整数据表见 task-5-report.md。 */
+  @media (max-width: 600px) and (pointer: coarse) {
+    #top-bar {
+      height: 54px;
+    }
+    #top-bar-actions {
+      padding: 8px 2px 14px 0;
+    }
+
+    /* #app-title 站标补漏（控制方追加，非本节 Task 5 原始范围）：手机档站标收成只剩"史"
+       印章后（见 8. 响应式一节 .app-title-text 规则的详细背景），#app-title 的命中区缩到
+       实测 26×22.453125px（375/390 两款设备完全一致，见 task-9-report.md 的实测数据），
+       远低于 44×44 门槛——但它是有点击行为的元素（js/app.js 绑定点击 → 回到长卷视图），
+       不补齐就是一个"看得见点不中"的死角。
+       只在本条 (max-width:600px) and (pointer:coarse) 内生效，不外溢到平板/桌面触屏：
+       那些断点下 .app-title-text 仍可见，#app-title 天然宽得多，是否需要扩张、扩张多少
+       是完全不同的另一个问题，未经实测不敢断言，故不在控制方本次追加的范围内。
+       #app-title 默认 position:static，必须显式补 relative + z-index:0 建立局部层叠
+       上下文——原因与上面 #top-bar-actions button 的"坑①"完全相同：不建立上下文的话
+       ::after 的 z-index:-1 会穿透到 #top-bar 自身范围，实测扩张区会命中 HEADER
+       （#top-bar 本身）而非 #app-title。
+       inset 数值按实测框反推（两款设备 getBoundingClientRect 完全相同：left 10,
+       top 15.265625, width 26, height 22.453125）：水平方向 (44-26)/2=9px；垂直方向
+       (44-22.453125)/2=10.7734375px，取 11px（比精确值多留约 0.23px 安全边际）——同
+       .node::after 的 (44-var)/-2 公式同一套算法，只是这里手写常量而非引用 CSS 变量，
+       因为 #app-title 的宽高不由任何 --node-* 变量驱动，没有变量可引用。
+       视觉/布局零影响：::after 无背景/边框，纯占位扩张层，不遮挡"史"印章（::before）；
+       绝对定位负 inset 不参与流布局，不改变 #app-title 自身盒尺寸，因此不侵蚀
+       #score-hud / #top-bar-actions 的横向预算——5/6 按钮态总分复测见 task-9-report.md，
+       两组合下 .hud-total 均单行、不截断。
+       唯一已知的相邻元素影响：向右探测点 (中心+21.5px, 中心) 本来就落在 #score-hud 的
+       .hud-total 几何范围内（两者 gap 仅 8px，这个探测点落在 hud-total 矩形内是布局本身
+       早已存在的既成事实，不是本次改动造成的）；要让"右"方向命中 #app-title，扩张后的
+       ::after 必然与 hud-total 产生约 1px 重叠——#app-title 补了 position:relative+
+       z-index:0 后，按 CSS2.1 层叠顺序，它（含内部 z:-1 的 ::after）整体落在步骤 6
+       （stack level 0 的定位后代），高于未定位的 #score-hud 所在的步骤 3（就地流内
+       非定位后代），这 1px 重叠区域内 elementFromPoint 会判给 #app-title。hud-total 本身
+       不可点击（纯展示的分数文本，未绑定任何事件），且 ::after 无可见样式、不改变
+       hud-total 文字的视觉呈现——这 1px 只影响命中归属，不影响任何看得见或原本点得到的
+       功能，代价可接受。 */
+    #app-title {
+      position: relative;
+      z-index: 0;
+    }
+    #app-title::after {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      inset: -11px -9px -11px -9px;
+    }
+  }
+
+  /* .person-chip / .choice-option 实测在全部断点下命中矩形本就 ≥44×44
+     （.person-chip 48-56 宽 × 53-103 高；.choice-option 本身是大按钮，270-555 宽 × 79-103
+     高），此处仍按设计补 relative + 适度扩张，统一"触控设备下可交互元素都带外扩热区"的
+     口径，也为未来样式收紧留余量，而非为了让断言变绿才加。gap 净余量核算：.person-chip
+     兄弟间 gap 在 .card-persons 基础规则是 14px，两侧各收窄 6px 后仍余 2px 不咬合；但手机档
+     （2026-07-28 复审发现）.card-persons 的 gap 被 max-width:600px 覆写成 10px（8 节），
+     两侧仍各收窄 6px、共 12px > 10px，本目标断点上相邻 chip 的扩张热区实际约重叠 2px——
+     命中区重叠只影响"点到哪个"这类边界判定，不产生视觉可见的位移或裁切，且两颗 chip 仍各自
+     满足 ≥44×44（本条断言的判据），危害可忽略，这里如实记录而非当作已解决。.choice-option
+     兄弟间同为 14px 且未被任何断点覆写，两侧各收窄 4px 后仍余 6px，不受此问题影响。
+     同上一条 #top-bar-actions button 的教训：只写 position:relative 不够，必须一并给
+     z-index（这里用 0，仅为建立局部层叠上下文，不改变与兄弟元素的正常叠放顺序）。已实测：
+     不加 z-index 时，.person-chip 扩张区四边全部命中 .card-body（穿透到事件卡整体层叠
+     上下文之下），.choice-option 扩张区部分边命中相邻选项/容器而非自身——均是同一根因；
+     加上 z-index:0 后 elementFromPoint 在四边测试点均正确命中各自元素本体。 */
+  .person-chip {
+    position: relative;
+    z-index: 0;
+  }
+  .person-chip::after {
+    inset: -6px;
+  }
+  .choice-option {
+    position: relative;
+    z-index: 0;
+  }
+  .choice-option::after {
+    inset: -4px;
+  }
+
+  /* .card-close 本身已是 position:absolute（固定在事件卡右上角，top:10/right:12），已建立
+     定位上下文——切勿再补 position:relative：那会覆盖它自身的 position:absolute（同一选择器，
+     本条媒体查询声明晚于 6. 节的基础规则，会真的覆盖生效），导致关闭按钮从"卡片右上角
+     绝对定位固定"退化为 relative 偏移，top/right 语义整个变掉。实测原尺寸约 30×30，
+     -10px 扩到约 50×50；.event-card 只设 overflow-y:auto（x 轴默认 visible），扩张后的新顶边
+     恰好落在 0（10px 自身 top − 10px 扩张 = 0），不会被纵向裁剪；右侧同理不会被左右方向
+     裁剪（overflow-x 未设，默认 visible）。 */
+  .card-close::after {
+    inset: -10px;
+  }
+
+  /* 星图节点是 SVG <circle>，不支持 ::after 伪元素，命中区扩大改在 js/graph.js 的
+     buildGraph() 里插入真实的透明 <circle class="graph-node-hit" r="22">，不在这里用
+     inset 套路（这条注释只是交叉引用，方便日后按"pointer:coarse 命中热区"关键字搜到）。
+     未点亮人物在手机上标签渲染成满屏"？"，纯噪声，隐藏之；点亮者的标签不带 is-blurred
+     类，不受这条规则影响，正常显示。 */
+  .graph-node-label.is-blurred {
+    display: none;
+  }
+}
+
+/* ---- 自动放映指示条 ---- */
+
+.autoplay-indicator {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 900; /* 高于 .walkin-overlay，泼溅环视段仍可见、仍可点暂停 */
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(20, 14, 8, 0.78);
+  border: 1px solid rgba(198, 160, 74, 0.45);
+  color: #f0e6d2;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.autoplay-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-vermilion, #a8341f);
+  animation: autoplayDotPulse 1.8s ease-in-out infinite;
+}
+.autoplay-indicator.is-paused .autoplay-indicator-dot {
+  background: var(--c-gold, #c8a24a);
+  animation: none;
+}
+@keyframes autoplayDotPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.25; }
+}
+
+.autoplay-indicator-pause {
+  background: transparent;
+  border: 1px solid rgba(198, 160, 74, 0.5);
+  border-radius: 999px;
+  color: inherit;
+  font: inherit;
+  padding: 3px 10px;
+  cursor: pointer;
+  min-height: 28px;
+}
+.autoplay-indicator-pause:hover { border-color: var(--c-gold, #c8a24a); }
+
+.autoplay-indicator-esc { opacity: 0.6; font-size: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .autoplay-indicator-dot { animation: none; }
+}
+
+@media (max-width: 600px) {
+  .autoplay-indicator { left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); justify-content: center; font-size: 12px; }
+  .autoplay-indicator-esc { display: none; }
+}
+
+/* ---- 章开篇影片全屏覆盖层 ---- */
+
+/* z-index 400：盖住顶栏(20)与事件卡 modal(200)，取全屏观感；低于 .shy-toast(500) 与
+   .autoplay-indicator(900)，使放映提示与暂停按钮在影片之上仍可见、仍可点。 */
+.chapter-film-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: #0b0806;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chapter-film-video {
+  max-width: 100%;
+  max-height: 100%;
+  background: #000;
+}
+
+.chapter-film-loading {
+  position: absolute;
+  color: var(--c-gold, #c8a24a);
+  font-size: 13px;
+  letter-spacing: 0.25em;
+}
+
+.chapter-film-skip {
+  position: absolute;
+  top: max(18px, env(safe-area-inset-top));
+  right: max(18px, env(safe-area-inset-right));
+  min-height: 36px;
+  padding: 7px 16px;
+  border: 1px solid rgba(200, 162, 74, 0.5);
+  border-radius: 999px;
+  background: rgba(20, 14, 8, 0.6);
+  color: #f0e6d2;
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+.chapter-film-skip:hover {
+  border-color: var(--c-gold, #c8a24a);
+}
+
+@media (max-width: 600px) {
+  .chapter-film-skip { font-size: 12px; padding: 6px 13px; }
+  .chapter-film-loading { font-size: 12px; }
+}
+
+/* ---- 自动放映入口弹窗 ---- */
+
+/* z-index 450：高于章开篇影片覆盖层(400)与事件卡(200)，低于 toast(500) 与放映指示条(900)。
+   弹窗出现时放映尚未开始、指示条不存在，但保持这一相对次序可免去将来的意外。 */
+.autoplay-prompt-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 450;
+  background: rgba(20, 14, 8, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(20px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+           max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+  backdrop-filter: blur(3px);
+}
+
+.autoplay-prompt-card {
+  width: min(360px, 100%);
+  padding: 22px 22px 18px;
+  border-radius: 4px;
+  background: var(--c-bg, #f4ead6);
+  border: 1px solid rgba(42, 35, 26, 0.28);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
+  color: var(--c-ink, #2a231a);
+}
+
+.autoplay-prompt-title {
+  margin: 0 0 8px;
+  font-size: 17px;
+  letter-spacing: 0.12em;
+}
+
+.autoplay-prompt-note {
+  margin: 0 0 16px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  opacity: 0.75;
+}
+
+.autoplay-prompt-card button {
+  display: block;
+  width: 100%;
+  margin-bottom: 9px;
+  padding: 11px 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(42, 35, 26, 0.3);
+  background: rgba(255, 255, 255, 0.45);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px; /* 触控热区，与项目既有的 44×44 约定一致 */
+}
+.autoplay-prompt-card button:hover { border-color: var(--c-gold, #c8a24a); }
+
+/* 「从当前进度」是更可能被选中的那个，给它主按钮的分量 */
+.autoplay-prompt-resume {
+  border-color: var(--c-gold, #c8a24a) !important;
+  background: rgba(200, 162, 74, 0.16) !important;
+}
+
+.autoplay-prompt-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  opacity: 0.66;
+}
+
+.autoplay-prompt-cancel {
+  margin-bottom: 0 !important;
+  text-align: center !important;
+  opacity: 0.7;
+}
+
+@media (max-width: 600px) {
+  .autoplay-prompt-card { padding: 18px 16px 14px; }
+  .autoplay-prompt-title { font-size: 16px; }
+}

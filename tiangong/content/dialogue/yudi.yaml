@@ -1,0 +1,103 @@
+id: yudi
+name: 玉皇大帝
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Reliable_Executive"
+  speed: 0.9
+  pitch: -2
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "宣卿上殿。有本早奏，无事退班。"
+  - id: greet_02
+    text: "你且权管那蟠桃园，早晚好生在意。"
+    quote: true
+  - id: greet_03
+    text: "灵霄殿非游耍之地。卿有话，奏来。"
+
+topics:
+  - id: fengguan
+    label: "封齐天大圣的事"
+    source: "第4回"
+    lines:
+      - id: fengguan_01
+        text: "今宣你做个齐天大圣，官品极矣，但切不可胡为。"
+        quote: true
+      - id: w_yd_fengguan_02
+        speaker: pc
+        text: "官品极矣？老孙听着欢喜。只是这官儿，管事不管事？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: fengguan_03
+        text: "天曹诸司，各有执掌。卿的名分是朕特恩，不在诸司之列。"
+      - id: w_yd_fengguan_04
+        speaker: pc
+        text: "(chuckle)好，好，好。好一个官品极矣。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+    next:
+      - { label: "蟠桃园那差事怎么说？", goto: guanzhi }
+      - { label: "臣告退。", goto: __end }
+  - id: guanzhi
+    label: "蟠桃园差事"
+    source: "第5回"
+    lines:
+      - id: guanzhi_01
+        text: "园中仙桃，乃王母娘娘之物。卿是代管，早晚好生在意。"
+      - id: w_yd_guanzhi_02
+        speaker: pc
+        text: "陛下放心。老孙看园，一根草也少不了。"
+        voice_setting: { emotion: happy, speed: 1.2 }
+      - id: guanzhi_03
+        text: "朕前日闻，卿日与星宿们称兄道弟，东游西荡。如今有了事管，须收心。"
+      - id: w_yd_guanzhi_04
+        speaker: pc
+        text: "收心？老孙的心，向来收在肚子里。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+    next:
+      - { label: "守甚么天条？", goto: tianze }
+      - { label: "告退。", goto: __end }
+  - id: chaohui
+    label: "朝礼"
+    source: "第4回"
+    lines:
+      - id: chaohui_01
+        text: "那孙悟空乃下界妖仙，初得人身，不知朝礼，且姑恕罪。"
+        quote: true
+      - id: w_yd_chaohui_02
+        speaker: pc
+        text: "陛下大度。老孙这厢有礼了。"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: chaohui_03
+        text: "恕你无罪，是朕的恩；朝礼不废，是朕的法。卿识之。"
+    next:
+      - { label: "说说封官的事。", goto: fengguan }
+      - { label: "罢了，告退。", goto: __end }
+  - id: tianze
+    label: "天上的法度"
+    source: "第4回、第5回"
+    lines:
+      - id: tianze_01
+        text: "天上有天上的法度。卿在花果山如何，朕不问；在天宫一日，便守一日天条。"
+      - id: w_yd_tianze_02
+        speaker: pc
+        text: "老孙最守规矩。陛下不信，去问御马监的马。"
+        voice_setting: { emotion: happy, speed: 1.15 }
+      - id: tianze_03
+        text: "御马监的事，朕知道。卿是能办事的。"
+    next:
+      - { label: "告退。", goto: __end }
+
+fallback:
+  - id: fb_01
+    text: "依卿所奏。"
+    quote: true
+  - id: fb_02
+    text: "此事非朕所问。卿且退。"
+  - id: fb_03
+    text: "殿上不语闲言。"
+
+bye:
+  - id: bye_01
+    text: "卿去罢。好生在意。"
+  - id: bye_02
+    text: "退班。"

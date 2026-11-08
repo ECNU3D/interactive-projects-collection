@@ -1,0 +1,1802 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>ZELDA DX · GBC</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  /* ============ 页面 chrome(Game Boy Color 紫机身风) ============ */
+  html,body{
+    margin:0; padding:0; background:#d8d0e0;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none; user-select:none;
+    touch-action:none; overscroll-behavior:none;
+  }
+  #wrap{
+    min-height:100vh; box-sizing:border-box;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:14px 10px; gap:10px;
+  }
+  /* 机身屏幕外框:GBC 半透明紫(#663399 系) + 深色镜面框 + 圆角 */
+  #bezel{
+    background:#663399; padding:16px 18px 12px; border-radius:16px 16px 40px 16px;
+    box-shadow: inset 0 2px 0 #8a5cc0, inset 0 -4px 0 #4a2372, 0 8px 22px rgba(50,20,80,.4);
+  }
+  #frame{
+    background:#1c1424; padding:10px; border-radius:10px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.7);
+  }
+  canvas#gb{
+    display:block; width:480px; height:432px; /* JS 会根据窗口改成整数倍 */
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    background:#2038a0; border-radius:2px;
+  }
+  /* GAME BOY COLOR 字标:COLOR 五个字母用彩虹色(情怀细节) */
+  #caption{
+    margin-top:8px; text-align:center; color:#cbb8e8; font-size:10px; letter-spacing:3px;
+    font-weight:bold; font-style:italic;
+  }
+  #caption .c1{ color:#f02828; } #caption .c2{ color:#f89020; }
+  #caption .c3{ color:#28c828; } #caption .c4{ color:#2088f8; }
+  #caption .c5{ color:#9838c8; }
+  /* 常驻按键说明 */
+  #hint{ color:#4a3a5f; font-size:12px; letter-spacing:1px; text-align:center; }
+  /* ============ 触屏虚拟按键(半透明) ============ */
+  #touch{
+    width:100%; max-width:560px;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:0 6px; box-sizing:border-box;
+  }
+  .pad{ display:grid; grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,46px); gap:4px; }
+  .tbtn{
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(60,30,90,.28); color:#3a2458;
+    border-radius:10px; font-size:18px; font-weight:bold;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .tbtn.on{ background:rgba(60,30,90,.62); color:#1c0f2c; }
+  .tbtn.empty{ background:transparent; pointer-events:none; }
+  .abtn{ width:56px; height:56px; border-radius:50%; font-size:20px; }
+  .sbtn{ width:52px; height:22px; border-radius:12px; font-size:10px; letter-spacing:1px; }
+  #mid{ display:flex; flex-direction:column; gap:10px; align-items:center; }
+  #ab{ display:flex; gap:14px; align-items:center; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="bezel">
+    <div id="frame"><canvas id="gb" width="160" height="144"></canvas></div>
+    <div id="caption">GAME BOY <span class="c1">C</span><span class="c2">O</span><span class="c3">L</span><span class="c4">O</span><span class="c5">R</span></div>
+  </div>
+  <div id="ui">
+    <div id="hint">&#8592;&#8593;&#8595;&#8594; 移动 &nbsp; X(A) 挥剑 &nbsp; Z(B) 用道具 &nbsp; SHIFT(SELECT) 换道具 &nbsp; ENTER(START) 开始</div>
+    <div id="touch">
+      <div class="pad">
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="up">&#9650;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="left">&#9664;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="right">&#9654;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="down">&#9660;</div>
+      </div>
+      <div id="mid">
+        <div class="tbtn sbtn" data-k="select">SELECT</div>
+        <div class="tbtn sbtn" data-k="start">START</div>
+      </div>
+      <div id="ab">
+        <div class="tbtn abtn" data-k="b">B</div>
+        <div class="tbtn abtn" data-k="a">A</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+ * 塞尔达传说 织梦岛 DX(Link's Awakening DX)· GBC 精华复刻版(单文件,零依赖)
+ * 操作:方向键=十字键(八方向斜走允许)  X=A(挥剑)  Z=B(用道具)
+ *       Enter=Start  Shift=Select(切换已拥有道具)
+ * 结构:标题 -> 5x4=20 房间地牢(迷你银河城:西侧炸弹->北侧钩爪->深处BOSS)
+ *       -> 举起勇气三角通关画面
+ *
+ * 【原版资料考据(凭训练记忆转写,供核对)】
+ * - 林克精灵:16x16,绿帽绿衣。LA DX 原版 4 色(深绿描边/绿/肤色/金发),
+ *   本复刻遵守"每精灵 3 色+透明"纪律,合并为 深绿#187028 / 绿#40b840 / 肤#f8c888。
+ * - 房间:10x8 块 16x16 图块(160x128),顶部 16px HUD,与 LA 的房间制一致;
+ *   走到屏幕边缘触发整屏滑动过场(20 帧)。
+ * - 敌人:史莱姆(直线冲撞)/骷髅(正面格挡,绕背打)/蝙蝠(正弦飞行)。
+ * - BOSS:4x4 图块石巨像,三段循环(冲撞->弹幕->眩晕露弱点 3 秒),3 轮击杀。
+ * ===================================================================== */
+
+/* ---------- 基本常量 ---------- */
+const W = 160, H = 144;                          // GBC 逻辑分辨率 160x144
+const TILE = 16, COLS = 10, ROWS = 8;            // 房间 10x8 图块
+const HUDH = 16;                                 // 顶部 HUD 高度
+
+/* GBC 调色板:全局 23 色(≤32),全部明快高饱和;画布上无渐变无半透明 */
+const PAL = [
+  '#101010', // 0  黑(描边/文字/沟壑)
+  '#f8f8f8', // 1  白
+  '#40b840', // 2  林克绿(帽/衣)
+  '#f8c888', // 3  肤色
+  '#187028', // 4  深绿(描边/草暗部)
+  '#68d060', // 5  浅绿(史莱姆/草亮部)
+  '#3090f0', // 6  水蓝
+  '#88d0f8', // 7  波光浅蓝
+  '#c89050', // 8  地砖棕
+  '#785028', // 9  深棕(砖缝/宝箱)
+  '#d8d8d8', // 10 浅灰(骷髅/墙砖)
+  '#686868', // 11 深灰(墙/BOSS石身)
+  '#f03030', // 12 红(心/宝石/蝙蝠眼)
+  '#f8c820', // 13 金(三角/卢比/钥匙)
+  '#9838c8', // 14 紫(蝙蝠)
+  '#401858', // 15 暗紫(蝙蝠描边)
+  '#30a048', // 16 草地绿
+  '#f86838', // 17 橙(爆炸/火花)
+  '#b8b8b8', // 18 银灰(剑刃/锁链)
+  '#2038a0', // 19 深蓝(HUD/标题底)
+  '#f8f880', // 20 亮黄(三角光芒)
+  '#e0b070', // 21 地砖高光
+  '#602808', // 22 暗棕(宝箱暗部)
+];
+
+const cv = document.getElementById('gb');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+/* 全部画面只允许用 fillRect 画(便于像素精确与离屏测试) */
+function R(x, y, w, h, c) {
+  ctx.fillStyle = PAL[c];
+  ctx.fillRect(x | 0, y | 0, w, h);
+}
+
+/* ---------- 8-bit 芯片音效(Web Audio 合成,无音频文件) ----------
+ * 2 方波 + 1 噪声通道;未 init(无 AudioContext)时全部静默 no-op,
+ * 这样在离屏 vm 里调用也绝对安全。 */
+const Snd = (() => {
+  let ac = null, master = null, noiseBuf = null;
+  function init() {                       // 首次按键后才创建 AudioContext
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain();
+    master.gain.value = 0.12;
+    master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  function sq(freq, delay, dur, vol, slideTo) {   // 方波
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(delay, dur, vol, hp) {           // 噪声通道
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const s = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+    s.buffer = noiseBuf;
+    s.loop = true;
+    f.type = hp ? 'highpass' : 'lowpass';
+    f.frequency.value = hp ? 1800 : 700;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t); s.stop(t + dur + 0.02);
+  }
+  const N = n => 440 * Math.pow(2, (n - 69) / 12); // MIDI 音号 -> 频率
+  return {
+    init, N, sq, noise,
+    start()  { sq(N(72), 0, 0.08, 0.4); sq(N(79), 0.08, 0.14, 0.4); },
+    select() { sq(N(76), 0, 0.05, 0.3); },
+    slash()  { noise(0, 0.07, 0.35, true); sq(920, 0, 0.08, 0.3, 260); },          // 挥剑"唰"
+    clink()  { sq(1760, 0, 0.04, 0.35); sq(2349, 0.04, 0.05, 0.3); },              // 剑被格挡"铛"
+    enemyHit(){ sq(320, 0, 0.07, 0.4, 140); },                                     // 敌人受击
+    enemyDie(){ sq(620, 0, 0.12, 0.4, 70); noise(0, 0.1, 0.3, false); },           // 敌人爆灭
+    hurt()   { sq(220, 0, 0.16, 0.45, 70); noise(0, 0.08, 0.3, false); },          // 林克受伤
+    heart()  { sq(N(88), 0, 0.06, 0.35); sq(N(93), 0.06, 0.1, 0.35); },            // 捡心
+    rupee()  { sq(1568, 0, 0.07, 0.3); },                                          // 捡卢比"叮"
+    keyGet() { sq(N(84), 0, 0.06, 0.35); sq(N(88), 0.06, 0.09, 0.35); },           // 捡钥匙
+    chestOpen(){ noise(0, 0.18, 0.3, false); sq(140, 0, 0.2, 0.3, 320); },         // 宝箱开盖"吱呀"
+    itemGet(){ [72, 76, 79, 84, 88].forEach((n, i) => sq(N(n), i * 0.07, 0.1, 0.4)); }, // 获得道具上行琶音(灵魂时刻)
+    bombPlace(){ sq(180, 0, 0.08, 0.35, 120); },                                   // 放炸弹"咚"
+    bombBoom(){ noise(0, 0.4, 0.55, false); sq(90, 0, 0.35, 0.5, 38); },           // 爆炸
+    hookFire(){ noise(0, 0.06, 0.3, true); sq(1100, 0, 0.09, 0.3, 500); },         // 钩爪射出
+    hookLatch(){ sq(520, 0, 0.06, 0.4); sq(760, 0.06, 0.08, 0.4); },               // 钩爪挂住
+    door()   { noise(0, 0.25, 0.3, false); sq(110, 0, 0.28, 0.3, 240); },          // 开门
+    push()   { sq(160, 0, 0.06, 0.3, 130); },                                      // 推石块
+    bossRoar(){ noise(0, 0.5, 0.5, false); sq(80, 0, 0.5, 0.5, 45); },             // BOSS 吼
+    bossHit(){ sq(240, 0, 0.15, 0.5, 55); noise(0, 0.12, 0.35, false); },          // BOSS 弱点被击
+    spit()   { sq(700, 0, 0.08, 0.3, 240); },                                      // BOSS 吐弹
+    triForce(){ [67, 72, 76, 79, 84, 88, 91].forEach((n, i) => sq(N(n), i * 0.09, 0.14, 0.42)); }, // 三角之力号角
+    over()   { [76, 72, 69, 65, 62, 57].forEach((n, i) => sq(N(n), i * 0.14, 0.15, 0.42)); },
+  };
+})();
+
+/* ---------- BGM:自创神秘地牢循环(8 小节) + BOSS 紧张变体 ----------
+ * 音符数组硬编码 [MIDI音号, 持续帧数](0=休止);方波,音量压低。
+ * 四分音符 = 24 帧(约 150bpm 的八分感);每小节 96 帧,8 小节一循环。 */
+const BGM = (() => {
+  // 地牢主循环:A 小调神秘冒险感,8 小节
+  const DUNGEON_LEAD = [
+    [69,24],[72,24],[76,24],[72,24],   // A4 C5 E5 C5
+    [74,24],[77,24],[76,24],[74,24],   // D5 F5 E5 D5
+    [72,24],[76,24],[81,24],[76,24],   // C5 E5 A5 E5
+    [77,24],[76,24],[74,48],           // F5 E5 D5(半音)
+    [69,24],[72,24],[76,24],[72,24],
+    [74,24],[79,24],[77,24],[74,24],
+    [76,24],[72,24],[74,24],[71,24],
+    [69,96],                           // A4 全音收尾
+  ];
+  const DUNGEON_BASS = [
+    [45,48],[45,48],[50,48],[50,48],[48,48],[48,48],[50,48],[52,48],
+    [45,48],[45,48],[50,48],[50,48],[52,48],[50,48],[45,48],[45,48],
+  ];
+  // BOSS 变体:紧张上 tempo,八分=12 帧的半音压迫动机,4 小节(384 帧)循环
+  const BOSS_LEAD = [
+    [69,12],[69,12],[72,12],[69,12],[70,12],[69,12],[68,12],[69,12],
+    [69,12],[69,12],[72,12],[69,12],[74,12],[72,12],[70,12],[68,12],
+    [69,12],[69,12],[72,12],[69,12],[70,12],[69,12],[68,12],[69,12],
+    [76,12],[74,12],[72,12],[70,12],[69,24],[0,24],
+  ];
+  const BOSS_BASS = [
+    [45,24],[44,24],[45,24],[41,24],[45,24],[44,24],[45,24],[40,24],
+    [45,24],[44,24],[45,24],[41,24],[45,24],[44,24],[43,24],[44,24],
+  ];
+  function expand(notes) {            // 展开成 {帧: [音号...]} 便于逐帧触发
+    const ev = {};
+    let t = 0;
+    for (const [n, d] of notes) { if (n > 0) ev[t] = n; t += d; }
+    return { ev, len: t };
+  }
+  const songs = {
+    dungeon: { lead: expand(DUNGEON_LEAD), bass: expand(DUNGEON_BASS), vol: 0.10 },
+    boss:    { lead: expand(BOSS_LEAD),    bass: expand(BOSS_BASS),    vol: 0.12 },
+  };
+  let cur = null, pos = 0;
+  return {
+    play(name) { if (cur !== name) { cur = name; pos = 0; } },
+    stop() { cur = null; },
+    get song() { return cur; },
+    tick() {                          // 每个逻辑帧调一次;无声卡时 sq 自带 no-op
+      if (!cur) return;
+      const s = songs[cur];
+      const L = Math.max(s.lead.len, s.bass.len);
+      const p = pos % L;
+      if (s.lead.ev[p] !== undefined) Snd.sq(Snd.N(s.lead.ev[p]), 0, 0.16, s.vol);
+      if (s.bass.ev[p] !== undefined) Snd.sq(Snd.N(s.bass.ev[p] - 12), 0, 0.22, s.vol * 0.8);
+      pos++;
+    },
+  };
+})();
+
+/* ---------- 8x8 手绘像素字体(画布文字只能用它) ---------- */
+const FONT = (() => {
+  const F = {};
+  const def = (ch, rows) => { F[ch] = rows; };
+  def(' ', ["........","........","........","........","........","........","........","........"]);
+  def('0', [".###....","#...#...","#..##...","#.#.#...","##..#...","#...#...",".###....","........"]);
+  def('1', ["..#.....",".##.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('2', [".###....","#...#...","....#...","..##....",".#......","#.......","#####...","........"]);
+  def('3', ["####....","....#...","....#...",".###....","....#...","....#...","####....","........"]);
+  def('4', ["...##...",".#.#....","#..#....","#####...","...#....","...#....","...#....","........"]);
+  def('5', ["#####...","#.......","####....","....#...","....#...","#...#...",".###....","........"]);
+  def('6', [".###....","#.......","#.......","####....","#...#...","#...#...",".###....","........"]);
+  def('7', ["#####...","....#...","...#....","...#....","..#.....","..#.....","..#.....","........"]);
+  def('8', [".###....","#...#...","#...#...",".###....","#...#...","#...#...",".###....","........"]);
+  def('9', [".###....","#...#...","#...#...",".####...","....#...","....#...",".###....","........"]);
+  def('A', [".###....","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('B', ["####....","#...#...","#...#...","####....","#...#...","#...#...","####....","........"]);
+  def('C', [".####...","#.......","#.......","#.......","#.......","#.......",".####...","........"]);
+  def('D', ["####....","#...#...","#...#...","#...#...","#...#...","#...#...","####....","........"]);
+  def('E', ["#####...","#.......","#.......","####....","#.......","#.......","#####...","........"]);
+  def('F', ["#####...","#.......","#.......","####....","#.......","#.......","#.......","........"]);
+  def('G', [".####...","#.......","#.......","#.###...","#...#...","#...#...",".####...","........"]);
+  def('H', ["#...#...","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('I', [".###....","..#.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('J', ["..###...","...#....","...#....","...#....","...#....","#..#....",".##.....","........"]);
+  def('K', ["#...#...","#..#....","#.#.....","##......","#.#.....","#..#....","#...#...","........"]);
+  def('L', ["#.......","#.......","#.......","#.......","#.......","#.......","#####...","........"]);
+  def('M', ["#...#...","##.##...","#.#.#...","#.#.#...","#...#...","#...#...","#...#...","........"]);
+  def('N', ["#...#...","##..#...","#.#.#...","#..##...","#...#...","#...#...","#...#...","........"]);
+  def('O', [".###....","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('P', ["####....","#...#...","#...#...","####....","#.......","#.......","#.......","........"]);
+  def('Q', [".###....","#...#...","#...#...","#...#...","#.#.#...","#..#....",".##.#...","........"]);
+  def('R', ["####....","#...#...","#...#...","####....","#.#.....","#..#....","#...#...","........"]);
+  def('S', [".####...","#.......","#.......",".###....","....#...","....#...","####....","........"]);
+  def('T', ["#####...","..#.....","..#.....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('U', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('V', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".#.#....","........"]);
+  def('W', ["#...#...","#...#...","#...#...","#.#.#...","#.#.#...","##.##...","#...#...","........"]);
+  def('X', ["#...#...","#...#...",".#.#....","..#.....",".#.#....","#...#...","#...#...","........"]);
+  def('Y', ["#...#...","#...#...",".#.#....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('Z', ["#####...","....#...","...#....","..#.....",".#......","#.......","#####...","........"]);
+  def('!', ["..#.....","..#.....","..#.....","..#.....","..#.....","........","..#.....","........"]);
+  def('.', ["........","........","........","........","........","..##....","..##....","........"]);
+  def('-', ["........","........","........",".###....","........","........","........","........"]);
+  def(':', ["........","..##....","..##....","........","..##....","..##....","........","........"]);
+  def("'", ["..#.....","..#.....","........","........","........","........","........","........"]);
+  def('*', ["........",".#...#..","..#.#...","...#....","..#.#...",".#...#..","........","........"]);
+  return F;
+})();
+
+/* 画文字:逐像素 fillRect,等宽 8px,可整数放大 */
+function drawText(str, x, y, color, scale) {
+  scale = scale || 1;
+  str = String(str).toUpperCase();
+  for (let i = 0; i < str.length; i++) {
+    const g = FONT[str[i]] || FONT[' '];
+    for (let r = 0; r < 8; r++) {
+      const row = g[r];
+      for (let c = 0; c < 8; c++) {
+        if (row[c] === '#') R(x + i * 8 * scale + c * scale, y + r * scale, scale, scale, color);
+      }
+    }
+  }
+}
+
+/* ---------- 输入:键盘 + 触屏(按下沿可靠入队,不丢输入) ---------- */
+const keys = { left: 0, right: 0, up: 0, down: 0, a: 0, b: 0, start: 0, select: 0 };
+const pressed = {};                    // 按下沿,逻辑帧消费,绝不丢输入
+const KEYMAP = {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+  KeyX: 'a', KeyZ: 'b', Enter: 'start', ShiftLeft: 'select', ShiftRight: 'select',
+};
+window.addEventListener('keydown', e => {
+  const k = KEYMAP[e.code];
+  if (!k) return;
+  e.preventDefault();
+  Snd.init();                          // 首次按键才初始化音频
+  if (!keys[k]) pressed[k] = 1;
+  keys[k] = 1;
+});
+window.addEventListener('keyup', e => {
+  const k = KEYMAP[e.code];
+  if (k) keys[k] = 0;
+});
+function hit(k) { if (pressed[k]) { pressed[k] = 0; return true; } return false; }
+function clearPressed() { for (const k in pressed) pressed[k] = 0; }
+
+/* 触屏按钮(pointer 事件,鼠标同样可用) */
+document.querySelectorAll('[data-k]').forEach(el => {
+  const k = el.getAttribute('data-k');
+  const down = e => {
+    e.preventDefault(); Snd.init();
+    if (!keys[k]) pressed[k] = 1;
+    keys[k] = 1;
+    el.classList.add('on');
+    if (el.setPointerCapture && e.pointerId !== undefined) {
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+  };
+  const up = e => { e.preventDefault(); keys[k] = 0; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+});
+
+/* ---------- 游戏状态 ---------- */
+const ST = { TITLE: 0, PLAY: 1, SLIDE: 2, ITEMGET: 3, DIE: 4, OVER: 5, VICTORY: 6 };
+const game = {
+  state: ST.TITLE, frame: 0,
+  hp: 6,                 // 生命:3 颗心 = 6 个半格
+  rupees: 0, keys: 0, bombs: 0,
+  hasBombs: false, hasHook: false, cur: 0,   // 道具:剑常驻 A;B = 当前选中道具
+  time: 0,               // 通关计时(逻辑帧)
+  bossDead: false, clinkT: 0,
+  overT: 0, dieT: 0, vicT: 0, igT: 0, igItem: '',
+};
+
+/* ---------- 房间数据:5x4 = 20 房间迷你地牢 ----------
+ * 图块字符:'#'墙 '.'地砖 ','草地 '~'水 'X'沟壑 '%'裂缝墙(炸弹可破)
+ *          'D'机关门 'K'钥匙门 'o'开关板 '^'石像(钩爪桩) 'C'宝箱 'B'推块
+ * 道具动线(迷你银河城):
+ *   起点(2,3) -> 西侧(0,2)宝箱拿炸弹 -> 炸开(2,2)北墙 '%'
+ *   -> (2,1)推块上开关开门 'D' -> (2,0)宝箱拿钩爪
+ *   -> (4,1)宝箱拿小钥匙 -> 开(2,0)西侧 'K' 钥匙门
+ *   -> (1,0)钩爪飞越 2 格沟壑 -> (0,0)BOSS 房 */
+const ROOM_DEF = [
+  /* y=0(最北一排) */
+  [
+    { fill: '.', ex: 'E', boss: true },                                        /* (0,0) BOSS 房 */
+    { fill: '.', ex: 'EW', rect: [['X', 4, 1, 5, 6]], feat: [['^', 2, 4], ['^', 7, 3]] }, /* (1,0) 沟壑+双向钩爪桩(西行挂(2,4),东归挂(7,3)) */
+    { fill: '.', ex: 'EWS', feat: [['K', 0, 3], ['K', 0, 4]], chest: [5, 2, 'hook'] }, /* (2,0) 钩爪宝箱+钥匙门 */
+    { fill: ',', ex: 'WS', en: [['bat', 3, 4], ['bat', 6, 3]] },               /* (3,0) 蝙蝠草地 */
+    { fill: ',', ex: 'S', rect: [['~', 6, 1, 8, 2]] },                         /* (4,0) 水塘草地 */
+  ],
+  /* y=1 */
+  [
+    { fill: '.', ex: 'ES', feat: [['^', 2, 2], ['^', 7, 5]], en: [['skeleton', 5, 4]] }, /* (0,1) 石像厅 */
+    { fill: '.', ex: 'WS', en: [['skeleton', 3, 3], ['skeleton', 6, 4]] },     /* (1,1) 骷髅房 */
+    { fill: '.', ex: 'SN', feat: [['D', 4, 0], ['D', 5, 0], ['o', 5, 4]], block: [3, 4] }, /* (2,1) 推块机关 */
+    { fill: '.', ex: 'SEN', en: [['bat', 4, 3]] },                             /* (3,1) 过厅 */
+    { fill: '.', ex: 'WSN', chest: [5, 2, 'key'] },                            /* (4,1) 小钥匙宝箱 */
+  ],
+  /* y=2 */
+  [
+    { fill: '.', ex: 'NES', chest: [5, 2, 'bombs'], en: [['slime', 3, 5]] },   /* (0,2) 炸弹宝箱 */
+    { fill: ',', ex: 'WEN', en: [['slime', 5, 3]] },                           /* (1,2) 草地(北门通(1,1)) */
+    { fill: '.', ex: 'WESN', feat: [['%', 4, 0], ['%', 5, 0]], en: [['slime', 2, 4], ['slime', 7, 3]] }, /* (2,2) 裂缝墙 */
+    { fill: ',', ex: 'WESN', en: [['skeleton', 5, 5], ['bat', 6, 2]] },        /* (3,2) 混合草地 */
+    { fill: ',', ex: 'WSN', en: [['bat', 5, 4]] },                             /* (4,2) 草地 */
+  ],
+  /* y=3(最南一排) */
+  [
+    { fill: ',', ex: 'NE', feat: [['^', 5, 3]] },                              /* (0,3) 石像草地 */
+    { fill: ',', ex: 'WE', rect: [['~', 2, 2, 7, 5]] },                        /* (1,3) 水池回廊 */
+    { fill: ',', ex: 'WEN' },                                                  /* (2,3) 起点 */
+    { fill: ',', ex: 'WEN' },                                                  /* (3,3) 草地 */
+    { fill: ',', ex: 'WN', feat: [['^', 4, 2]] },                              /* (4,3) 石像草地 */
+  ],
+];
+
+const SOLID = { '#': 1, '~': 1, 'X': 1, '%': 1, 'D': 1, 'K': 1, '^': 1 };
+
+let roomsAll = null;        // 全部房间状态(当局持久:炸墙/开门/开箱/推块位置)
+let roomX = 2, roomY = 3;   // 当前房间坐标
+let room = null;            // 当前房间对象
+let curTiles = null;        // 当前房间 8x10 字符二维数组
+let prevTiles = null;       // 滑屏过场时的旧房间图块
+
+function buildRooms() {
+  roomsAll = [];
+  for (let ry = 0; ry < 4; ry++) {
+    const rowArr = [];
+    for (let rx = 0; rx < 5; rx++) {
+      const def = ROOM_DEF[ry][rx];
+      const g = [];
+      for (let y = 0; y < ROWS; y++) {
+        const r = [];
+        for (let x = 0; x < COLS; x++) {
+          r.push((x === 0 || x === COLS - 1 || y === 0 || y === ROWS - 1) ? '#' : def.fill);
+        }
+        g.push(r);
+      }
+      /* 刻出门口(每边中间 2 格) */
+      if (def.ex.includes('N')) { g[0][4] = def.fill; g[0][5] = def.fill; }
+      if (def.ex.includes('S')) { g[7][4] = def.fill; g[7][5] = def.fill; }
+      if (def.ex.includes('W')) { g[3][0] = def.fill; g[4][0] = def.fill; }
+      if (def.ex.includes('E')) { g[3][9] = def.fill; g[4][9] = def.fill; }
+      if (def.rect) for (const [ch, x0, y0, x1, y1] of def.rect)
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) g[y][x] = ch;
+      if (def.feat) for (const [ch, x, y] of def.feat) g[y][x] = ch;
+      rowArr.push({
+        def, tiles: g,
+        chest: def.chest ? { tx: def.chest[0], ty: def.chest[1], item: def.chest[2], opened: false } : null,
+        block: def.block ? { tx: def.block[0], ty: def.block[1], slideT: 0, sdx: 0, sdy: 0 } : null,
+        doorOpen: false,
+      });
+    }
+    roomsAll.push(rowArr);
+  }
+}
+
+/* ---------- 实体容器 ---------- */
+const link = { x: 64, y: 96, fx: 0, fy: 1, swingT: 0, swingId: 0, invuln: 0, kb: 0, kbx: 0, kby: 0, walkT: 0, pushT: 0 };
+let enemies = [];      // {type,x,y,hp,t,face,charge,cdx,cdy,baseY,vx,flash,lastSwing}
+let drops = [];        // {x,y,kind:'heart'|'rupee'|'triforce',t}
+let eprojs = [];       // BOSS 弹幕 {x,y,dx,dy,t}
+let bombsEnt = [];     // {x,y,tx,ty,t,expT}
+const hook = { st: 0, dx: 0, dy: 0, len: 0 };  // 钩爪:0空闲 fire伸出 back收回 pull拉人
+let boss = null;       // {x,y,phase,t,rounds,flash,gemHit}
+const slide = { dx: 0, dy: 0, t: 0, frames: 20 };
+
+/* 敌人初始属性 */
+function mkEnemy(type, tx, ty) {
+  const e = {
+    type, x: tx * 16, y: HUDH + ty * 16, t: (tx * 31 + ty * 17) % 60,
+    hp: type === 'skeleton' ? 2 : 1,
+    face: 'down', charge: 0, cdx: 0, cdy: 0,
+    baseY: HUDH + ty * 16, vx: type === 'bat' ? 0.5 : 0,
+    flash: 0, lastSwing: -1,
+  };
+  return e;
+}
+
+function loadRoom() {
+  room = roomsAll[roomY][roomX];
+  curTiles = room.tiles;
+  enemies = (room.def.en || []).map(([tp, tx, ty]) => mkEnemy(tp, tx, ty));
+  drops = []; eprojs = []; bombsEnt = [];
+  hook.st = 0;
+  link.swingT = 0; link.pushT = 0;
+  boss = (room.def.boss && !game.bossDead)
+    ? { x: 40, y: 52, phase: 'charge', t: 0, rounds: 0, flash: 0, gemHit: false }
+    : null;
+  if (boss) Snd.bossRoar();
+  BGM.play(boss ? 'boss' : 'dungeon');
+}
+
+/* ---------- 碰撞:图块是否实心 ---------- */
+function solidTileAt(tx, ty, ignoreChasm) {
+  if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) return true;
+  const ch = curTiles[ty][tx];
+  if (ch === 'X' && ignoreChasm) return false;      // 钩爪拉人时可飞越沟壑
+  if (SOLID[ch]) return true;
+  if (room.chest && room.chest.tx === tx && room.chest.ty === ty) return true;
+  if (room.block && room.block.tx === tx && room.block.ty === ty) return true;
+  return false;
+}
+/* 林克碰撞盒:16x16 精灵内的 10x9 下身盒(原版俯视角惯例,头部可压墙) */
+function boxSolid(x, y, ignoreChasm) {
+  const x0 = x + 3, y0 = y + 7, x1 = x + 12, y1 = y + 15;
+  for (let ty = (y0 - HUDH) >> 4; ty <= (y1 - HUDH) >> 4; ty++)
+    for (let tx = x0 >> 4; tx <= x1 >> 4; tx++)
+      if (solidTileAt(tx, ty, ignoreChasm)) return true;
+  return false;
+}
+/* 像素点所在图块是否可走(用于边缘过场判定) */
+function pxWalkable(px, py) {
+  return !solidTileAt(px >> 4, (py - HUDH) >> 4);
+}
+
+/* ---------- 开始新游戏 ---------- */
+function startGame() {
+  buildRooms();
+  game.hp = 6; game.rupees = 0; game.keys = 0; game.bombs = 0;
+  game.hasBombs = false; game.hasHook = false; game.cur = 0;
+  game.time = 0; game.bossDead = false; game.clinkT = 0;
+  roomX = 2; roomY = 3;                     // 起点房间(2,3)
+  link.x = 64; link.y = 96; link.fx = 0; link.fy = 1;
+  link.invuln = 0; link.kb = 0; link.swingT = 0;
+  loadRoom();
+  clearPressed();
+  game.state = ST.PLAY;
+  BGM.play('dungeon');
+}
+
+/* 已拥有道具列表(B 键循环用) */
+function ownedItems() {
+  const it = [];
+  if (game.hasBombs) it.push('bombs');
+  if (game.hasHook) it.push('hook');
+  return it;
+}
+function curItem() {
+  const it = ownedItems();
+  return it.length ? it[game.cur % it.length] : null;
+}
+
+/* ---------- 受伤:半颗心 + 击退 + 无敌闪烁 ---------- */
+function hurtLink(dmg, kx, ky) {
+  if (link.invuln > 0 || game.state !== ST.PLAY) return;
+  game.hp = Math.max(0, game.hp - dmg);
+  Snd.hurt();
+  if (game.hp <= 0) {
+    game.state = ST.DIE; game.dieT = 0;
+    return;
+  }
+  link.invuln = 70;                          // 无敌 70 帧(约 1.2 秒)
+  link.kb = 14; link.kbx = kx; link.kby = ky; // 击退 14 帧
+}
+
+/* 过场落点:新房间对侧门口内侧(避免立刻又触发回程)。canEnterRoom 也用它,两处必须一致 */
+function slideSpawn(dx, dy) {
+  let sx = link.x, sy = link.y;
+  if (dx === -1) sx = 140;
+  if (dx === 1) sx = 8;
+  if (dy === -1) sy = 124;
+  if (dy === 1) sy = 20;
+  return [sx, sy];
+}
+
+/* ---------- 房间滑动过场 ---------- */
+function startSlide(dx, dy) {
+  prevTiles = curTiles;
+  slide.dx = dx; slide.dy = dy; slide.t = 0;
+  slide.frames = 20;                          // 20 帧整屏滑动
+  roomX += dx; roomY += dy;
+  const p = slideSpawn(dx, dy);
+  link.x = p[0]; link.y = p[1];
+  loadRoom();
+  game.state = ST.SLIDE;
+}
+
+/* 指定房间的某格是否实心(与 solidTileAt 同规则,但可对任意房间求值) */
+function roomSolidTile(rm, tx, ty) {
+  if (tx < 0 || tx >= COLS || ty < 0 || ty >= ROWS) return true;
+  if (SOLID[rm.tiles[ty][tx]]) return true;
+  if (rm.chest && rm.chest.tx === tx && rm.chest.ty === ty) return true;
+  if (rm.block && rm.block.tx === tx && rm.block.ty === ty) return true;
+  return false;
+}
+/* 目标房间入口落点是否全部可走:只看本侧门口就滑屏,会把林克嵌进
+ * 对面的墙/未开门里(卡死),滑前必须检查对面(如 (2,0) 南门对着未开的机关门 D) */
+function canEnterRoom(dx, dy) {
+  const row = roomsAll[roomY + dy];
+  const rm = row && row[roomX + dx];
+  if (!rm) return false;
+  const p = slideSpawn(dx, dy);
+  const x0 = p[0] + 3, y0 = p[1] + 7, x1 = p[0] + 12, y1 = p[1] + 15;  // 与 boxSolid 同一下身盒
+  for (let ty = (y0 - HUDH) >> 4; ty <= (y1 - HUDH) >> 4; ty++)
+    for (let tx = x0 >> 4; tx <= x1 >> 4; tx++)
+      if (roomSolidTile(rm, tx, ty)) return false;
+  return true;
+}
+
+/* ---------- 宝箱仪式:面向镜头举道具 + 上行琶音 ---------- */
+function openChest(ch) {
+  ch.opened = true;
+  game.igItem = ch.item;
+  game.igT = 0;
+  /* 立即授予(仪式播放期间 HUD 已更新) */
+  if (ch.item === 'bombs') { game.hasBombs = true; game.bombs += 10; }
+  if (ch.item === 'key') { game.keys += 1; }
+  if (ch.item === 'hook') { game.hasHook = true; }
+  Snd.chestOpen();
+  Snd.itemGet();
+  game.state = ST.ITEMGET;
+}
+
+/* ---------- 剑击判定:面前 3 格弧形 ---------- */
+function swordArcTiles() {
+  const cx = link.x + 8, cy = link.y + 8;
+  const ftx = (cx + link.fx * 16) >> 4, fty = (cy + link.fy * 16 - HUDH) >> 4;
+  const tiles = [[ftx, fty]];
+  if (link.fx !== 0) { tiles.push([ftx, fty - 1], [ftx, fty + 1]); }
+  else { tiles.push([ftx - 1, fty], [ftx + 1, fty]); }
+  return tiles;
+}
+function enemyTouchingArc(e) {
+  const x0 = e.x + 2, y0 = e.y + 2, x1 = e.x + 13, y1 = e.y + 13;
+  for (const [tx, ty] of swordArcTiles()) {
+    const rx0 = tx * 16, ry0 = HUDH + ty * 16;
+    if (x0 < rx0 + 16 && x1 > rx0 && y0 < ry0 + 16 && y1 > ry0) return true;
+  }
+  return false;
+}
+
+function killEnemy(e) {
+  e.dead = true;
+  Snd.enemyDie();
+  /* 掉落:约一半概率掉心或卢比 */
+  const r = Math.random();
+  if (r < 0.3) drops.push({ x: e.x + 4, y: e.y + 4, kind: 'heart', t: 0 });
+  else if (r < 0.55) drops.push({ x: e.x + 4, y: e.y + 4, kind: 'rupee', t: 0 });
+}
+
+/* 剑命中敌人(含骷髅正面格挡规则) */
+function swordHitEnemy(e) {
+  if (e.lastSwing === link.swingId) return;
+  e.lastSwing = link.swingId;
+  if (e.type === 'skeleton') {
+    /* 骷髅举剑格挡正面:只有从它背后砍才掉血 */
+    const dx = link.x - e.x, dy = link.y - e.y;
+    const fromDir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+    if (fromDir === e.face) {
+      game.clinkT = 20;
+      Snd.clink();
+      return;                                // 格挡:无伤害
+    }
+  }
+  e.hp -= 1; e.flash = 8;
+  if (e.hp <= 0) killEnemy(e); else Snd.enemyHit();
+}
+
+/* BOSS 弱点(额头宝石)被剑命中 */
+function swordHitBoss() {
+  if (!boss || boss.phase !== 'stun' || boss.gemHit) return;
+  const gx0 = boss.x + 24, gy0 = boss.y, gx1 = boss.x + 40, gy1 = boss.y + 16;
+  for (const [tx, ty] of swordArcTiles()) {
+    const rx0 = tx * 16, ry0 = HUDH + ty * 16;
+    if (gx0 < rx0 + 16 && gx1 > rx0 && gy0 < ry0 + 16 && gy1 > ry0) {
+      boss.gemHit = true;
+      boss.rounds++;
+      boss.flash = 15;
+      Snd.bossHit();
+      if (boss.rounds >= 3) { boss.phase = 'dying'; boss.t = 0; Snd.bossRoar(); }
+      return;
+    }
+  }
+}
+
+/* ---------- 主逻辑:游戏中 ---------- */
+function stepPlay() {
+  game.time++;
+  BGM.tick();
+  if (game.clinkT > 0) game.clinkT--;
+
+  /* --- 道具切换(Select) --- */
+  if (hit('select')) {
+    const it = ownedItems();
+    if (it.length) { game.cur = (game.cur + 1) % it.length; Snd.select(); }
+  }
+
+  /* --- 挥剑(A) --- */
+  if (hit('a') && link.swingT === 0 && link.kb === 0 && hook.st === 0) {
+    link.swingT = 12;
+    link.swingId++;
+    Snd.slash();
+  }
+
+  /* --- 使用道具(B) --- */
+  if (hit('b') && link.kb === 0 && hook.st === 0) {
+    const it = curItem();
+    if (it === 'bombs' && game.bombs > 0) {
+      /* 放在面前一格(面前实心则放脚下) */
+      let btx = (link.x + 8 + link.fx * 16) >> 4, bty = (link.y + 8 + link.fy * 16 - HUDH) >> 4;
+      if (solidTileAt(btx, bty)) { btx = (link.x + 8) >> 4; bty = (link.y + 8 - HUDH) >> 4; }
+      if (!bombsEnt.length) {
+        game.bombs--;
+        bombsEnt.push({ tx: btx, ty: bty, x: btx * 16 + 4, y: HUDH + bty * 16 + 4, t: 90, expT: 0 });
+        Snd.bombPlace();
+      }
+    } else if (it === 'hook') {
+      hook.st = 'fire'; hook.dx = link.fx; hook.dy = link.fy; hook.len = 8;
+      Snd.hookFire();
+    }
+  }
+
+  /* --- 移动(八方向;击退/挥剑/钩爪拉扯时输入无效) --- */
+  let mdx = 0, mdy = 0;
+  if (link.kb > 0) {
+    link.kb--;
+    const nx = link.x + link.kbx * 2, ny = link.y + link.kby * 2;
+    if (!boxSolid(nx, link.y)) link.x = nx;
+    if (!boxSolid(link.x, ny)) link.y = ny;
+  } else if (link.swingT === 0 && hook.st !== 'pull') {
+    if (keys.left) mdx -= 1;
+    if (keys.right) mdx += 1;
+    if (keys.up) mdy -= 1;
+    if (keys.down) mdy += 1;
+    if (mdx !== 0) { link.fx = mdx; link.fy = 0; }
+    else if (mdy !== 0) { link.fx = 0; link.fy = mdy; }
+    if (mdx !== 0 || mdy !== 0) {
+      link.walkT++;
+      /* 边缘过场判定:本侧是门口且对面入口可落脚 -> 整屏滑动 */
+      const nx = link.x + mdx, ny = link.y + mdy;
+      if (nx <= 1 && roomX > 0 && pxWalkable(2, link.y + 8) && canEnterRoom(-1, 0)) return startSlide(-1, 0);
+      if (nx >= 143 && roomX < 4 && pxWalkable(157, link.y + 8) && canEnterRoom(1, 0)) return startSlide(1, 0);
+      if (ny <= 17 && roomY > 0 && pxWalkable(link.x + 8, 18) && canEnterRoom(0, -1)) return startSlide(0, -1);
+      if (ny >= 127 && roomY < 3 && pxWalkable(link.x + 8, 141) && canEnterRoom(0, 1)) return startSlide(0, 1);
+      if (!boxSolid(nx, link.y)) link.x = nx;
+      if (!boxSolid(link.x, ny)) link.y = ny;
+    }
+  }
+
+  /* 无敌帧倒计时 */
+  if (link.invuln > 0) link.invuln--;
+
+  /* --- 挥剑推进 + 命中判定(第 3~9 帧有效) --- */
+  if (link.swingT > 0) {
+    link.swingT--;
+    if (link.swingT >= 3 && link.swingT <= 9) {
+      for (const e of enemies) if (!e.dead && enemyTouchingArc(e)) swordHitEnemy(e);
+      swordHitBoss();
+    }
+  }
+
+  /* --- 宝箱:朝着未开宝箱推方向 -> 仪式感开盒 --- */
+  if (room.chest && !room.chest.opened && (mdx !== 0 || mdy !== 0)) {
+    const ftx = (link.x + 8 + link.fx * 16) >> 4, fty = (link.y + 8 + link.fy * 16 - HUDH) >> 4;
+    if (ftx === room.chest.tx && fty === room.chest.ty) return openChest(room.chest);
+  }
+
+  /* --- 钥匙门:有钥匙时推门即开 --- */
+  {
+    const ftx = (link.x + 8 + link.fx * 16) >> 4, fty = (link.y + 8 + link.fy * 16 - HUDH) >> 4;
+    if ((mdx !== 0 || mdy !== 0) && fty >= 0 && fty < ROWS && ftx >= 0 && ftx < COLS
+        && curTiles[fty][ftx] === 'K' && game.keys > 0) {
+      game.keys--;
+      for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++)
+        if (curTiles[y][x] === 'K') curTiles[y][x] = '.';
+      Snd.door();
+    }
+  }
+
+  /* --- 推块:顶住 8 帧后滑动 1 格 --- */
+  if (room.block && room.block.slideT === 0) {
+    const b = room.block;
+    const adx = (b.tx * 16) - link.x, ady = (HUDH + b.ty * 16) - link.y;  // 块相对林克
+    const touching = Math.abs(adx) <= 16 && Math.abs(ady) <= 16;
+    const toward = touching && ((link.fx === 1 && adx > 0) || (link.fx === -1 && adx < 0)
+                             || (link.fy === 1 && ady > 0) || (link.fy === -1 && ady < 0));
+    if (toward && ((link.fx !== 0 && keys[link.fx === 1 ? 'right' : 'left'])
+                || (link.fy !== 0 && keys[link.fy === 1 ? 'down' : 'up']))) {
+      link.pushT++;
+      if (link.pushT >= 8) {
+        link.pushT = 0;
+        const ntx = b.tx + link.fx, nty = b.ty + link.fy;
+        /* 目标格须可走且不在边界(块不能推出房间) */
+        if (ntx > 0 && ntx < COLS - 1 && nty > 0 && nty < ROWS - 1 && !solidTileAt(ntx, nty)) {
+          b.slideT = 12; b.sdx = link.fx; b.sdy = link.fy;
+          b.tx = ntx; b.ty = nty;                 // 逻辑格立即换,碰撞即时让位
+          Snd.push();
+        }
+      }
+    } else link.pushT = 0;
+  }
+  if (room.block && room.block.slideT > 0) {
+    room.block.slideT--;
+    if (room.block.slideT === 0) {
+      /* 推块停稳:压上开关板 -> 机关门开 */
+      for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++)
+        if (curTiles[y][x] === 'o' && room.block.tx === x && room.block.ty === y) {
+          for (let yy = 0; yy < ROWS; yy++) for (let xx = 0; xx < COLS; xx++)
+            if (curTiles[yy][xx] === 'D') curTiles[yy][xx] = '.';
+          room.doorOpen = true;
+          Snd.door();
+        }
+    }
+  }
+
+  stepEnemies();
+  stepBoss();
+  stepBombs();
+  stepHook();
+  stepDrops();
+  stepEprojs();
+}
+
+/* ---------- 敌人 AI ---------- */
+function stepEnemies() {
+  for (const e of enemies) {
+    if (e.dead) continue;
+    e.t++;
+    if (e.flash > 0) e.flash--;
+    if (e.type === 'slime') {
+      /* 史莱姆:停顿后朝林克方向直线冲撞 */
+      if (e.charge > 0) {
+        e.charge--;
+        const nx = e.x + e.cdx * 1.5, ny = e.y + e.cdy * 1.5;
+        if (!boxSolid(nx, e.y)) e.x = nx; else e.charge = 0;
+        if (!boxSolid(e.x, ny)) e.y = ny; else e.charge = 0;
+      } else if (e.t % 80 === 0) {
+        const dx = link.x - e.x, dy = link.y - e.y;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        /* 八方向取整 */
+        e.cdx = Math.round(dx / len); e.cdy = Math.round(dy / len);
+        e.charge = 26;
+      }
+    } else if (e.type === 'skeleton') {
+      /* 骷髅:慢速巡逻;每 45 帧重新面向林克(绕背窗口) */
+      if (e.t % 45 === 0) {
+        const dx = link.x - e.x, dy = link.y - e.y;
+        e.face = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+      }
+      if (e.t % 90 < 45) {
+        const vx = e.face === 'left' ? -0.5 : e.face === 'right' ? 0.5 : 0;
+        const vy = e.face === 'up' ? -0.5 : e.face === 'down' ? 0.5 : 0;
+        if (!boxSolid(e.x + vx, e.y)) e.x += vx;
+        if (!boxSolid(e.x, e.y + vy)) e.y += vy;
+      }
+    } else if (e.type === 'bat') {
+      /* 蝙蝠:水平漂移 + 正弦上下(可飞越水面沟壑) */
+      e.x += e.vx;
+      if (e.x < 8 || e.x > 144) e.vx = -e.vx;
+      e.y = e.baseY + Math.sin(e.t / 15) * 10;
+    }
+    /* 接触伤害 */
+    if (link.invuln === 0 && link.kb === 0
+        && Math.abs(e.x - link.x) < 13 && Math.abs(e.y - link.y) < 13) {
+      const dx = link.x - e.x, dy = link.y - e.y;
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      hurtLink(1, dx / len, dy / len);
+    }
+  }
+  enemies = enemies.filter(e => !e.dead);
+}
+
+/* ---------- BOSS:4x4 格石巨像,三段循环 ---------- */
+function stepBoss() {
+  if (!boss) return;
+  boss.t++;
+  if (boss.flash > 0) boss.flash--;
+  if (boss.phase === 'charge') {
+    /* 冲撞:低速直线压向林克 */
+    const dx = link.x - boss.x, dy = link.y - boss.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    if (boss.t % 2 === 0) {
+      boss.x += dx / len;
+      boss.y += dy / len;
+      boss.x = Math.max(16, Math.min(80, boss.x));
+      boss.y = Math.max(32, Math.min(80, boss.y));
+    }
+    if (boss.t >= 120) { boss.phase = 'barrage'; boss.t = 0; }
+  } else if (boss.phase === 'barrage') {
+    /* 弹幕:每 25 帧朝林克吐一发 */
+    if (boss.t % 25 === 0) {
+      const dx = link.x + 8 - (boss.x + 32), dy = link.y + 8 - (boss.y + 32);
+      const len = Math.sqrt(dx * dx + dy * dy) || 1;
+      eprojs.push({ x: boss.x + 28, y: boss.y + 40, dx: dx / len * 1.6, dy: dy / len * 1.6, t: 0 });
+      Snd.spit();
+    }
+    if (boss.t >= 150) { boss.phase = 'stun'; boss.t = 0; boss.gemHit = false; }
+  } else if (boss.phase === 'stun') {
+    /* 眩晕 3 秒(180 帧):额头宝石露出,可砍 */
+    if (boss.t >= 180) { boss.phase = 'charge'; boss.t = 0; }
+  } else if (boss.phase === 'dying') {
+    /* 死亡:90 帧连环爆炸 */
+    if (boss.t % 10 === 0) Snd.bombBoom();
+    if (boss.t >= 90) {
+      drops.push({ x: boss.x + 24, y: boss.y + 24, kind: 'triforce', t: 0 });
+      boss = null;
+      game.bossDead = true;
+      BGM.play('dungeon');
+      return;
+    }
+  }
+  /* 身体接触伤害 */
+  if (boss && link.invuln === 0 && link.kb === 0
+      && link.x + 12 > boss.x && link.x + 3 < boss.x + 64
+      && link.y + 15 > boss.y && link.y + 7 < boss.y + 64) {
+    const dx = link.x - boss.x - 24, dy = link.y - boss.y - 24;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    hurtLink(1, dx / len, dy / len);
+  }
+}
+
+/* ---------- 炸弹 ---------- */
+function stepBombs() {
+  for (const b of bombsEnt) {
+    if (b.expT > 0) { b.expT--; continue; }
+    b.t--;
+    if (b.t === 0) {
+      b.expT = 18;
+      Snd.bombBoom();
+      /* 炸开 3x3 范围内的裂缝墙 */
+      for (let y = b.ty - 1; y <= b.ty + 1; y++)
+        for (let x = b.tx - 1; x <= b.tx + 1; x++)
+          if (y >= 0 && y < ROWS && x >= 0 && x < COLS && curTiles[y][x] === '%')
+            curTiles[y][x] = '.';
+      /* 炸伤敌人(大范围即死)与林克(半颗心) */
+      for (const e of enemies)
+        if (!e.dead && Math.abs(e.x + 8 - (b.x + 4)) < 24 && Math.abs(e.y + 8 - (b.y + 4)) < 24)
+          killEnemy(e);
+      if (Math.abs(link.x + 8 - (b.x + 4)) < 20 && Math.abs(link.y + 8 - (b.y + 4)) < 20) {
+        const dx = link.x - b.x, dy = link.y - b.y;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        hurtLink(1, dx / len, dy / len);
+      }
+    }
+  }
+  bombsEnt = bombsEnt.filter(b => b.t > 0 || b.expT > 0);
+}
+
+/* ---------- 钩爪 ---------- */
+function stepHook() {
+  if (hook.st === 'fire') {
+    hook.len += 8;
+    const tx = (link.x + 8 + hook.dx * hook.len) >> 4;
+    const ty = (link.y + 8 + hook.dy * hook.len - HUDH) >> 4;
+    const ch = (tx >= 0 && tx < COLS && ty >= 0 && ty < ROWS) ? curTiles[ty][tx] : '#';
+    if (ch === '^') {                        // 挂住石像:开始拉人
+      hook.st = 'pull';
+      Snd.hookLatch();
+    } else if ((ch !== 'X' && SOLID[ch]) || hook.len >= 88) {
+      hook.st = 'back';                      // 沟壑可飞越,其它实心挡回
+    }
+  } else if (hook.st === 'back') {
+    hook.len -= 12;
+    if (hook.len <= 0) hook.st = 0;
+  } else if (hook.st === 'pull') {
+    /* 拉人:可飞越沟壑,撞到实心(石像)即落地 */
+    const nx = link.x + hook.dx * 4, ny = link.y + hook.dy * 4;
+    if (boxSolid(nx, ny, true)) { hook.st = 0; link.x = Math.round(link.x); link.y = Math.round(link.y); }
+    else { link.x = nx; link.y = ny; }
+  }
+}
+
+/* ---------- 掉落物 ---------- */
+function stepDrops() {
+  for (const d of drops) {
+    d.t++;
+    if (d.kind !== 'triforce' && d.t > 600) { d.gone = true; continue; }
+    if (Math.abs(d.x - link.x - 4) < 12 && Math.abs(d.y - link.y - 4) < 12) {
+      d.gone = true;
+      if (d.kind === 'heart') { game.hp = Math.min(6, game.hp + 1); Snd.heart(); }
+      else if (d.kind === 'rupee') { game.rupees++; Snd.rupee(); }
+      else if (d.kind === 'triforce') {      // 通关!
+        game.vicT = 0;
+        game.state = ST.VICTORY;
+        BGM.stop();
+        Snd.triForce();
+        clearPressed();
+      }
+    }
+  }
+  drops = drops.filter(d => !d.gone);
+}
+
+/* ---------- BOSS 弹幕 ---------- */
+function stepEprojs() {
+  for (const p of eprojs) {
+    p.t++;
+    p.x += p.dx; p.y += p.dy;
+    if (p.t > 200 || solidTileAt(p.x >> 4, (p.y - HUDH) >> 4)) { p.gone = true; continue; }
+    if (link.invuln === 0 && link.kb === 0
+        && Math.abs(p.x - link.x - 6) < 10 && Math.abs(p.y - link.y - 10) < 10) {
+      p.gone = true;
+      const len = Math.sqrt(p.dx * p.dx + p.dy * p.dy) || 1;
+      hurtLink(1, p.dx / len, p.dy / len);
+    }
+  }
+  eprojs = eprojs.filter(p => !p.gone);
+}
+
+/* ---------- 其它状态推进 ---------- */
+function stepSlide() {
+  game.time++;
+  BGM.tick();
+  slide.t++;
+  if (slide.t >= slide.frames) { game.state = ST.PLAY; prevTiles = null; }
+}
+function stepItemGet() {
+  game.time++;
+  game.igT++;
+  if (game.igT >= 100) game.state = ST.PLAY;  // 仪式约 1.7 秒,无对话直接继续
+}
+function stepDie() {
+  game.dieT++;
+  if (game.dieT >= 70) { game.state = ST.OVER; game.overT = 0; Snd.over(); BGM.stop(); clearPressed(); }
+}
+function stepOver() {
+  game.overT++;
+  if (game.overT > 30 && hit('start')) { game.state = ST.TITLE; }
+}
+function stepVictory() {
+  game.vicT++;
+  if (game.vicT > 150 && hit('start')) { game.state = ST.TITLE; }
+}
+
+function step() {
+  game.frame++;
+  switch (game.state) {
+    case ST.TITLE:
+      if (hit('start')) { startGame(); Snd.start(); }
+      break;
+    case ST.PLAY: stepPlay(); break;
+    case ST.SLIDE: stepSlide(); break;
+    case ST.ITEMGET: stepItemGet(); break;
+    case ST.DIE: stepDie(); break;
+    case ST.OVER: stepOver(); break;
+    case ST.VICTORY: stepVictory(); break;
+  }
+}
+
+/* ===================== 渲染 ===================== */
+/* 像素精灵绘制:rows 为字符串数组,map 把字符映到 PAL 色号;flip 水平镜像,sc 整数放大 */
+function drawSpr(rows, map, x, y, flip, sc) {
+  sc = sc || 1;
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r];
+    for (let c = 0; c < row.length; c++) {
+      const ch = row[flip ? row.length - 1 - c : c];
+      if (ch === '.') continue;
+      const col = map[ch];
+      if (col === undefined) continue;
+      R(x + c * sc, y + r * sc, sc, sc, col);
+    }
+  }
+}
+
+/* ---- 林克 16x16(对照 LA DX 原版转写:绿帽绿衣,3 色+透明) ----
+ * D=深绿描边 G=绿 S=肤;SIDE 朝右,朝左用镜像 */
+const LMAP = { D: 4, G: 2, S: 3 };
+const LINK_DOWN_A = [
+  "....DDDDDDDD....",
+  "...DGGGGGGGGD...",
+  "..DGGGGGGGGGGD..",
+  "..DGGGGGGGGD....",
+  "..DDSSSSSSDD....",
+  "..DSSSSSSSSD....",
+  "..DSDSSSSSSDSD..",
+  "...DSSSSSSD.....",
+  "....DDDDDDD.....",
+  "..DDGGGGGGGDD...",
+  ".DGGGGGGGGGGGD..",
+  ".DGGGGGGGGGGGD..",
+  ".SSDDDDDDDDDSS..",
+  ".SS.DGGGGGD.SS..",
+  "....DD...DD.....",
+  "...DDD...DDD....",
+];
+const LINK_DOWN_B = LINK_DOWN_A.slice(0, 14).concat([
+  "...DD.....DD....",
+  "..DDD.....DDD...",
+]);
+const LINK_UP_A = [
+  "....DDDDDDDD....",
+  "...DGGGGGGGGD...",
+  "..DGGGGGGGGGGD..",
+  "..DGGGGGGGGGGD..",
+  "..DGGGGGGGGGGD..",
+  "..DDDDDDDDDDDD..",
+  "...DDDDDDDDDD...",
+  "...DDDDDDDDDD...",
+  "....DDDDDDD.....",
+  "..DDGGGGGGGDD...",
+  ".DGGGGGGGGGGGD..",
+  ".DGGGGGGGGGGGD..",
+  ".SSDDDDDDDDDSS..",
+  ".SS.DGGGGGD.SS..",
+  "....DD...DD.....",
+  "...DDD...DDD....",
+];
+const LINK_UP_B = LINK_UP_A.slice(0, 14).concat([
+  "...DD.....DD....",
+  "..DDD.....DDD...",
+]);
+const LINK_SIDE_A = [
+  "....DDDDDDDD....",
+  "...DGGGGGGGGD...",
+  "..DGGGGGGGGGGD..",
+  "..DDGGGGGGGGD...",
+  "..DSSSSSSDD.....",
+  "..DSSSSSSSD.....",
+  "..DDSSSDSSD.....",
+  "...DSSSSSSD.....",
+  "....DDDDDDD.....",
+  "...DDGGGGGDD....",
+  "..DGGGGGGGGD....",
+  "..DGGGGGGGGD....",
+  "..SSDDDDDDDDS...",
+  "..SS.DGGGGGD.S..",
+  "....DD...DD.....",
+  "...DDD...DDD....",
+];
+const LINK_SIDE_B = LINK_SIDE_A.slice(0, 14).concat([
+  "...DD.....DD....",
+  "..DDD.....DDD...",
+]);
+/* 举道具仪式姿势:面向镜头双手上举(胸前托举,道具画在头顶) */
+const LINK_HOLD = [
+  "....DDDDDDDD....",
+  "...DGGGGGGGGD...",
+  "..DGGGGGGGGGGD..",
+  "..DGGGGGGGGD....",
+  "..DDSSSSSSDD....",
+  "..DSSSSSSSSD....",
+  "..DSDSSSSSSDSD..",
+  "...DSSSSSSD.....",
+  ".S.DDDDDDDD.S...",
+  ".SSDGGGGGGDSS...",
+  ".SSDGDDDDGDSS...",
+  "..DDGGGGGGGDD...",
+  "...DGGGGGGGD....",
+  "...DDDDDDDDD....",
+  "....DD...DD.....",
+  "...DDD...DDD....",
+];
+
+/* ---- 敌人 16x16 ---- */
+/* 史莱姆:浅绿身体 + 深绿描边 + 白眼黑瞳(3 色+透明) */
+const SLIME = [
+  ".....DDDDDD.....",
+  "...DDGGGGGGDD...",
+  "..DGGGGGGGGGGD..",
+  ".DGGGGGGGGGGGGD.",
+  ".DGGWGGGGGGWGGD.",
+  ".DGBWGGGGGGBWGD.",
+  ".DGGGGGGGGGGGGD.",
+  ".DGGGGGGGGGGGGD.",
+  ".DGGGGDGGDGGGGD.",
+  "..DGGGGGGGGGGD..",
+  "..DDGGGGGGGGDD..",
+  "....DDDDDDDD....",
+];
+const SLIME_MAP = { D: 4, G: 5, W: 1, B: 0 };
+/* 骷髅:白骨 + 黑描边/眼窝 */
+const SKEL = [
+  "....DDDDDDDD....",
+  "...DWWWWWWWWD...",
+  "..DWWWWWWWWWWD..",
+  "..DWDWWWWWWDWD..",
+  "..DWDWWWWWWDWD..",
+  "..DWWWWWWWWWWD..",
+  "..DWWDDDDDWWWD..",
+  "...DWWWWWWWWD...",
+  "....DDDDDDDD....",
+  ".....DWWWD......",
+  "..D..DWWWD..D...",
+  "..DWDWWDWWDWD...",
+  "..DWDWWDWWDWD...",
+  "..D..DWWWD..D...",
+  "....DD...DD.....",
+  "...DWD...DWD....",
+];
+const SKEL_MAP = { D: 0, W: 1 };
+/* 蝙蝠:紫身 + 暗紫描边 + 红眼,两帧翅膀 */
+const BAT1 = [
+  ".DD..........DD.",
+  ".DPPD......DPPD.",
+  "..DPPD....DPPD..",
+  "...DPPD..DPPD...",
+  "....DPPDDPPD....",
+  "....DPPPPPPD....",
+  "....DPRPPRPD....",
+  "....DPPPPPPD....",
+  ".....DPPPPD.....",
+  "......DDDD......",
+];
+const BAT2 = [
+  "....DPPPPPPD....",
+  "....DPRPPRPD....",
+  "....DPPPPPPD....",
+  ".....DPPPPD.....",
+  "..DPPDDDDDDPPD..",
+  ".DPPD......DPPD.",
+  ".DDD........DDD.",
+];
+const BAT_MAP = { D: 15, P: 14, R: 12 };
+
+/* ---- 小件 8x8 ---- */
+const HEART = [
+  ".DD..DD.",
+  "DRRDDRRD",
+  "DRWRRRRD",
+  "DRRRRRRD",
+  ".DRRRRD.",
+  "..DRRD..",
+  "...DD...",
+];
+const RUPEE = [
+  "...DD...",
+  "..DGGD..",
+  ".DGWGGD.",
+  ".DGGGGD.",
+  "..DGGD..",
+  "...DD...",
+];
+const BOMB = [
+  "....S...",
+  "...S.S..",
+  "..DDDD..",
+  ".DWDDDD.",
+  ".DDDDDD.",
+  ".DDDDDD.",
+  "..DDDD..",
+];
+const KEY = [
+  "..DDD...",
+  ".DGGGD..",
+  ".DGDGD..",
+  "..DDD...",
+  "...D....",
+  "...DD...",
+  "...D....",
+];
+const HOOKIC = [
+  "..DDD...",
+  ".D...D..",
+  ".D..DD..",
+  "..DD....",
+  "..DD....",
+  ".DD.....",
+];
+const SWORDIC = [
+  "......DD",
+  ".....DWD",
+  "....DWD.",
+  "...DWD..",
+  "..DWD...",
+  ".BBD....",
+  "BBBB....",
+  ".BB.....",
+];
+const DROP_MAP = { D: 0, R: 12, W: 1, G: 13, B: 9, S: 17 };
+
+/* ---- 宝箱 16x16:棕箱身 + 金箍 + 锁孔 ---- */
+const CHEST_CLOSED = [
+  "................",
+  ".DDDDDDDDDDDDDD.",
+  ".DBBBBBBBBBBBBD.",
+  ".DBBBBGGGBBBBD..",
+  ".DGGGGGGGGGGGGD.",
+  ".DBBBBGKKGBBBBD.",
+  ".DBBBBGKKGBBBBD.",
+  ".DBBBBGGGBBBBD..",
+  ".DDDDDDDDDDDDDD.",
+];
+const CHEST_OPEN = [
+  ".DDDDDDDDDDDDDD.",
+  ".DGGGGGGGGGGGGD.",
+  ".DDDDDDDDDDDDDD.",
+  "................",
+  ".DDDDDDDDDDDDDD.",
+  ".DKKKKKKKKKKKKD.",
+  ".DKKKKKKKKKKKKD.",
+  ".DBBBBGKKGBBBBD.",
+  ".DDDDDDDDDDDDDD.",
+];
+const CHEST_MAP = { D: 22, B: 9, G: 13, K: 0 };
+
+/* ---- 勇气三角 16x16:三金三角 ---- */
+const TRIFORCE = [
+  ".......DD.......",
+  "......DGGD......",
+  "......DGGD......",
+  ".....DGGGGD.....",
+  ".....DGGGGD.....",
+  "....DGGGGGGD....",
+  "...DDDDDDDDDD...",
+  "....DD....DD....",
+  "...DGGD..DGGD...",
+  "...DGGD..DGGD...",
+  "..DGGGGDDGGGGD..",
+  "..DGGGGDDGGGGD..",
+  ".DGGGGGGGGGGGGD.",
+  ".DDDDDDDDDDDDDD.",
+];
+const TRI_MAP = { D: 0, G: 13 };
+
+/* ---------- 图块绘制(16x16, sx/sy 为屏幕坐标) ---------- */
+function drawTile(ch, sx, sy, tx, ty) {
+  switch (ch) {
+    case '#': {                             /* 墙:灰砖 + 深缝 */
+      R(sx, sy, 16, 16, 10);
+      R(sx, sy, 16, 2, 11); R(sx, sy + 14, 16, 2, 11);
+      R(sx, sy + 7, 16, 1, 11);
+      if (ty % 2 === 0) { R(sx + 7, sy + 2, 1, 5, 11); R(sx + 3, sy + 8, 1, 6, 11); R(sx + 11, sy + 8, 1, 6, 11); }
+      else { R(sx + 7, sy + 8, 1, 6, 11); R(sx + 3, sy + 2, 1, 5, 11); R(sx + 11, sy + 2, 1, 5, 11); }
+      break;
+    }
+    case '.': {                             /* 地砖:棕底 + 砖缝 */
+      R(sx, sy, 16, 16, 8);
+      R(sx, sy, 16, 1, 21); R(sx, sy, 1, 16, 21);
+      R(sx, sy + 7, 16, 1, 9); R(sx, sy + 15, 16, 1, 9);
+      if ((tx + ty) % 2 === 0) { R(sx + 7, sy, 1, 7, 9); R(sx + 3, sy + 8, 1, 7, 9); R(sx + 11, sy + 8, 1, 7, 9); }
+      else { R(sx + 3, sy, 1, 7, 9); R(sx + 11, sy, 1, 7, 9); R(sx + 7, sy + 8, 1, 7, 9); }
+      break;
+    }
+    case ',': {                             /* 草地:绿底 + 深浅草簇(按格坐标确定性排布) */
+      R(sx, sy, 16, 16, 16);
+      const v = (tx * 3 + ty * 5) % 4;
+      if (v === 0) { R(sx + 3, sy + 3, 1, 3, 5); R(sx + 4, sy + 4, 1, 2, 5); R(sx + 11, sy + 10, 1, 3, 5); R(sx + 12, sy + 11, 1, 2, 5); }
+      else if (v === 1) { R(sx + 10, sy + 4, 1, 3, 4); R(sx + 11, sy + 5, 1, 2, 4); R(sx + 4, sy + 11, 1, 3, 4); }
+      else if (v === 2) { R(sx + 6, sy + 6, 1, 3, 5); R(sx + 13, sy + 12, 1, 3, 5); R(sx + 2, sy + 12, 1, 3, 4); }
+      else { R(sx + 12, sy + 3, 1, 3, 5); R(sx + 3, sy + 8, 1, 3, 5); R(sx + 8, sy + 13, 1, 3, 4); }
+      break;
+    }
+    case '~': {                             /* 水:蓝底 + 2 帧波光 */
+      R(sx, sy, 16, 16, 6);
+      const f = (game.frame >> 5) & 1;
+      const o1 = ((tx + ty + f) % 2 === 0) ? 2 : 8;
+      const o2 = ((tx + ty + f) % 2 === 0) ? 9 : 3;
+      R(sx + o1, sy + 4, 5, 1, 7);
+      R(sx + o2, sy + 11, 5, 1, 7);
+      break;
+    }
+    case 'X': {                             /* 沟壑:黑 + 底部深灰岩壁 */
+      R(sx, sy, 16, 16, 0);
+      R(sx, sy + 12, 16, 4, 15);
+      R(sx, sy + 12, 16, 1, 11);
+      break;
+    }
+    case '%': {                             /* 裂缝墙:墙 + 黑色裂纹 */
+      drawTile('#', sx, sy, tx, ty);
+      R(sx + 7, sy + 2, 1, 2, 0); R(sx + 8, sy + 4, 1, 2, 0); R(sx + 6, sy + 6, 1, 2, 0);
+      R(sx + 8, sy + 8, 1, 2, 0); R(sx + 7, sy + 10, 1, 2, 0); R(sx + 9, sy + 12, 1, 2, 0);
+      break;
+    }
+    case 'D': {                             /* 机关门:深灰门板 */
+      R(sx, sy, 16, 16, 11);
+      R(sx, sy, 16, 2, 0); R(sx, sy + 14, 16, 2, 0);
+      R(sx + 4, sy + 3, 3, 10, 10); R(sx + 9, sy + 3, 3, 10, 10);
+      break;
+    }
+    case 'K': {                             /* 钥匙门:门板 + 金色锁孔 */
+      drawTile('D', sx, sy, tx, ty);
+      R(sx + 6, sy + 5, 4, 3, 13);
+      R(sx + 7, sy + 8, 2, 4, 13);
+      break;
+    }
+    case 'o': {                             /* 开关板:地砖 + 金色压板 */
+      drawTile('.', sx, sy, tx, ty);
+      R(sx + 3, sy + 3, 10, 10, 13);
+      R(sx + 5, sy + 5, 6, 6, 9);
+      break;
+    }
+    case '^': {                             /* 石像(钩爪桩):灰柱 + 银环 */
+      drawTile('.', sx, sy, tx, ty);
+      R(sx + 3, sy + 2, 10, 12, 11);
+      R(sx + 3, sy + 2, 10, 3, 10);
+      R(sx + 5, sy + 6, 6, 4, 18);
+      R(sx + 2, sy + 13, 12, 2, 0);
+      break;
+    }
+    default:                                /* 其余(宝箱/推块占位格)按地砖画 */
+      drawTile('.', sx, sy, tx, ty);
+  }
+}
+
+function drawTiles(tiles, ox, oy) {
+  for (let ty = 0; ty < ROWS; ty++)
+    for (let tx = 0; tx < COLS; tx++) {
+      const sx = tx * 16 + ox, sy = HUDH + ty * 16 + oy;
+      if (sx < -16 || sx > 160 || sy < 0 || sy > 144) continue;
+      drawTile(tiles[ty][tx], sx, sy, tx, ty);
+    }
+}
+
+/* ---------- HUD:顶部 16px(A 剑 / B 道具 / 心 / 卢比 / 钥匙) ---------- */
+function drawHeartAt(x, y, st) {
+  for (let r = 0; r < HEART.length; r++)
+    for (let c = 0; c < 8; c++) {
+      const ch = HEART[r][c];
+      if (ch === '.') continue;
+      let col;
+      if (ch === 'R') col = (st === 2 || (st === 1 && c < 4)) ? 12 : 11;  /* 半心:左红右灰 */
+      else if (ch === 'W') col = (st >= 1) ? 1 : 11;
+      else col = st === 0 ? 11 : 0;
+      R(x + c, y + r, 1, 1, col);
+    }
+}
+
+function drawHUD() {
+  R(0, 0, 160, 16, 19);
+  R(0, 15, 160, 1, 0);
+  /* A 键槽:剑常驻 */
+  drawText('A', 2, 4, 1);
+  R(11, 1, 14, 14, 0); R(12, 2, 12, 12, 19);
+  drawSpr(SWORDIC, DROP_MAP, 14, 4, false);
+  /* B 键槽:当前选中道具 */
+  drawText('B', 27, 4, 1);
+  R(36, 1, 14, 14, 0); R(37, 2, 12, 12, 19);
+  const it = curItem();
+  if (it === 'bombs') drawSpr(BOMB, DROP_MAP, 39, 5, false);
+  if (it === 'hook') drawSpr(HOOKIC, DROP_MAP, 40, 4, false);
+  if (it === 'bombs') drawText(String(game.bombs).padStart(2, '0'), 52, 4, 13);
+  /* 心:3 颗,每颗 2 半格 */
+  for (let i = 0; i < 3; i++) {
+    const v = Math.max(0, Math.min(2, game.hp - i * 2));
+    drawHeartAt(72 + i * 10, 4, v);
+  }
+  /* 卢比 */
+  drawSpr(RUPEE, DROP_MAP, 104, 4, false);
+  drawText(String(game.rupees).padStart(2, '0'), 113, 4, 13);
+  /* 小钥匙 */
+  drawSpr(KEY, DROP_MAP, 132, 4, false);
+  drawText(String(game.keys), 141, 4, 13);
+}
+
+/* ---------- 林克绘制(含挥剑弧线/无敌闪烁) ---------- */
+function drawLinkAt(x, y) {
+  let rows, flip = false;
+  if (link.fy < 0) rows = (link.walkT >> 3) % 2 === 0 ? LINK_UP_A : LINK_UP_B;
+  else if (link.fy > 0) rows = (link.walkT >> 3) % 2 === 0 ? LINK_DOWN_A : LINK_DOWN_B;
+  else {
+    flip = link.fx < 0;
+    rows = (link.walkT >> 3) % 2 === 0 ? LINK_SIDE_A : LINK_SIDE_B;
+  }
+  drawSpr(rows, LMAP, x, y, flip);
+  /* 挥剑:3 帧弧形剑光(面前扇形) */
+  if (link.swingT > 0) {
+    const p = 12 - link.swingT;                     // 1..12
+    const a0 = Math.atan2(link.fy, link.fx);        // 面朝角
+    const sweep = -1.1 + (p / 12) * 2.2;            // -63° -> +63°
+    const a = a0 + sweep;
+    const cx = x + 8, cy = y + 8;
+    for (let r = 7; r <= 13; r++) {
+      const px = cx + Math.round(Math.cos(a) * r), py = cy + Math.round(Math.sin(a) * r);
+      R(px, py, 2, 2, r > 11 ? 1 : 18);             // 银刃白尖
+    }
+    R(cx + Math.round(Math.cos(a) * 6), cy + Math.round(Math.sin(a) * 6), 2, 2, 9); // 剑柄
+  }
+  /* 格挡火花 */
+  if (game.clinkT > 10) {
+    const sx = x + 8 + link.fx * 14, sy = y + 8 + link.fy * 14;
+    R(sx - 1, sy, 3, 1, 20); R(sx, sy - 1, 1, 3, 20);
+  }
+}
+function drawLink(ox, oy) {
+  /* 无敌闪烁:每 4 帧隐 2 帧 */
+  if (link.invuln > 0 && (game.frame >> 2) % 2 === 0) return;
+  drawLinkAt(link.x + ox, link.y + oy);
+}
+
+/* ---------- 敌人绘制 ---------- */
+function drawEnemies(ox, oy) {
+  for (const e of enemies) {
+    const flash = e.flash > 0 && (e.flash & 2);
+    const x = e.x + ox, y = e.y + oy;
+    if (e.type === 'slime') {
+      drawSpr(SLIME, flash ? { D: 1, G: 1, W: 1, B: 1 } : SLIME_MAP, x, y, false);
+    } else if (e.type === 'skeleton') {
+      drawSpr(SKEL, flash ? { D: 1, W: 1 } : SKEL_MAP, x, y, false);
+      /* 骷髅手中的剑(格挡方向) */
+      const dx = e.face === 'right' ? 1 : e.face === 'left' ? -1 : 0;
+      const dy = e.face === 'down' ? 1 : e.face === 'up' ? -1 : 0;
+      for (let i = 1; i <= 5; i++) R(x + 8 + dx * (8 + i), y + 8 + dy * (8 + i), 2, 2, 18);
+    } else if (e.type === 'bat') {
+      const fr = (e.t >> 3) % 2 === 0 ? BAT1 : BAT2;
+      drawSpr(fr, flash ? { D: 1, P: 1, R: 1 } : BAT_MAP, x, y, false);
+    }
+  }
+}
+
+/* ---------- BOSS:4x4 格石巨像(64x64,程序化绘制) ---------- */
+function drawBoss(ox, oy) {
+  if (!boss) return;
+  const bx = boss.x + ox, by = boss.y + oy;
+  const shake = boss.phase === 'charge' ? ((boss.t >> 1) % 2) : 0;
+  const x = bx + shake, y = by;
+  const dying = boss.phase === 'dying';
+  const flash = boss.flash > 0 && (boss.flash & 2);
+  const body = flash ? 1 : 10, dark = flash ? 1 : 11;
+  if (dying && (boss.t % 10 < 5)) {                 /* 濒死爆炸闪烁 */
+    R(x + ((boss.t * 7) % 48), y + ((boss.t * 13) % 48), 10, 10, 17);
+  }
+  /* 身体:深灰描边 + 浅灰石身 */
+  R(x + 2, y + 2, 60, 58, 0);
+  R(x + 4, y + 4, 56, 54, dark);
+  R(x + 6, y + 6, 52, 48, body);
+  /* 头顶石冠 */
+  R(x + 8, y, 8, 4, 0); R(x + 28, y, 8, 4, 0); R(x + 48, y, 8, 4, 0);
+  /* 眼睛:红瞳 + 白高光(眩晕时闭上) */
+  if (boss.phase !== 'stun') {
+    R(x + 14, y + 20, 10, 8, 12); R(x + 40, y + 20, 10, 8, 12);
+    R(x + 16, y + 21, 2, 2, 1); R(x + 42, y + 21, 2, 2, 1);
+    R(x + 12, y + 16, 14, 3, 0); R(x + 38, y + 16, 14, 3, 0);
+  } else {
+    R(x + 14, y + 22, 10, 3, 0); R(x + 40, y + 22, 10, 3, 0);
+    /* 眩晕星星绕头 */
+    const sa = boss.t / 6;
+    for (let i = 0; i < 3; i++) {
+      const px = x + 32 + Math.round(Math.cos(sa + i * 2.1) * 26);
+      const py = y + 10 + Math.round(Math.sin(sa + i * 2.1) * 6);
+      R(px - 1, py, 3, 1, 20); R(px, py - 1, 1, 3, 20);
+    }
+  }
+  /* 嘴:黑口 + 白牙 */
+  R(x + 16, y + 40, 32, 8, 0);
+  for (let i = 0; i < 4; i++) R(x + 18 + i * 8, y + 40, 4, 4, 1);
+  /* 脚 */
+  R(x + 8, y + 58, 14, 6, 0); R(x + 42, y + 58, 14, 6, 0);
+  /* 弱点宝石:额头红钻;眩晕时放大闪金 */
+  if (boss.phase === 'stun') {
+    const g = (game.frame >> 2) % 2 === 0 ? 13 : 20;
+    R(x + 28, y + 4, 8, 8, g);
+    R(x + 30, y + 2, 4, 12, g);
+  } else {
+    R(x + 29, y + 5, 6, 6, 12);
+  }
+}
+
+/* ---------- 场景内其它实体 ---------- */
+function drawChest(ox, oy) {
+  if (!room.chest) return;
+  const x = room.chest.tx * 16 + ox, y = HUDH + room.chest.ty * 16 + oy;
+  drawSpr(room.chest.opened ? CHEST_OPEN : CHEST_CLOSED, CHEST_MAP, x, y, false);
+}
+function drawBlock(ox, oy) {
+  if (!room.block) return;
+  const b = room.block;
+  /* 滑动动画:逻辑格已换位,视觉从旧格补间 */
+  const k = b.slideT > 0 ? b.slideT / 12 : 0;
+  const x = (b.tx - b.sdx * k) * 16 + ox, y = HUDH + (b.ty - b.sdy * k) * 16 + oy;
+  R(x, y, 16, 16, 0);
+  R(x + 1, y + 1, 14, 14, 11);
+  R(x + 3, y + 3, 10, 10, 10);
+  R(x + 5, y + 5, 6, 6, 11);
+  R(x + 6, y + 6, 4, 4, 10);
+}
+function drawDrops(ox, oy) {
+  for (const d of drops) {
+    const bob = d.kind === 'triforce' ? 0 : Math.round(Math.sin(d.t / 20) * 2);
+    const x = d.x + ox, y = d.y + bob + oy;
+    if (d.kind === 'heart') drawSpr(HEART, DROP_MAP, x, y, false);
+    else if (d.kind === 'rupee') drawSpr(RUPEE, DROP_MAP, x, y, false);
+    else drawSpr(TRIFORCE, (game.frame >> 3) % 2 === 0 ? TRI_MAP : { D: 0, G: 20 }, x - 8, y - 8, false);
+  }
+}
+function drawBombsEnt(ox, oy) {
+  for (const b of bombsEnt) {
+    const x = b.x + ox, y = b.y + oy;
+    if (b.expT > 0) {                          /* 爆炸:橙色十字扩开 */
+      const r = (18 - b.expT);
+      R(x - r, y + 2, r * 2 + 8, 4, 17);
+      R(x + 2, y - r + 4, 4, r * 2, 17);
+      R(x, y, 8, 8, 20);
+    } else {
+      const blink = b.t < 30 && (b.t >> 2) % 2 === 0;
+      drawSpr(BOMB, blink ? { D: 12, W: 1, S: 17 } : DROP_MAP, x, y, false);
+    }
+  }
+}
+function drawHook(ox, oy) {
+  if (hook.st === 0) return;
+  const cx = link.x + 8 + ox, cy = link.y + 8 + oy;
+  for (let i = 6; i < hook.len; i += 4)
+    R(cx + hook.dx * i, cy + hook.dy * i, 2, 2, 18);   // 锁链
+  const tx = cx + hook.dx * hook.len, ty = cy + hook.dy * hook.len;
+  R(tx - 2, ty - 2, 5, 5, 11);                          // 钩爪头
+  R(tx - 1, ty - 1, 3, 3, 18);
+}
+function drawEprojs(ox, oy) {
+  for (const p of eprojs) {
+    R(p.x + ox, p.y + oy, 8, 8, 17);
+    R(p.x + 2 + ox, p.y + 2 + oy, 4, 4, 12);
+  }
+}
+
+/* ---------- 世界总绘制(带滑屏偏移) ---------- */
+function drawWorld(ox, oy) {
+  drawTiles(curTiles, ox, oy);
+  drawChest(ox, oy);
+  drawBlock(ox, oy);
+  drawDrops(ox, oy);
+  drawBombsEnt(ox, oy);
+  drawEnemies(ox, oy);
+  drawBoss(ox, oy);
+  drawEprojs(ox, oy);
+  drawHook(ox, oy);
+  drawLink(ox, oy);
+}
+
+/* ---------- 宝箱仪式:林克面向镜头高举道具 ---------- */
+function drawItemGet() {
+  drawTiles(curTiles, 0, 0);
+  drawChest(0, 0);
+  drawBlock(0, 0);
+  const x = link.x, y = link.y;
+  drawSpr(LINK_HOLD, LMAP, x, y, false);
+  /* 道具图标:2 倍放大举在头顶,随仪式轻微上浮 */
+  const ix = x, iy = y - 18 + ((game.igT >> 3) % 2 === 0 ? 0 : -1);
+  if (game.igItem === 'bombs') drawSpr(BOMB, DROP_MAP, ix, iy, false, 2);
+  else if (game.igItem === 'key') drawSpr(KEY, DROP_MAP, ix, iy, false, 2);
+  else if (game.igItem === 'hook') drawSpr(HOOKIC, DROP_MAP, ix, iy, false, 2);
+  if ((game.igT >> 2) % 2 === 0) {           /* 闪光星 */
+    R(x - 2, y - 6, 1, 1, 1); R(x + 17, y - 4, 1, 1, 1);
+    R(x + 2, y - 14, 1, 1, 20); R(x + 14, y - 13, 1, 1, 20);
+  }
+  drawHUD();
+}
+
+/* ---------- 标题画面:GBC 时代彩色大 LOGO ---------- */
+function drawTitle() {
+  R(0, 0, W, H, 19);
+  R(0, 0, W, 2, 13); R(0, H - 2, W, 2, 13);           /* 金色描边 */
+  drawText('THE LEGEND OF', 28, 14, 1);
+  drawText("LINK'S", 32, 28, 13, 2);
+  drawText('AWAKENING', 8, 48, 1, 2);
+  drawText('DX', 64, 68, 2, 2);
+  drawSpr(LINK_DOWN_A, LMAP, 20, 92, false);          /* 两侧角色立绘 */
+  drawSpr(SLIME, SLIME_MAP, 124, 96, false);
+  drawSpr(TRIFORCE, TRI_MAP, 72, 92, false);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 122, 1);
+}
+
+/* ---------- GAME OVER ---------- */
+function drawOver() {
+  R(0, 0, W, H, 0);
+  drawText('GAME OVER', 8, 56, 1, 2);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 104, 11);
+}
+
+/* ---------- 通关:举三角放光 + 时间统计 ---------- */
+function drawVictory() {
+  R(0, 0, W, H, 19);
+  /* 放射光芒:8 条射线随时间伸长/变色 */
+  const cx = 80, cy = 70;
+  for (let i = 0; i < 8; i++) {
+    const a = i * Math.PI / 4 + game.vicT / 90;
+    const len = 18 + (game.vicT * 2) % 26;
+    for (let r = 16; r < len; r += 3) {
+      const px = cx + Math.round(Math.cos(a) * r), py = cy + Math.round(Math.sin(a) * r);
+      R(px, py, 2, 2, (r >> 2) % 2 === 0 ? 13 : 20);
+    }
+  }
+  drawSpr(LINK_HOLD, LMAP, 72, 74, false);            /* 林克高举 */
+  drawSpr(TRIFORCE, (game.frame >> 3) % 2 === 0 ? TRI_MAP : { D: 0, G: 20 }, 72, 54, false);
+  if (game.vicT > 90) {
+    drawText('YOU WIN!', 16, 14, 13, 2);
+    const mm = String((game.time / 3600) | 0).padStart(2, '0');
+    const ss = String(((game.time / 60) | 0) % 60).padStart(2, '0');
+    drawText('TIME ' + mm + ':' + ss, 44, 116, 1);
+  }
+  if (game.vicT > 150 && (game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 130, 1);
+}
+
+/* ---------- 死亡动画:林克原地打转 ---------- */
+function drawDying() {
+  drawTiles(curTiles, 0, 0);
+  const seq = [LINK_DOWN_A, LINK_SIDE_A, LINK_UP_A, LINK_SIDE_A];
+  const flip = [false, false, false, true][(game.dieT >> 3) % 4];
+  drawSpr(seq[(game.dieT >> 3) % 4], LMAP, link.x, link.y, flip);
+  drawHUD();
+}
+
+function render() {
+  switch (game.state) {
+    case ST.TITLE: drawTitle(); break;
+    case ST.PLAY: drawWorld(0, 0); drawHUD(); break;
+    case ST.SLIDE: {
+      /* 整屏滑动过场:旧房间滑出,新房间滑入 */
+      const k = slide.t / slide.frames;
+      const offX = slide.dx * 160, offY = slide.dy * 128;
+      R(0, HUDH, W, H - HUDH, 0);
+      if (prevTiles) drawTiles(prevTiles, -offX * k, -offY * k);   /* 旧房间滑出 */
+      drawWorld(offX * (1 - k), offY * (1 - k));                   /* 新房间滑入 */
+      drawHUD();
+      break;
+    }
+    case ST.ITEMGET: drawItemGet(); break;
+    case ST.DIE: drawDying(); break;
+    case ST.OVER: drawOver(); break;
+    case ST.VICTORY: drawVictory(); break;
+  }
+}
+
+/* ---------- 主循环:requestAnimationFrame + 固定 60fps 逻辑帧 ---------- */
+let lastTs = 0, acc = 0;
+function frameLoop(ts) {
+  requestAnimationFrame(frameLoop);
+  if (!lastTs) lastTs = ts;
+  let dt = ts - lastTs;
+  lastTs = ts;
+  if (dt > 250) dt = 250;                  // 切后台回来不追帧
+  acc += dt;
+  while (acc >= 1000 / 60) { step(); acc -= 1000 / 60; }
+  render();
+}
+
+/* ---------- 画布整数倍放大(3~5 倍,像素锐利) ---------- */
+function fit() {
+  const ui = document.getElementById('ui');
+  const chrome = (ui ? ui.offsetHeight : 120) + 64;
+  const availW = window.innerWidth - 20, availH = window.innerHeight - chrome;
+  let s = Math.floor(Math.min(availW / 160, availH / 144));
+  s = Math.max(3, Math.min(5, s));
+  cv.style.width = 160 * s + 'px';
+  cv.style.height = 144 * s + 'px';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', fit);
+buildRooms();                              // 标题画面也要先有房间数据
+loadRoom();
+fit();
+requestAnimationFrame(frameLoop);
+
+/* ---------- 离屏测试钩子(不影响游戏本身) ---------- */
+window.__test = {
+  ST, game, keys, pressed, step, render, Snd, BGM, startGame,
+  key(k, down) { if (down && !keys[k]) pressed[k] = 1; keys[k] = down ? 1 : 0; },
+  get link() { return link; },
+  get roomX() { return roomX; },
+  get roomY() { return roomY; },
+  get enemies() { return enemies; },
+  get drops() { return drops; },
+  get boss() { return boss; },
+  get bombsEnt() { return bombsEnt; },
+  get hook() { return hook; },
+  get eprojs() { return eprojs; },
+  get slide() { return slide; },
+  get room() { return room; },
+  get roomsAll() { return roomsAll; },
+  linkStuck() { return boxSolid(link.x, link.y); },   // 林克是否嵌进实心格(卡死检测)
+  curItem,
+  setRoom(x, y) { roomX = x; roomY = y; loadRoom(); game.state = ST.PLAY; },
+  setLink(x, y) { link.x = x; link.y = y; link.invuln = 0; link.kb = 0; },
+  face(fx, fy) { link.fx = fx; link.fy = fy; },
+  giveItem(name) {
+    if (name === 'bombs') { game.hasBombs = true; if (game.bombs === 0) game.bombs = 10; }
+    if (name === 'hook') { game.hasHook = true; }
+    if (name === 'key') { game.keys++; }
+    if (name === 'heal') { game.hp = 6; }
+  },
+  setItem(name) {                            // 直接指定 B 槽当前道具
+    const it = ownedItems();
+    const i = it.indexOf(name);
+    if (i >= 0) game.cur = i;
+  },
+  tileAt(tx, ty) { return curTiles[ty][tx]; },
+  setTile(tx, ty, ch) { curTiles[ty][tx] = ch; },
+  spawnEnemy(type, tx, ty) { const e = mkEnemy(type, tx, ty); enemies.push(e); return e; },
+  clearEnemies() { enemies = []; },
+  spawnDrop(tx, ty, kind) { drops.push({ x: tx * 16 + 4, y: HUDH + ty * 16 + 4, kind, t: 0 }); },
+  hurtLink,
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>TETRIS · GB</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<style>
+  /* ============ 页面 chrome(Game Boy 机身风) ============ */
+  html,body{
+    margin:0; padding:0; background:#c4bebb;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-user-select:none; user-select:none;
+    touch-action:none; overscroll-behavior:none;
+  }
+  #wrap{
+    min-height:100vh; box-sizing:border-box;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:14px 10px; gap:10px;
+  }
+  /* 机身屏幕外框:灰紫机身 + 深色镜面框 + 圆角 */
+  #bezel{
+    background:#5c5660; padding:16px 18px 12px; border-radius:16px;
+    box-shadow: inset 0 2px 0 #7d7681, inset 0 -4px 0 #463f4b, 0 8px 22px rgba(40,30,45,.35);
+  }
+  #frame{
+    background:#221e26; padding:10px; border-radius:10px;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.7);
+  }
+  canvas#gb{
+    display:block; width:480px; height:432px; /* JS 会根据窗口改成整数倍 */
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    background:#9bbc0f; border-radius:2px;
+  }
+  #caption{
+    margin-top:8px; text-align:center; color:#a79ea9; font-size:10px; letter-spacing:3px;
+  }
+  /* 常驻按键说明 */
+  #hint{ color:#4a444f; font-size:12px; letter-spacing:1px; text-align:center; }
+  /* ============ 触屏虚拟按键(半透明) ============ */
+  #touch{
+    width:100%; max-width:560px;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:0 6px; box-sizing:border-box;
+  }
+  .pad{ display:grid; grid-template-columns:repeat(3,46px); grid-template-rows:repeat(3,46px); gap:4px; }
+  .tbtn{
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(38,32,44,.30); color:#2c2731;
+    border-radius:10px; font-size:18px; font-weight:bold;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .tbtn.on{ background:rgba(38,32,44,.62); color:#12100f; }
+  .tbtn.empty{ background:transparent; pointer-events:none; }
+  .abtn{ width:56px; height:56px; border-radius:50%; font-size:20px; }
+  .sbtn{ width:52px; height:22px; border-radius:12px; font-size:10px; letter-spacing:1px; }
+  #mid{ display:flex; flex-direction:column; gap:10px; align-items:center; }
+  #ab{ display:flex; gap:14px; align-items:center; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="bezel">
+    <div id="frame"><canvas id="gb" width="160" height="144"></canvas></div>
+    <div id="caption">TETRIS &middot; GB STYLE</div>
+  </div>
+  <div id="ui">
+    <div id="hint">&#8592;&#8594; 移动 &nbsp; &#8595; 软降 &nbsp; &#8593; 硬降 &nbsp; X(A) 顺转 &nbsp; Z(B) 逆转 &nbsp; ENTER(START) 开始</div>
+    <div id="touch">
+      <div class="pad">
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="up">&#9650;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="left">&#9664;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="right">&#9654;</div>
+        <div class="tbtn empty"></div>
+        <div class="tbtn" data-k="down">&#9660;</div>
+        <div class="tbtn empty"></div>
+      </div>
+      <div id="mid">
+        <div class="tbtn sbtn" data-k="select">SELECT</div>
+        <div class="tbtn sbtn" data-k="start">START</div>
+      </div>
+      <div id="ab">
+        <div class="tbtn abtn" data-k="b">B</div>
+        <div class="tbtn abtn" data-k="a">A</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+ * TETRIS · Game Boy 风格俄罗斯方块(单文件,零依赖)
+ * 操作:方向键=十字键  X=A(顺时针旋转)  Z=B(逆时针旋转)
+ *       上=硬降  下=软降  Enter=Start  Shift=Select
+ * ===================================================================== */
+
+/* ---------- 基本常量 ---------- */
+const W = 160, H = 144;                          // GB 逻辑分辨率 160x144
+const PAL = ['#0f380f', '#306230', '#8bac0f', '#9bbc0f']; // DMG 4 色绿
+const COLS = 10, ROWS = 18, CELL = 8;            // 场地 10 列 x 18 行,格 8px
+const FX = 8, FY = 0;                            // 场地左上角像素坐标
+
+const cv = document.getElementById('gb');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+/* 全部画面只允许用 fillRect 画;ox/oy 为四消时的全屏震动偏移 */
+let ox = 0, oy = 0;
+function R(x, y, w, h, c) {
+  ctx.fillStyle = PAL[c];
+  ctx.fillRect((x + ox) | 0, (y + oy) | 0, w, h);
+}
+
+/* ---------- 8-bit 芯片音效(Web Audio 合成,无音频文件) ---------- */
+const Snd = (() => {
+  let ac = null, master = null, noiseBuf = null;
+  function init() {                       // 首次按键后才创建 AudioContext
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain();
+    master.gain.value = 0.14;
+    master.connect(ac.destination);
+    noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  function sq(freq, delay, dur, vol, slideTo) {   // 方波
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noise(delay, dur, vol, hp) {           // 噪声通道
+    if (!ac) return;
+    const t = ac.currentTime + delay;
+    const s = ac.createBufferSource(), g = ac.createGain(), f = ac.createBiquadFilter();
+    s.buffer = noiseBuf;
+    s.loop = true;
+    f.type = hp ? 'highpass' : 'lowpass';
+    f.frequency.value = hp ? 1800 : 900;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t); s.stop(t + dur + 0.02);
+  }
+  const N = n => 440 * Math.pow(2, (n - 69) / 12); // MIDI 音号 -> 频率
+  const SCALE = [72, 76, 79, 84, 88, 91];          // 消行上行音阶
+  return {
+    init,
+    move()   { sq(220, 0, 0.03, 0.35); },                                // 移动"哒"
+    rotate() { sq(480, 0, 0.04, 0.4, 300); },                            // 旋转"咔"
+    lock()   { sq(130, 0, 0.09, 0.5, 60); noise(0, 0.06, 0.35, false); },// 落地"咚"
+    clear(n) {                                                           // 消行上行音阶
+      const k = n >= 4 ? 6 : n + 1;
+      for (let i = 0; i < k; i++) sq(N(SCALE[i]), i * 0.06, 0.08, 0.45);
+    },
+    levelup(){ [67, 72, 76, 79, 84, 88].forEach((n, i) => sq(N(n), i * 0.08, 0.1, 0.45)); }, // 升级号角
+    start()  { sq(N(72), 0, 0.07, 0.45); sq(N(79), 0.07, 0.12, 0.45); },
+    over()   { [76, 72, 69, 65, 62, 57].forEach((n, i) => sq(N(n), i * 0.14, 0.15, 0.45)); },
+    rocket() { noise(0, 1.6, 0.5, false); sq(90, 0, 1.6, 0.35, 800); },  // 火箭发射
+  };
+})();
+
+/* ---------- 8x8 手绘像素字体(画布文字只能用它) ---------- */
+const FONT = (() => {
+  const F = {};
+  const def = (ch, rows) => { F[ch] = rows; };
+  def(' ', ["........","........","........","........","........","........","........","........"]);
+  def('0', [".###....","#...#...","#..##...","#.#.#...","##..#...","#...#...",".###....","........"]);
+  def('1', ["..#.....",".##.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('2', [".###....","#...#...","....#...","..##....",".#......","#.......","#####...","........"]);
+  def('3', ["####....","....#...","....#...",".###....","....#...","....#...","####....","........"]);
+  def('4', ["...##...",".#.#....","#..#....","#####...","...#....","...#....","...#....","........"]);
+  def('5', ["#####...","#.......","####....","....#...","....#...","#...#...",".###....","........"]);
+  def('6', [".###....","#.......","#.......","####....","#...#...","#...#...",".###....","........"]);
+  def('7', ["#####...","....#...","...#....","...#....","..#.....","..#.....","..#.....","........"]);
+  def('8', [".###....","#...#...","#...#...",".###....","#...#...","#...#...",".###....","........"]);
+  def('9', [".###....","#...#...","#...#...",".####...","....#...","....#...",".###....","........"]);
+  def('A', [".###....","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('B', ["####....","#...#...","#...#...","####....","#...#...","#...#...","####....","........"]);
+  def('C', [".####...","#.......","#.......","#.......","#.......","#.......",".####...","........"]);
+  def('D', ["####....","#...#...","#...#...","#...#...","#...#...","#...#...","####....","........"]);
+  def('E', ["#####...","#.......","#.......","####....","#.......","#.......","#####...","........"]);
+  def('F', ["#####...","#.......","#.......","####....","#.......","#.......","#.......","........"]);
+  def('G', [".####...","#.......","#.......","#.###...","#...#...","#...#...",".####...","........"]);
+  def('H', ["#...#...","#...#...","#...#...","#####...","#...#...","#...#...","#...#...","........"]);
+  def('I', [".###....","..#.....","..#.....","..#.....","..#.....","..#.....",".###....","........"]);
+  def('J', ["..###...","...#....","...#....","...#....","...#....","#..#....",".##.....","........"]);
+  def('K', ["#...#...","#..#....","#.#.....","##......","#.#.....","#..#....","#...#...","........"]);
+  def('L', ["#.......","#.......","#.......","#.......","#.......","#.......","#####...","........"]);
+  def('M', ["#...#...","##.##...","#.#.#...","#.#.#...","#...#...","#...#...","#...#...","........"]);
+  def('N', ["#...#...","##..#...","#.#.#...","#..##...","#...#...","#...#...","#...#...","........"]);
+  def('O', [".###....","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('P', ["####....","#...#...","#...#...","####....","#.......","#.......","#.......","........"]);
+  def('Q', [".###....","#...#...","#...#...","#...#...","#.#.#...","#..#....",".##.#...","........"]);
+  def('R', ["####....","#...#...","#...#...","####....","#.#.....","#..#....","#...#...","........"]);
+  def('S', [".####...","#.......","#.......",".###....","....#...","....#...","####....","........"]);
+  def('T', ["#####...","..#.....","..#.....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('U', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".###....","........"]);
+  def('V', ["#...#...","#...#...","#...#...","#...#...","#...#...","#...#...",".#.#....","........"]);
+  def('W', ["#...#...","#...#...","#...#...","#.#.#...","#.#.#...","##.##...","#...#...","........"]);
+  def('X', ["#...#...","#...#...",".#.#....","..#.....",".#.#....","#...#...","#...#...","........"]);
+  def('Y', ["#...#...","#...#...",".#.#....","..#.....","..#.....","..#.....","..#.....","........"]);
+  def('Z', ["#####...","....#...","...#....","..#.....",".#......","#.......","#####...","........"]);
+  def('!', ["..#.....","..#.....","..#.....","..#.....","..#.....","........","..#.....","........"]);
+  def('.', ["........","........","........","........","........","..##....","..##....","........"]);
+  def('-', ["........","........","........",".###....","........","........","........","........"]);
+  def(':', ["........","..##....","..##....","........","..##....","..##....","........","........"]);
+  def('*', ["........",".#...#..","..#.#...","...#....","..#.#...",".#...#..","........","........"]);
+  return F;
+})();
+
+/* 画文字:逐像素 fillRect,等宽 8px,可整数放大 */
+function drawText(str, x, y, color, scale) {
+  scale = scale || 1;
+  str = String(str).toUpperCase();
+  for (let i = 0; i < str.length; i++) {
+    const g = FONT[str[i]] || FONT[' '];
+    for (let r = 0; r < 8; r++) {
+      const row = g[r];
+      for (let c = 0; c < 8; c++) {
+        if (row[c] === '#') R(x + i * 8 * scale + c * scale, y + r * scale, scale, scale, color);
+      }
+    }
+  }
+}
+
+/* ---------- 方块定义:7 种标准四连块,旋转态预计算 ---------- */
+const SHAPES = [
+  { size: 4, cells: [[0,1],[1,1],[2,1],[3,1]] },  // 0 I
+  { size: 2, cells: [[0,0],[1,0],[0,1],[1,1]] },  // 1 O
+  { size: 3, cells: [[1,0],[0,1],[1,1],[2,1]] },  // 2 T
+  { size: 3, cells: [[1,0],[2,0],[0,1],[1,1]] },  // 3 S
+  { size: 3, cells: [[0,0],[1,0],[1,1],[2,1]] },  // 4 Z
+  { size: 3, cells: [[0,0],[0,1],[1,1],[2,1]] },  // 5 J
+  { size: 3, cells: [[2,0],[0,1],[1,1],[2,1]] },  // 6 L
+];
+/* ROT[p][r] = 旋转 r 次(顺时针)后的格坐标,r=0..3 */
+const ROT = SHAPES.map(s => {
+  const rs = [s.cells];
+  for (let r = 1; r < 4; r++)
+    rs.push(rs[r - 1].map(([x, y]) => [s.size - 1 - y, x]));
+  return rs;
+});
+
+/* 每种形状的涂装:深色描边 + 浅色填充 + 内部纹样(2 级灰度区分形状) */
+const CELL_STYLE = [
+  { f: 2, d: [[1,1,6,2,3]] },              // I 亮顶纹
+  { f: 2, d: [[3,3,2,2,0]] },              // O 中心暗点
+  { f: 1, d: [[2,2,4,4,2]] },              // T 浅芯
+  { f: 1, d: [[2,2,2,2,3],[4,4,2,2,3]] },  // S 斜双点
+  { f: 2, d: [[2,4,2,2,1],[4,2,2,2,1]] },  // Z 反斜双点
+  { f: 1, d: [[3,2,2,4,3]] },              // J 竖亮纹
+  { f: 3, d: [[2,2,4,4,1]] },              // L 浅底深芯
+];
+
+/* 单格画法(全部 fillRect,4 色);id 1..7 = 方块,8 = Game Over 灰块 */
+function drawCell(sx, sy, id) {
+  if (id === 8) {
+    R(sx, sy, 8, 8, 1);
+  } else {
+    const st = CELL_STYLE[id - 1];
+    R(sx, sy, 8, 8, st.f);
+    for (const d of st.d) R(sx + d[0], sy + d[1], d[2], d[3], d[4]);
+  }
+  R(sx, sy, 8, 1, 0); R(sx, sy + 7, 8, 1, 0);
+  R(sx, sy, 1, 8, 0); R(sx + 7, sy, 1, 8, 0);
+}
+
+/* ---------- 输入:键盘 + 触屏(按住连发 / 单次触发都可靠) ---------- */
+const keys = { left: 0, right: 0, up: 0, down: 0, a: 0, b: 0, start: 0, select: 0 };
+const pressed = {};                    // 按下沿,逻辑帧消费,绝不丢输入
+const KEYMAP = {
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down',
+  KeyX: 'a', KeyZ: 'b', Enter: 'start', ShiftLeft: 'select', ShiftRight: 'select',
+};
+window.addEventListener('keydown', e => {
+  const k = KEYMAP[e.code];
+  if (!k) return;
+  e.preventDefault();
+  Snd.init();                          // 首次按键才初始化音频
+  if (!keys[k]) pressed[k] = 1;
+  keys[k] = 1;
+});
+window.addEventListener('keyup', e => {
+  const k = KEYMAP[e.code];
+  if (k) keys[k] = 0;
+});
+function hit(k) { if (pressed[k]) { pressed[k] = 0; return true; } return false; }
+function clearPressed() { for (const k in pressed) pressed[k] = 0; }
+
+/* 触屏按钮(pointer 事件,鼠标同样可用) */
+document.querySelectorAll('[data-k]').forEach(el => {
+  const k = el.getAttribute('data-k');
+  const down = e => {
+    e.preventDefault(); Snd.init();
+    if (!keys[k]) pressed[k] = 1;
+    keys[k] = 1;
+    el.classList.add('on');
+    if (el.setPointerCapture && e.pointerId !== undefined) {
+      try { el.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+  };
+  const up = e => { e.preventDefault(); keys[k] = 0; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+});
+
+/* ---------- 游戏状态 ---------- */
+const ST = { TITLE: 0, PLAY: 1, FILL: 2, ROCKET: 3, OVER: 4 };
+const game = {
+  state: ST.TITLE, frame: 0,
+  score: 0, level: 0, lines: 0,
+  overT: 0, fillRow: 0, fillWait: 0,
+};
+let grid = [];                         // grid[y][x]: 0=空, 1..7=方块, 8=灰块
+let cur = null;                        // 当前下落块 {p,r,x,y}
+let nextId = 0;                        // 下一块(NEXT 预览)
+let bag = [];                          // 7-bag
+let fallT = 0;                         // 重力计帧
+let clearing = null;                   // 消行闪烁 {rows,t}
+let shake = 0;                         // 四消全屏震动剩余帧
+let dasDir = 0, dasT = 0;              // 左右按住连发
+let rocket = null;                     // 彩蛋火箭 {x,y,rise}
+
+/* 下落速度:0 级 48 帧(约 800ms/格),9 级起 6 帧(约 100ms/格) */
+const SPD = [48, 38, 30, 24, 19, 15, 12, 10, 8, 6];
+function speedFor(level) { return SPD[Math.min(level, 9)]; }
+
+/* 7-bag 随机:一袋 7 种各一个,抽完再洗新袋 */
+function nextFromBag() {
+  if (!bag.length) {
+    bag = [0, 1, 2, 3, 4, 5, 6];
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      const t = bag[i]; bag[i] = bag[j]; bag[j] = t;
+    }
+  }
+  return bag.pop();
+}
+
+function collide(p, r, x, y) {
+  const cells = ROT[p][r];
+  for (const [cx, cy] of cells) {
+    const gx = x + cx, gy = y + cy;
+    if (gx < 0 || gx >= COLS || gy >= ROWS) return true;
+    if (gy >= 0 && grid[gy][gx]) return true;
+  }
+  return false;
+}
+
+function startGame() {
+  grid = Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
+  bag = [];
+  game.score = 0; game.level = 0; game.lines = 0;
+  clearing = null; shake = 0; rocket = null;
+  dasDir = 0; dasT = 0;
+  nextId = nextFromBag();
+  spawnNext();
+  clearPressed();
+  game.state = ST.PLAY;
+}
+
+function spawnNext() {
+  const p = nextId;
+  nextId = nextFromBag();
+  cur = { p, r: 0, x: SHAPES[p].size === 2 ? 4 : 3, y: 0 };
+  fallT = 0;
+  if (collide(p, 0, cur.x, 0)) startOver();   // 出生点被堵 -> Game Over
+}
+
+/* 锁定当前块;有整行则进入闪烁消行,否则直接出下一块 */
+function lockPiece() {
+  if (!cur) return;
+  let above = false;
+  for (const [cx, cy] of ROT[cur.p][cur.r]) {
+    const gx = cur.x + cx, gy = cur.y + cy;
+    if (gy < 0) above = true;
+    else grid[gy][gx] = cur.p + 1;
+  }
+  Snd.lock();
+  cur = null;
+  if (above) { startOver(); return; }          // 锁定在场地外 -> Game Over
+  const rows = [];
+  for (let y = 0; y < ROWS; y++)
+    if (grid[y].every(v => v)) rows.push(y);
+  if (rows.length) {
+    clearing = { rows, t: 0 };
+    Snd.clear(rows.length);
+  } else {
+    spawnNext();
+  }
+}
+
+/* 闪烁结束:真正消行、计分、升级、四消震动 */
+function finishClear() {
+  const n = clearing.rows.length;
+  for (const ry of clearing.rows) {            // rows 升序,删一行补一行索引不变
+    grid.splice(ry, 1);
+    grid.unshift(new Array(COLS).fill(0));
+  }
+  game.lines += n;
+  game.score += [0, 40, 100, 300, 1200][n] * (game.level + 1);
+  const nl = Math.floor(game.lines / 10);
+  if (nl > game.level) { game.level = nl; Snd.levelup(); }
+  if (n === 4) shake = 14;                     // Tetris! 全屏轻微震动
+  clearing = null;
+  spawnNext();
+}
+
+function startOver() {
+  game.state = ST.FILL;
+  game.fillRow = ROWS - 1; game.fillWait = 0; game.overT = 0;
+  cur = null; clearing = null; shake = 0;
+  Snd.over();
+}
+
+/* ---------- 主逻辑帧 ---------- */
+function moveHoriz(dir) {
+  if (cur && !collide(cur.p, cur.r, cur.x + dir, cur.y)) {
+    cur.x += dir;
+    Snd.move();
+  }
+}
+function rotate(dir) {
+  if (!cur) return;
+  const nr = (cur.r + dir + 4) % 4;
+  for (const dx of [0, -1, 1]) {               // 简单碰撞 + 贴墙踢墙 1 格
+    if (!collide(cur.p, nr, cur.x + dx, cur.y)) {
+      cur.r = nr; cur.x += dx;
+      Snd.rotate();
+      return;
+    }
+  }
+}
+function hardDrop() {
+  if (!cur) return;
+  while (!collide(cur.p, cur.r, cur.x, cur.y + 1)) cur.y++;
+  lockPiece();
+}
+
+function stepPlay() {
+  if (clearing) {                              // 消行闪烁期间世界暂停
+    clearPressed();
+    if (++clearing.t >= 30) finishClear();
+    return;
+  }
+  if (!cur) return;
+  /* 左右:DAS 按住连发(按下立即动,12 帧后以 3 帧间隔连发) */
+  const dir = keys.left ? -1 : (keys.right ? 1 : 0);
+  if (dir === 0) { dasDir = 0; dasT = 0; }
+  else if (dir !== dasDir) { dasDir = dir; dasT = 0; moveHoriz(dir); }
+  else if (++dasT >= 12) { moveHoriz(dir); dasT = 9; }
+  /* 旋转 / 硬降:单次触发 */
+  if (hit('a')) rotate(1);                     // X(A) 顺时针
+  if (hit('b')) rotate(-1);                    // Z(B) 逆时针
+  if (hit('up')) { hardDrop(); return; }       // 上 = 瞬间落底并锁定
+  hit('down');                                 // 清掉下键按下沿,软降只看按住状态
+  /* 重力:下键软降加速 */
+  const iv = keys.down ? 2 : speedFor(game.level);
+  if (++fallT >= iv) {
+    fallT = 0;
+    if (!collide(cur.p, cur.r, cur.x, cur.y + 1)) cur.y++;
+    else lockPiece();
+  }
+}
+
+function step() {
+  game.frame++;
+  if (shake > 0) shake--;
+  switch (game.state) {
+    case ST.TITLE:
+      if (hit('start')) { startGame(); Snd.start(); }
+      break;
+    case ST.PLAY: stepPlay(); break;
+    case ST.FILL: {                            // 场地从下往上逐行填满灰块
+      game.overT++;
+      if (game.fillRow >= 0) {
+        if (game.overT % 3 === 0) {
+          grid[game.fillRow].fill(8);
+          game.fillRow--;
+        }
+      } else if (++game.fillWait > 18) {       // 填满后稍作停顿
+        if (game.score > 10000) {              // 彩蛋:高分触发火箭发射
+          rocket = { x: FX + COLS * CELL / 2 - 4, y: H + 6, rise: 0 };
+          game.state = ST.ROCKET;
+          Snd.rocket();
+        } else {
+          game.state = ST.OVER; game.overT = 0;
+        }
+      }
+      break;
+    }
+    case ST.ROCKET:
+      rocket.rise += 1.6;
+      rocket.y -= 1.6;
+      if (rocket.y < -26) { game.state = ST.OVER; game.overT = 0; }
+      break;
+    case ST.OVER:
+      game.overT++;
+      if (game.overT > 30 && hit('start')) game.state = ST.TITLE;
+      break;
+  }
+}
+
+/* ---------- 渲染 ---------- */
+/* 浅色砖块纹理的场地边框柱(8px 宽) */
+function drawBrick(bx, y, ty) {
+  R(bx, y, 8, 8, 2);
+  R(bx, y + 3, 8, 1, 1);                       // 横向砖缝
+  R(bx + (ty % 2 === 0 ? 5 : 2), y, 1, 3, 1);  // 竖向砖缝(交错)
+  R(bx + (ty % 2 === 0 ? 1 : 6), y + 5, 1, 1, 0); // 零星深色点
+}
+function drawBricks() {
+  for (let ty = 0; ty < ROWS; ty++) {
+    drawBrick(0, ty * CELL, ty);
+    drawBrick(FX + COLS * CELL, ty * CELL, ty + 1);
+  }
+  for (let y = 0; y < H; y += 8) {             // 砖柱与场地之间的深色接缝
+    R(FX - 1, y, 1, 8, 0);
+    R(FX + COLS * CELL, y, 1, 8, 0);
+  }
+}
+
+function drawField() {
+  drawBricks();
+  for (let y = 0; y < ROWS; y++)
+    for (let x = 0; x < COLS; x++)
+      if (grid[y][x]) drawCell(FX + x * CELL, FY + y * CELL, grid[y][x]);
+  if (cur)                                     // 下落中的块(允许顶部超出)
+    for (const [cx, cy] of ROT[cur.p][cur.r]) {
+      const gy = cur.y + cy;
+      if (gy >= 0) drawCell(FX + (cur.x + cx) * CELL, FY + gy * CELL, cur.p + 1);
+    }
+  if (clearing && ((clearing.t >> 2) % 2 === 0))  // 整行闪烁(亮相)
+    for (const ry of clearing.rows)
+      for (let x = 0; x < COLS; x++)
+        R(FX + x * CELL, FY + ry * CELL, 8, 8, 3);
+}
+
+function drawPanel() {
+  const PX = 100;
+  drawText('SCORE', PX, 8, 0);
+  drawText(String(game.score).padStart(6, '0'), PX, 17, 0);
+  drawText('LEVEL', PX, 34, 0);
+  drawText(String(game.level).padStart(2, '0'), PX, 43, 0);
+  drawText('LINES', PX, 60, 0);
+  drawText(String(game.lines).padStart(3, '0'), PX, 69, 0);
+  drawText('NEXT', PX, 86, 0);
+  /* NEXT 预览框 */
+  R(102, 94, 40, 1, 0); R(102, 119, 40, 1, 0);
+  R(102, 94, 1, 26, 0); R(141, 94, 1, 26, 0);
+  const cells = ROT[nextId][0];
+  let minX = 9, maxX = -9, minY = 9, maxY = -9;
+  for (const [cx, cy] of cells) {
+    if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+    if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+  }
+  const bw = (maxX - minX + 1) * CELL, bh = (maxY - minY + 1) * CELL;
+  const bx = 102 + ((40 - bw) >> 1), by = 94 + ((26 - bh) >> 1);
+  for (const [cx, cy] of cells)
+    drawCell(bx + (cx - minX) * CELL, by + (cy - minY) * CELL, nextId + 1);
+}
+
+/* 标题:像素大标题 TETRIS + 闪烁的 PRESS START */
+function drawTitle() {
+  drawBricks();
+  drawText('TETRIS', 8, 26, 0, 3);
+  /* 装饰:井底堆几个方块 */
+  for (let x = 0; x < COLS; x++) drawCell(FX + x * CELL, H - 8, 1);
+  drawCell(FX + 0 * CELL, H - 16, 3); drawCell(FX + 1 * CELL, H - 16, 3);
+  drawCell(FX + 2 * CELL, H - 16, 3); drawCell(FX + 1 * CELL, H - 24, 3);
+  drawCell(FX + 7 * CELL, H - 16, 6); drawCell(FX + 8 * CELL, H - 16, 6);
+  drawCell(FX + 9 * CELL, H - 16, 6); drawCell(FX + 9 * CELL, H - 24, 6);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 66, 0); // 闪烁,灵魂所在
+}
+
+function drawOver() {
+  R(0, 0, W, H, 0);
+  drawText('GAME OVER', 44, 44, 3);
+  drawText('SCORE ' + String(game.score).padStart(6, '0'), 32, 68, 3);
+  if ((game.frame >> 4) % 2 === 0) drawText('PRESS START', 36, 100, 3);
+}
+
+/* 彩蛋火箭(致敬原版通关火箭) */
+const ROCKET_BODY = [
+  "...00...",
+  "..0##0..",
+  "..0##0..",
+  "..0220..",
+  "..0##0..",
+  ".0####0.",
+  "0######0",
+  "..0##0..",
+  "0.0##0.0",
+  "0.0##0.0",
+  "..0##0..",
+];
+const FLAME = [
+  ["..2222..", "...22...", "..2..2.."],
+  ["...22...", "..2..2..", ".2....2."],
+];
+function drawRocket() {
+  for (let i = 0; i < 14; i++) {               // 星星向后掠
+    const sx = (i * 31 + 13) % W, sy = (i * 47 + (rocket.rise | 0)) % H;
+    R(sx, sy, 1, 1, i % 2 === 0 ? 0 : 2);
+  }
+  const rx = rocket.x, ry = rocket.y | 0;
+  for (let r = 0; r < ROCKET_BODY.length; r++)
+    for (let c = 0; c < 8; c++) {
+      const ch = ROCKET_BODY[r][c];
+      if (ch !== '.') R(rx + c, ry + r, 1, 1, ch === '0' ? 0 : (ch === '2' ? 2 : 3));
+    }
+  const fl = FLAME[(game.frame >> 2) % 2];
+  for (let r = 0; r < 3; r++)
+    for (let c = 0; c < 8; c++)
+      if (fl[r][c] === '2') R(rx + c, ry + 11 + r, 1, 1, 2);
+}
+
+function render() {
+  ox = 0; oy = 0;
+  R(0, 0, W, H, 3);                            // 背景 = 最浅色(先无偏移铺满)
+  if (shake > 0 && game.state === ST.PLAY) {   // 四消震动:之后的绘制整体偏移
+    ox = (game.frame % 2 === 0) ? -2 : 2;
+    oy = (game.frame % 3 === 0) ? 1 : -1;
+  }
+  switch (game.state) {
+    case ST.TITLE: drawTitle(); break;
+    case ST.PLAY: drawField(); drawPanel(); break;
+    case ST.FILL: drawField(); drawPanel(); break;
+    case ST.ROCKET: drawField(); drawPanel(); drawRocket(); break;
+    case ST.OVER: drawOver(); break;
+  }
+}
+
+/* ---------- 主循环:requestAnimationFrame + 固定 60fps 逻辑帧 ---------- */
+let lastTs = 0, acc = 0;
+function frameLoop(ts) {
+  requestAnimationFrame(frameLoop);
+  if (!lastTs) lastTs = ts;
+  let dt = ts - lastTs;
+  lastTs = ts;
+  if (dt > 250) dt = 250;                      // 切后台回来不追帧
+  acc += dt;
+  while (acc >= 1000 / 60) { step(); acc -= 1000 / 60; }
+  render();
+}
+
+/* ---------- 画布整数倍放大(3~5 倍,像素锐利) ---------- */
+function fit() {
+  const ui = document.getElementById('ui');
+  const chrome = (ui ? ui.offsetHeight : 120) + 64;
+  const availW = window.innerWidth - 20, availH = window.innerHeight - chrome;
+  let s = Math.floor(Math.min(availW / 160, availH / 144));
+  s = Math.max(3, Math.min(5, s));
+  cv.style.width = 160 * s + 'px';
+  cv.style.height = 144 * s + 'px';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', fit);
+fit();
+requestAnimationFrame(frameLoop);
+
+/* ---------- 离屏测试钩子(不影响游戏本身) ---------- */
+window.__test = {
+  ST, game, keys, pressed, step, render, collide, speedFor,
+  startGame, spawnNext, lockPiece, nextFromBag, ROT, SHAPES,
+  key(k, down) { if (down && !keys[k]) pressed[k] = 1; keys[k] = down ? 1 : 0; },
+  get grid() { return grid; },
+  setCell(x, y, v) { grid[y][x] = v; },
+  get cur() { return cur; },
+  setCur(p, r, x, y) { cur = { p, r, x, y }; },
+  get nextId() { return nextId; },
+  setNext(id) { nextId = id; },
+  get clearing() { return clearing; },
+  get shake() { return shake; },
+  get rocket() { return rocket; },
+};
+</script>
+</body>
+</html>

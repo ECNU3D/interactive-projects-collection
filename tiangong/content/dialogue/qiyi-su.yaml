@@ -1,0 +1,31 @@
+id: qiyi_su
+name: 素衣仙女
+model: speech-2.8-hd
+voice_setting:
+  voice_id: "Chinese (Mandarin)_Soft_Girl"
+  speed: 0.95
+  pitch: -1
+  emotion: calm
+
+greet:
+  - id: greet_01
+    text: "大圣万福。"
+
+topics:
+  - id: dianlan
+    label: "篮里的讲究"
+    source: "第5回"
+    lines:
+      - id: w_su_dianlan_01
+        speaker: pc
+        text: "篮子里垫的是甚么？"
+        voice_setting: { emotion: calm, speed: 1.05 }
+      - id: dianlan_02
+        text: "素帛垫篮，桃不沾篮篾，才不硌出印子。娘娘面前的果子带了印子，奴等吃罪不起。"
+
+fallback:
+  - id: fb_01
+    text: "奴只晓得摘桃。"
+bye:
+  - id: bye_01
+    text: "奴告退。"
